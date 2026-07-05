@@ -102,9 +102,11 @@ def test_epic1_readonly_locals_hint(attach_server, micropython_debuggee):
 
     caps = _read_mpdbg_ready(process)["caps"]
 
-    # Line 79 (`x = 78`) inside main() so the local `x` is already bound by
-    # the time execution stops there.
-    set_breakpoints(server, _TARGET_PY, [79])
+    # Break on line 80 (the `for` header) rather than line 79 (`x = 78`):
+    # sys.settrace fires the `line` event BEFORE the statement runs (correct
+    # CPython/pdb semantics), so at line 79 `x` is not yet bound. By line 80,
+    # `x = 78` has executed and the local is present to carry the hint.
+    set_breakpoints(server, _TARGET_PY, [80])
     wait_for_msg(server, response="setBreakpoints")
     server.client.configuration_done()
     assert wait_for_msg(server, event="stopped"), "configurationDone produced no stopped event"

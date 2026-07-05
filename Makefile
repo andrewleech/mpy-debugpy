@@ -7,26 +7,31 @@
 MPY            := micropython
 UNIX_PORT      := $(MPY)/ports/unix
 UNIX_VARIANT   := standard
-# settrace + local-name preservation; adjust per what the composed branches expose
-DEBUG_CFLAGS   := -DMICROPY_PY_SYS_SETTRACE=1 -DMICROPY_PY_SYS_SETTRACE_SAVE_NAMES=1
+# The unix `standard` variant already enables settrace and local-name capture
+# (MICROPY_PY_SYS_SETTRACE + MICROPY_PY_SYS_SETTRACE_LOCALNAMES) via #8767's
+# mpconfigvariant.h, so no extra CFLAGS are needed for the unix build. Bytecode
+# persistence of names into .mpy (MICROPY_PY_SYS_SETTRACE_LOCALNAMES_PERSIST) is
+# intentionally off — it corrupts line numbers for all compiled code. For other
+# ports, define MICROPY_PY_SYS_SETTRACE=1 and MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1.
+DEBUG_CFLAGS   :=
 
 .PHONY: bootstrap integrate firmware-unix mpy-cross test demo firmware-list firmware-verify clean
 
 # One-shot setup: check out the recorded integration commits and the libraries
 # the unix port needs. This does NOT run `mbm rebase` — the integration branches
-# are currently vendored (based directly on the upstream debug-support fork
-# branches, see mbm.toml), not yet reconstructable from upstream master.
+# are composed by hand (merge + cherry-pick onto current master, see mbm.toml),
+# not yet reconstructable via mbm automation.
 bootstrap:
 	git submodule update --init --recursive
 	$(MAKE) -C $(UNIX_PORT) VARIANT=$(UNIX_VARIANT) submodules
 
 # Reconstruct the integration branches from mbm.toml on top of upstream master.
-# NOT part of bootstrap: the current branches are vendored fork integrations and
-# a rebase-from-master would discard them. Wiring clean mbm composition is the
+# NOT part of bootstrap and not yet wired: the branches are currently hand-composed
+# (merge + cherry-pick). Expressing them as mbm add-pr composition is the
 # upstreaming epic (see planning/ROADMAP.md).
 integrate:
-	@echo "Refusing to auto-rebase: integration branches are vendored (see Makefile/mbm.toml)."
-	@echo "Run 'mbm rebase -s <submodule>' manually once the composition is expressed as PRs."
+	@echo "mbm auto-composition not wired yet; branches are hand-composed (see mbm.toml)."
+	@echo "See planning/ROADMAP.md upstreaming epic."
 
 mpy-cross:
 	$(MAKE) -C $(MPY)/mpy-cross
