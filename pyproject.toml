@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "mbm integration + tooling for debugging MicroPython over the Debug Adapter Protocol"
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+# Host-side DAP test harness dependencies (see Makefile `test`).
+test = ["pytest", "anyio", "debugpy"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

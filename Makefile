@@ -39,7 +39,7 @@ firmware-unix: mpy-cross
 
 # Run the host-side DAP test harness against a built unix firmware.
 test:
-	uv run --with pytest python -m pytest tests/ -q
+	uv run --with pytest --with anyio --with debugpy python -m pytest tests/ -q
 
 # Run the sample target under the debug launcher (unix). Attach VS Code to the
 # host/port from the MPDBG-READY line.
