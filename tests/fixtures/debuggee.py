@@ -90,8 +90,15 @@ def micropython_debuggee(
     # Get the workspace root path using pytest configuration
     root_path = Path(pytestconfig.rootpath)
 
-    # Construct absolute paths
-    micropython_path = root_path / "firmware/unix_settrace_save_names/micropython"
+    # Construct absolute paths. The debug-enabled unix firmware is built from
+    # the micropython submodule (see `make firmware-unix`); allow an override
+    # via MPY_DEBUG_FIRMWARE for testing an alternative binary.
+    micropython_path = Path(
+        os.environ.get(
+            "MPY_DEBUG_FIRMWARE",
+            root_path / "micropython/ports/unix/build-standard/micropython",
+        )
+    )
     launcher_path = root_path / "launcher/mpy_launch_debugpy.py"
     micropython_lib_path = root_path / "micropython-lib/python-ecosys/debugpy"
     src_path = root_path / "src"

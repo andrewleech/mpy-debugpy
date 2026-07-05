@@ -2,8 +2,26 @@
 # Install: pip install micropython-branch-manager
 #          or: uv tool install micropython-branch-manager
 # Usage:   mbm --help
+#
+# NOTE: the integration branches below are currently VENDORED — each is based
+# directly on an upstream debug-support fork branch (plus, for micropython-lib,
+# the local EPIC-1 foundations commits), NOT reconstructed from upstream master
+# via `mbm rebase`. Do not run `mbm rebase` expecting a clean rebuild: it would
+# discard the vendored integration. Expressing this as clean, rebuildable PR
+# composition (settrace #8767, debugpy #1022, the local-variable work, and the
+# foundations) is the upstreaming epic in planning/ROADMAP.md.
+#
+# For local development the recorded submodule commits are checked out directly
+# (`make bootstrap`). Reproducing on another machine additionally requires the
+# integration branches — including the local micropython-lib foundation commits —
+# to be pushed to a fork and this file's provenance pointed at it.
 
 submodules = [
-    { path = "micropython", integration_branch = "mpy-debugpy", branches = [] },
-    { path = "micropython-lib", integration_branch = "mpy-debugpy", branches = [] },
+    { path = "micropython", integration_branch = "mpy-debugpy", branches = [
+        { name = "pdb_support_localvars", pr_url = "https://github.com/josverl/micropython/tree/pdb_support_localvars", title = "sys.settrace + frame f_locals / local name preservation (base for micropython#8767)" },
+    ] },
+    { path = "micropython-lib", integration_branch = "mpy-debugpy", branches = [
+        { name = "debugpy/jos", pr_url = "https://github.com/josverl/micropython-lib/tree/debugpy/jos", title = "debugpy DAP server + Jos updates (base for micropython-lib#1022)" },
+        { name = "mpy-debugpy-foundations", pr_url = "local", title = "EPIC-1: DAP framing fix, wait_for_client, capability probe, read-only locals" },
+    ] },
 ]

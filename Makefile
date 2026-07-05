@@ -12,21 +12,28 @@ DEBUG_CFLAGS   := -DMICROPY_PY_SYS_SETTRACE=1 -DMICROPY_PY_SYS_SETTRACE_SAVE_NAM
 
 .PHONY: bootstrap integrate firmware-unix mpy-cross test demo firmware-list firmware-verify clean
 
-# One-shot setup: fetch submodules and rebuild the mbm integration branches.
+# One-shot setup: check out the recorded integration commits and the libraries
+# the unix port needs. This does NOT run `mbm rebase` — the integration branches
+# are currently vendored (based directly on the upstream debug-support fork
+# branches, see mbm.toml), not yet reconstructable from upstream master.
 bootstrap:
 	git submodule update --init --recursive
-	$(MAKE) integrate
+	$(MAKE) -C $(UNIX_PORT) VARIANT=$(UNIX_VARIANT) submodules
 
-# Rebuild both integration branches from the branches listed in mbm.toml.
+# Reconstruct the integration branches from mbm.toml on top of upstream master.
+# NOT part of bootstrap: the current branches are vendored fork integrations and
+# a rebase-from-master would discard them. Wiring clean mbm composition is the
+# upstreaming epic (see planning/ROADMAP.md).
 integrate:
-	mbm rebase -s micropython
-	mbm rebase -s micropython-lib
+	@echo "Refusing to auto-rebase: integration branches are vendored (see Makefile/mbm.toml)."
+	@echo "Run 'mbm rebase -s <submodule>' manually once the composition is expressed as PRs."
 
 mpy-cross:
 	$(MAKE) -C $(MPY)/mpy-cross
 
 # Build a debug-enabled unix firmware.
 firmware-unix: mpy-cross
+	$(MAKE) -C $(UNIX_PORT) VARIANT=$(UNIX_VARIANT) submodules
 	$(MAKE) -C $(UNIX_PORT) VARIANT=$(UNIX_VARIANT) CFLAGS_EXTRA="$(DEBUG_CFLAGS)"
 	@echo "Built: $(UNIX_PORT)/build-$(UNIX_VARIANT)/micropython"
 
