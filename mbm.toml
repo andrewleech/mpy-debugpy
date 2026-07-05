@@ -11,10 +11,10 @@
 # composition (settrace #8767, debugpy #1022, the local-variable work, and the
 # foundations) is the upstreaming epic in planning/ROADMAP.md.
 #
-# For local development the recorded submodule commits are checked out directly
-# (`make bootstrap`). Reproducing on another machine additionally requires the
-# integration branches — including the local micropython-lib foundation commits —
-# to be pushed to a fork and this file's provenance pointed at it.
+# The integration branches are published on the andrewleech forks
+# (andrewleech/micropython @ mpy-debugpy, andrewleech/micropython-lib @
+# mpy-debugpy); .gitmodules points there, so `git clone --recurse-submodules`
+# followed by `make bootstrap` reproduces the buildable tree.
 
 submodules = [
     { path = "micropython", integration_branch = "mpy-debugpy", branches = [

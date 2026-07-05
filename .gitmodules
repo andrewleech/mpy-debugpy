@@ -1,6 +1,8 @@
 [submodule "micropython"]
 	path = micropython
-	url = https://github.com/micropython/micropython.git
+	url = https://github.com/andrewleech/micropython.git
+	branch = mpy-debugpy
 [submodule "micropython-lib"]
 	path = micropython-lib
-	url = https://github.com/micropython/micropython-lib.git
+	url = https://github.com/andrewleech/micropython-lib.git
+	branch = mpy-debugpy
