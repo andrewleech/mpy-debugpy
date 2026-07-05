@@ -1,0 +1,26 @@
+{
+    // Attach to a MicroPython debugpy session.
+    //
+    // Start the target first (e.g. `make demo`, or run
+    // launcher/mpy_launch_debugpy.py on the device). Read the host/port from
+    // the target's MPDBG-READY handshake line and use them below. The debug
+    // support runs on the target; this just attaches VS Code's Python debugger
+    // to it.
+    "version": "0.2.0",
+    "inputs": [
+        { "id": "host", "type": "promptString", "description": "Target host (from MPDBG-READY)", "default": "localhost" },
+        { "id": "port", "type": "promptString", "description": "Target port (from MPDBG-READY)", "default": "5678" }
+    ],
+    "configurations": [
+        {
+            "name": "MicroPython: Attach",
+            "type": "debugpy",
+            "request": "attach",
+            "connect": { "host": "${input:host}", "port": "${input:port}" },
+            "pathMappings": [
+                { "localRoot": "${workspaceFolder}/src", "remoteRoot": "." }
+            ],
+            "justMyCode": false
+        }
+    ]
+}

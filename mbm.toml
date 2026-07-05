@@ -1,0 +1,9 @@
+# micropython-branch-manager (mbm)
+# Install: pip install micropython-branch-manager
+#          or: uv tool install micropython-branch-manager
+# Usage:   mbm --help
+
+submodules = [
+    { path = "micropython", integration_branch = "mpy-debugpy", branches = [] },
+    { path = "micropython-lib", integration_branch = "mpy-debugpy", branches = [] },
+]

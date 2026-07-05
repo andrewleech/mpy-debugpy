@@ -1,0 +1,101 @@
+# Firmware provenance manifest (STORY-3.1).
+#
+# Each [[variant]] describes one prebuilt binary under firmware/<id>/. Capability
+# fields here are what the *build* was intended to provide; they are not a substitute
+# for runtime capability probing (STORY-1.2) and must never be inferred from a
+# directory or variant name alone (see planning/BACKGROUND.md, "Firmware (C)
+# internals" and planning/ROADMAP.md STORY-3.1/3.3).
+#
+# `source_commit` is the exact commit the binary was built from, recovered from the
+# `MicroPython vX.Y.Z-preview.N.g<sha><dirty?>` version string embedded in each
+# artifact (readable via `strings <binary> | grep MicroPython`). This is independent
+# of whatever commit the `micropython` submodule happens to be pinned to today —
+# recording the submodule's current SHA against an older artifact would be a false
+# provenance claim. A `.dirty` suffix in the upstream version string means the build
+# tree had uncommitted changes on top of `source_commit`; the artifact's exact source
+# is therefore not fully reconstructable from that commit alone.
+#
+# `set_local` fields: BACKGROUND.md's traced findings against the micropython
+# submodule *as pinned* (05b7818) show `frame._set_local` / `sys._set_local_var` do
+# not exist in that source tree — grep over py/ and ports/unix/ returns nothing, and
+# `frame_attr`'s store branch handles only f_trace. Only the `unix_settrace_local_xx`
+# artifact's `source_commit` (05b7818c80) matches that traced checkout, so it is the
+# only variant for which "no set_local" is source-verified here. The other two
+# artifacts were built from different, unfetched commits (shallow submodule clone
+# does not contain them) so their source cannot be inspected from this checkout;
+# `set_local` for those is recorded from what `strings` on the binary itself shows
+# (symbol presence is necessary but not sufficient for a working write-back path —
+# only a runtime probe, STORY-1.2, can confirm behaviour).
+
+[[variant]]
+id = "unix-settrace-save-names"
+description = "Unix port, sys.settrace enabled, real local variable names (MICROPY_PY_SYS_SETTRACE_SAVE_NAMES)."
+repo = "https://github.com/josverl/micropython.git"
+source_commit = "a7c7a75eef"
+source_commit_note = "Recovered from embedded version string 'v1.26.0-preview.272.ga7c7a75eef.dirty on 2025-06-19'. Not the commit the micropython submodule is currently pinned to (05b7818); not present in this repo's shallow submodule clone, so the exact source cannot be diffed from here. dirty: build tree had uncommitted changes on top of this commit."
+port = "unix"
+board = "standard"
+build_flags = [
+    "MICROPY_PY_SYS_SETTRACE=1",
+    "MICROPY_PY_SYS_SETTRACE_SAVE_NAMES=1",
+]
+capabilities = { settrace = true, save_names = true, set_local = false }
+capabilities_note = "set_local=false is inferred by absence: 'strings' on this binary contains no '_set_local' or 'set_local_var' symbol. Source not available locally to confirm (see source_commit_note). Treat as unconfirmed, not proven, until runtime-probed (STORY-1.2)."
+artifact = "unix_settrace_save_names/micropython"
+artifact_sha256 = "22e32da050ed5f3d11938e7a773d09913320ad7c17271454eb392232f7fcfcfc"
+download_url = ""  # TODO: no GitHub Release published yet for this artifact (STORY-3.1 AC: "repo no longer stores firmware binaries" is not yet done). Populate once CI publishes a release asset.
+
+[[variant]]
+id = "unix-settrace-local-xx"
+description = "Unix port, sys.settrace enabled, placeholder local names (local_N; SAVE_NAMES off). Matches the micropython submodule's pinned commit exactly."
+repo = "https://github.com/josverl/micropython.git"
+source_commit = "05b7818c80defd927d7edf11cef47e3bab892629"
+source_commit_note = "Recovered from embedded version string 'v1.26.0-preview.207.g05b7818c80 on 2025-06-23', which matches the exact commit currently pinned by the micropython submodule (branch pdb_support_jos). This is the only variant here whose source is directly inspectable in this checkout."
+port = "unix"
+board = "standard"
+build_flags = [
+    "MICROPY_PY_SYS_SETTRACE=1",
+]
+capabilities = { settrace = true, save_names = false, set_local = false }
+capabilities_note = "set_local=false is source-verified: BACKGROUND.md traced py/profile.c and py/modsys.c at this exact commit and found no frame._set_local, no sys._set_local_var, and frame_attr's store branch handles only f_trace. Locals are exposed only as positional placeholders (local_1, local_2, ...; format is local_%d, not local_01)."
+artifact = "unix_settrace_local_xx/micropython"
+artifact_sha256 = "ac49b959350203fa6d5ad2c65664a3c727f5cbb626e5c06287956054e18ed44d"
+download_url = ""  # TODO: no GitHub Release published yet for this artifact.
+
+[[variant]]
+id = "unix-settrace-set-local"
+description = "Unix port, sys.settrace enabled. Directory/variant name claims local-variable write-back support (set_local); do not trust that name — see capabilities_note."
+repo = "https://github.com/josverl/micropython.git"
+source_commit = "87ff9ef78"
+source_commit_note = "Recovered from embedded version string 'v1.20.0-2500.g87ff9ef78.dirty on 2025-07-01'. Different commit and different upstream base version (v1.20.0 vs v1.26.0-preview for the other two variants) from what the micropython submodule is pinned to today (05b7818); not present in this repo's shallow submodule clone. dirty: build tree had uncommitted changes on top of this commit, so the artifact's exact source is not fully reconstructable."
+port = "unix"
+board = "standard"
+build_flags = [
+    "MICROPY_PY_SYS_SETTRACE=1",
+    # SAVE_NAMES status unknown for this build: 'strings' on the binary does not show
+    # the 'local_%d' placeholder-name format string, which is weak evidence SAVE_NAMES
+    # was on, but this is not confirmed against source (source unavailable locally).
+]
+capabilities = { settrace = true, save_names = "unknown", set_local = "unknown" }
+capabilities_note = "The variant name 'set_local' is a claim about capability, not a fact — per planning/BACKGROUND.md this is exactly the failure mode STORY-3.1/3.3 exist to fix (capability encoded in a name, not probed). 'strings' on this binary DOES contain a '_set_local' symbol, unlike the other two variants, which is evidence a write-back path may exist in this build's source — but symbol presence alone does not prove the feature works end-to-end, and the source commit is not available in this checkout to confirm behaviour. This must be confirmed only by the runtime capability probe (STORY-1.2), never asserted from this name or from symbol presence alone."
+artifact = "unix_settrace_set_local/micropython"
+artifact_sha256 = "24e28f5332c0a6913031c89466745d5952b0d1781948adc1a163226789d768c1"
+download_url = ""  # TODO: no GitHub Release published yet for this artifact.
+
+[[variant]]
+id = "esp32-generic-settrace-save-names"
+description = "ESP32_GENERIC board, sys.settrace enabled, real local variable names (MICROPY_PY_SYS_SETTRACE_SAVE_NAMES)."
+repo = "https://github.com/josverl/micropython.git"
+source_commit = "a7c7a75eef"
+source_commit_note = "Recovered from embedded version string 'v1.26.0-preview.272.ga7c7a75eef.dirty on 2025-06-18', one day before and matching the same commit family as unix-settrace-save-names. Not present in this repo's shallow submodule clone."
+port = "esp32"
+board = "ESP32_GENERIC"
+build_flags = [
+    "MICROPY_PY_SYS_SETTRACE=1",
+    "MICROPY_PY_SYS_SETTRACE_SAVE_NAMES=1",
+]
+capabilities = { settrace = true, save_names = true, set_local = false }
+capabilities_note = "set_local=false is inferred by absence: 'strings' on this binary contains no '_set_local' or 'set_local_var' symbol. Source not available locally to confirm. Treat as unconfirmed until runtime-probed (STORY-1.2)."
+artifact = "esp32_settrace_save_names/firmware.bin"
+artifact_sha256 = "ba28e9316d1fcf4b6053b73ad991ba4a4d92e296b93e1ce86da2bc9f3a1a426b"
+download_url = ""  # TODO: no GitHub Release published yet for this artifact.

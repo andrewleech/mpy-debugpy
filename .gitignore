@@ -1,0 +1,22 @@
+# Firmware binaries are not stored in-repo; they are described by
+# firmware/firmware.toml and fetched/built on demand (see launcher/firmware.py).
+firmware/**/*.bin
+firmware/**/*.elf
+firmware/**/*.uf2
+firmware/**/micropython
+firmware/build*/
+
+# debugpy cross-compiled artifacts
+launcher/compiled/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Local secrets (device WiFi credentials)
+src/_secrets.py
+
+# Editor/OS
+.DS_Store
