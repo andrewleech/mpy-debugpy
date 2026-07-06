@@ -218,6 +218,15 @@ foundations, because each can remove a whole epic's worth of work.
 - **D5 (2026-07-06) — Canonical lineage is the andrewleech branches composed onto
   current upstream master**; Jos's snapshot branches are provenance only. Composition
   recorded in `mbm.toml`; hand-composed until STORY-8.5. `20260706_recomposition.md`.
+- **D6 (2026-07-06) — Depend on the ampremote lineage for mpremote primitives until
+  its PRs land upstream.** The prerequisite mpremote capabilities (verify_hash #18436,
+  QEMU PTY #18327, auto-reconnect #17322, rfc2217/TCP #19062) are ampremote-only at the
+  pinned upstream SHA. Rather than feature-detecting their absence, register the needed
+  ampremote branches into this repo's `micropython:mpy-debugpy` composition via mbm
+  (STORY-8.5 scope, consistent with Q1's one-branch/two-consumers model). The dependency
+  dissolves naturally as each PR merges upstream and drops out of the composition at the
+  next `mbm rebase`. Tickets written before this date (s4.x, s6.1/s6.2) hedge with
+  "feature-detect" language — supersede that at phase-entry revalidation.
 
 ### Open questions
 
@@ -246,9 +255,6 @@ All open questions are now closed; see DECIDED entries below.
   the v1 roadmap rather than deferring to v2.
 - **Q5 → wire mbm reproducibility now.** STORY-8.5 is pulled forward — do it before more
   feature work so upstream-master bumps stay cheap.
-- **Q6 → OPEN**, being traced now by an opus agent (result → design note
-  `20260706_flocals_params.md`, then STORY-8.6). Row kept until that lands.
-
 Close a question with a dated DECIDED entry and a pointer to the design note that
 resolved it; do not delete rows.
 
@@ -733,6 +739,12 @@ commits to the extension path and is done last, after the command carries the lo
 or the preLaunchTask/problemMatcher contortions the repo has now. Kept thin: it shells out
 to `mpremote debug` and starts a `debugpy` attach with the generated config.
 
+> **Fan-out (2026-07-06):** the extension grows beyond this epic into a full
+> MicroPython extension (stubs, broker/REPL, fs explorer, mip installer,
+> mpflash/mpbuild firmware flows) via its OWN roadmap, seeded by
+> `20260706_vscode-extension-direction.md`. EPIC-7 remains the v1 slice here and
+> becomes that roadmap's foundation; it does not absorb the new scope.
+
 **Definition of done:** a custom `micropython` debug type resolves to a debugpy attach
 using the command's handshake; a target picker in the status bar; nine launch configs
 collapse to one; extension depends on ms-python.
@@ -923,7 +935,7 @@ Notes:
 | Firmware behaviour assumptions drift when branches are recomposed (e.g. Q6 parameter omission, line-event timing) | runtime capability probe (STORY-1.2) + behavioural DAP tests re-run on every recomposition; never trust names or prose over the probe |
 | Upstream review churn on #8767 invalidates the composition | keep integration deltas small and upstream-first (STORY-8.2/8.6); rerere replays conflict resolutions |
 | Prebuilt firmware provenance drift (legacy artifacts predate the recomposed branch) | STORY-3.1/3.2: CI-built, hash-verified artifacts from the pinned submodule SHA; the manifest never claims what the probe would contradict |
-| EPIC-4/5 assume mpremote primitives (verify_hash, QEMU PTY, reconnect, rfc2217) that exist only in ampremote's tree, not this repo's submodule | register the needed mpremote branches into this repo's `mpy-debugpy` integration via mbm (folded into STORY-8.5 scope), or run against the installed `ampr`; tickets s4.1/s4.2/s4.4/s5.x carry the dependency explicitly |
+| EPIC-4/5 assume mpremote primitives (verify_hash, QEMU PTY, reconnect, rfc2217) that exist only in ampremote's tree, not this repo's submodule | DECIDED as D6: register the needed ampremote branches into this repo's `mpy-debugpy` integration via mbm (folded into STORY-8.5 scope) until the PRs land upstream; tickets s4.1/s4.2/s4.4/s5.x carry the dependency explicitly |
 | Serial DAP framing on single-UART boards unproven | network transport stays mainline (D3); the framing prototype is a gated follow-up spike (Q3), not a dependency |
 | Busy-poll pause loop starves WiFi/housekeeping while paused on device | measure during STORY-6.4 hardware-in-loop tests; document the impact and tune the poll interval if measurable |
 

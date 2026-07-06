@@ -18,6 +18,7 @@ the current phase/epic → its tickets under `tickets/`.
 | `SPIKE-2.2-serial-dap.md` | decision record: serial DAP is board-dependent (D3); retains the single-UART framing detail deferred by Q3 |
 | `20260706_recomposition.md` | design note: canonical lineage = andrewleech branches composed onto current upstream master (D5) |
 | `20260706_flocals_params.md` | trace: params are NOT omitted from `f_locals` on the current branch (closes Q6) |
+| `20260706_vscode-extension-direction.md` | design note: VS Code extension fan-out — positioning (build new), decided questions (mbm-adopt overlaps, broker in mpremote, stubs best-practices, mpflash, mpbuild), feature set; seeds a future `vscode/ROADMAP.md` |
 | `tickets/s<epic>.<story>_<slug>.md` | one self-contained execution brief per substantive work item, all phases, written upfront at peak knowledge |
 
 ## Conventions
