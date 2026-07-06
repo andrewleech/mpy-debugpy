@@ -63,9 +63,22 @@ hardcoded absolute paths) and drive real behaviour, not source-string checks.
 
 ## Planning
 
-`planning/ROADMAP.md` (epics/stories + status), `planning/BACKGROUND.md`
-(architecture), and `planning/SPIKE-*.md` (decision records). These are tracked
-here deliberately — keep them current as work lands.
+**Entry point: `planning/00_index.md`** — the folder's operating manual (document
+map, conventions, phase-entry ticket-revalidation procedure, execution model,
+ticket template). Then `planning/ROADMAP.md` (epics/stories + status +
+open-questions table + risk register), `planning/BACKGROUND.md` (architecture,
+commit-anchored), `planning/SPIKE-*.md` / `planning/YYYYMMDD_*.md` (decision
+records / research reports), and `planning/tickets/` (per-work-item execution
+briefs). Tracked here deliberately — keep them current as work lands.
+
+Capture discipline (per the phased-roadmap procedure):
+
+- New research/design documents go in `planning/` as `YYYYMMDD_<topic>.md` with a
+  header carrying the date, the top-repo HEAD SHA, and the relevant submodule SHAs.
+- The roadmap's Status, open-questions table (Q1..Qn), and risk register are updated
+  in place, never forked. A question closes with a dated DECIDED entry pointing at
+  the design note that resolved it; rows are never deleted.
+- Decision records are append-only: add dated corrections, don't rewrite conclusions.
 
 ## Python tooling
 

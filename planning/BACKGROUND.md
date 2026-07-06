@@ -4,6 +4,16 @@ Starting-point notes on how MicroPython debugpy support fits together, captured 
 inspecting the PRs and the checked-out submodule source. This is orientation material,
 not a design decision record.
 
+> **Anchoring:** captured 2026-07-04 against the original Josverl wrapper repo —
+> submodules micropython @ `05b7818` (`pdb_support_jos`), micropython-lib @ `1b49992`
+> (`debugpy/jos`). The integration has since been recomposed onto current upstream
+> master from the andrewleech lineage (see `20260706_recomposition.md`). Facts below
+> superseded by that recomposition: the name-capture macro is now
+> `MICROPY_PY_SYS_SETTRACE_LOCALNAMES` (not `_SAVE_NAMES`); the unix `standard` variant
+> on the integration branch enables settrace by default; the `f_locals` slot-assignment
+> heuristic was fixed; the `line` event fires before the statement executes. File/line
+> references in "Firmware (C) internals" are valid only against `05b7818`.
+
 ## What this project is
 
 `Josverl/mp_debugpy` is a wrapper repo that pins two MicroPython forks as submodules and
@@ -227,6 +237,10 @@ How the dict is populated depends on `MICROPY_PY_SYS_SETTRACE_SAVE_NAMES`:
   `local_num < param_count` (`:200`). Net effect: **function parameters are omitted from
   `f_locals`** in the SAVE_NAMES path; only non-parameter locals are emitted. Name storage is
   also capped at `MICROPY_PY_SYS_SETTRACE_NAMES_MAX` (32) slots.
+  **SUPERSEDED (2026-07-06):** this omission is gone on the recomposed integration branch
+  (`18c76f7c`). There `py/profile.c:164/181` stores every `local_num` unconditionally with no
+  `param_count` skip, and params appear in `f_locals` under their real names (proven
+  empirically). See `20260706_flocals_params.md`. The trace above is valid only at `05b7818`.
 - **Without SAVE_NAMES** (`:228-248`): names are synthesized as `local_1`, `local_2`, …
   (`vstr_printf(..., "local_%d", order_idx + 1)`, `:240`) over the reverse-slot walk. These
   are positional placeholders, not source names. (The docs elsewhere say `local_01`; the

@@ -2,6 +2,10 @@
 
 Status: complete (desk investigation; no hardware attach attempted — see confidence note).
 
+Anchored: 2026-07-05, micropython submodule @ `05b7818` (pre-recomposition). The serial /
+raw-REPL mechanics analysed here live in upstream mpremote and the debugpy module's
+transport layer; conclusions are unaffected by the 2026-07-06 branch recomposition.
+
 ## Question
 
 STORY-2.2 asks whether the DAP byte stream can be tunnelled over the existing

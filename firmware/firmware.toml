@@ -15,8 +15,15 @@
 # tree had uncommitted changes on top of `source_commit`; the artifact's exact source
 # is therefore not fully reconstructable from that commit alone.
 #
+# NOTE (2026-07-06): all four variants are legacy artifacts built from the
+# pre-recomposition Josverl lineage. The micropython submodule now pins the recomposed
+# andrewleech integration branch (mpy-debugpy, 18c76f7c), so statements below comparing
+# an artifact to "the pinned submodule" describe the pin at capture time (05b7818),
+# not the current one. These entries stand as provenance records until STORY-3.2's CI
+# builds replace them with artifacts from the pinned integration SHA.
+#
 # `set_local` fields: BACKGROUND.md's traced findings against the micropython
-# submodule *as pinned* (05b7818) show `frame._set_local` / `sys._set_local_var` do
+# submodule as pinned at capture time (05b7818) show `frame._set_local` / `sys._set_local_var` do
 # not exist in that source tree — grep over py/ and ports/unix/ returns nothing, and
 # `frame_attr`'s store branch handles only f_trace. Only the `unix_settrace_local_xx`
 # artifact's `source_commit` (05b7818c80) matches that traced checkout, so it is the
@@ -47,10 +54,10 @@ download_url = ""  # TODO: no GitHub Release published yet for this artifact (ST
 
 [[variant]]
 id = "unix-settrace-local-xx"
-description = "Unix port, sys.settrace enabled, placeholder local names (local_N; SAVE_NAMES off). Matches the micropython submodule's pinned commit exactly."
+description = "Unix port, sys.settrace enabled, placeholder local names (local_N; SAVE_NAMES off). Matched the submodule pin at capture time (see header note)."
 repo = "https://github.com/josverl/micropython.git"
 source_commit = "05b7818c80defd927d7edf11cef47e3bab892629"
-source_commit_note = "Recovered from embedded version string 'v1.26.0-preview.207.g05b7818c80 on 2025-06-23', which matches the exact commit currently pinned by the micropython submodule (branch pdb_support_jos). This is the only variant here whose source is directly inspectable in this checkout."
+source_commit_note = "Recovered from embedded version string 'v1.26.0-preview.207.g05b7818c80 on 2025-06-23', which matched the commit pinned by the micropython submodule at capture time (Josverl branch pdb_support_jos; the submodule has since moved to the recomposed integration branch). At capture time this was the only variant whose source was directly inspectable in the checkout."
 port = "unix"
 board = "standard"
 build_flags = [

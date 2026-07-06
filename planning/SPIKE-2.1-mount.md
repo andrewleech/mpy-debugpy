@@ -5,6 +5,10 @@ available in this environment — see "Reproduction attempt" below). Confidence:
 mechanism claims below; medium for the overall verdict, pending the hardware check this
 document specifies.
 
+Anchored: 2026-07-05, micropython submodule @ `05b7818` (pre-recomposition). The mount
+mechanics analysed here live in upstream mpremote (`transport_serial.py`) and are
+unaffected by the 2026-07-06 branch recomposition.
+
 ## Question
 
 The roadmap's hypothesis (`ROADMAP.md`, "The mount mechanism, and why it is a spike"): mount
