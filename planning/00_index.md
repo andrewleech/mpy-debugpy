@@ -12,7 +12,7 @@ the current phase/epic → its tickets under `tickets/`.
 | file | what it is |
 |------|------------|
 | `00_index.md` | this file — conventions + phase-entry procedure |
-| `ROADMAP.md` | the living roadmap: epics/stories, status, settled decisions D1–D6, questions (Q1–Q6 closed, Q7 open), risk register, dependency-ordered execution sequence |
+| `ROADMAP.md` | the living roadmap: epics/stories, status, settled decisions D1–D6, questions Q1–Q7 (all closed), risk register, dependency-ordered execution sequence |
 | `BACKGROUND.md` | architecture orientation, commit-anchored to the ORIGINAL Josverl tree (`05b7818`); superseded facts are marked inline — trust the anchor notes |
 | `SPIKE-2.1-mount.md` | decision record: mount works under settrace (D2); source of STORY-4.5/6.5 |
 | `SPIKE-2.2-serial-dap.md` | decision record: serial DAP is board-dependent (D3); retains the single-UART framing detail deferred by Q3 |

@@ -61,8 +61,8 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   `launcher/firmware.py select` resolves required capabilities against manifest
   intent, and `launcher/capcheck.py` hard-errors any claimed-true-but-probed-false
   key against the real MPDBG-READY handshake. Host suite 39 passed / 1 xfailed
-  (26 new tests). s3.2 is blocked on the push-to-origin policy call (CI needs
-  the repo pushed to iterate Actions); s3.4 waits on s3.2's Release URLs.
+  (26 new tests). s3.2 was blocked on the push-to-origin policy call until Q7
+  DECIDED (2026-07-15: push as work lands); s3.4 waits on s3.2's Release URLs.
 - **Integration recomposed onto current upstream master (2026-07-06).** The first
   migration into this repo vendored Josverl snapshot branches frozen at an old master;
   that was rejected and redone. Both submodule integration branches are now composed
@@ -274,18 +274,18 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-Q1–Q6 are closed (DECIDED entries below); Q7 is open.
+All questions Q1–Q7 are closed; see DECIDED entries below.
 
-**OPEN:**
+**DECIDED (2026-07-15):**
 
-- **Q7 (raised 2026-07-15) — push-to-origin / CI iteration policy.** STORY-3.2's
-  GitHub Actions firmware builds need this repo pushed to `origin`
-  (git@github.com:andrewleech/mpy-debugpy.git, public) to iterate; local `main`
-  is 8 commits ahead of `origin/main` @ `59fab84` and earlier sessions'
-  commits were never pushed either, so pushing is not established convention —
-  it needs an explicit call. Blocks s3.2's Actions/Release half (and
-  transitively s3.4's fetch-URL sections); s3.2's local dockerised build path
-  and everything on the EPIC-4/5 front are not gated on it.
+- **Q7 → push `main` to `origin` as work lands** (option a). Raised the same
+  day during the roadmap review: STORY-3.2's GitHub Actions firmware builds
+  need this repo pushed to `origin` (git@github.com:andrewleech/mpy-debugpy.git,
+  public) to iterate, and pushing was not established convention — local `main`
+  had accumulated 8 unpushed commits across sessions. Decision accepts that
+  `planning/` becomes public. Unblocks s3.2 in full (and transitively s3.4's
+  fetch-URL sections); Actions iteration happens on `main` or short-lived
+  branches at the executor's discretion.
 
 **DECIDED (2026-07-06):**
 
@@ -971,8 +971,8 @@ parallel.
 1. **STORY-1.1**, **STORY-1.2** (independent) — and **STORY-3.1** can start here too.
    **DONE.**
 2. **STORY-1.3** (needs 1.2), **STORY-1.4** (needs 1.1+1.2), **STORY-3.2** (needs 3.1),
-   **STORY-3.3** (needs 1.2+3.1) — parallel. **DONE except STORY-3.2** — its
-   Actions/Release half is blocked on Q7; the local dockerised build half can proceed.
+   **STORY-3.3** (needs 1.2+3.1) — parallel. **DONE except STORY-3.2** — was
+   blocked on Q7, executable in full since Q7 DECIDED (2026-07-15).
 3. **STORY-1.5** (needs 1.1–1.4), **STORY-3.4** (needs 3.1+3.3) — parallel.
    **STORY-1.5 DONE**; STORY-3.4 waits on s3.2's Release URLs (its capability-truth
    section is decision-stable and can be drafted early).
