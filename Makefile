@@ -18,20 +18,29 @@ DEBUG_CFLAGS   :=
 .PHONY: bootstrap integrate firmware-unix mpy-cross test demo firmware-list firmware-verify clean
 
 # One-shot setup: check out the recorded integration commits and the libraries
-# the unix port needs. This does NOT run `mbm rebase` — the integration branches
-# are composed by hand (merge + cherry-pick onto current master, see mbm.toml),
-# not yet reconstructable via mbm automation.
+# the unix port needs. Checkout-only; rebuilding the integration branches from
+# mbm.toml is the separate `integrate` target below.
 bootstrap:
 	git submodule update --init --recursive
 	$(MAKE) -C $(UNIX_PORT) VARIANT=$(UNIX_VARIANT) submodules
 
-# Reconstruct the integration branches from mbm.toml on top of upstream master.
-# NOT part of bootstrap and not yet wired: the branches are currently hand-composed
-# (merge + cherry-pick). Expressing them as mbm add-pr composition is the
-# upstreaming epic (see planning/ROADMAP.md).
+# Rebuild the integration branches from mbm.toml on top of the latest upstream
+# master, into <integration>_update branches (mpy-debugpy_update). --local
+# skips mbm's own push routing, which targets upstream, not the andrewleech
+# fork; it also skips mbm's pre-fetch, so we fetch by hand first. Conflicts
+# stop mbm with instructions: resolve, `git rebase --continue`, then re-run
+# with `--resume`.
 integrate:
-	@echo "mbm auto-composition not wired yet; branches are hand-composed (see mbm.toml)."
-	@echo "See planning/ROADMAP.md upstreaming epic."
+	git -C $(MPY) fetch --all --quiet
+	git -C micropython-lib fetch --all --quiet
+	mbm rebase -s micropython --local
+	mbm rebase -s micropython-lib --local
+	@echo "Update branches rebuilt (mpy-debugpy_update in each submodule)."
+	@echo "Verify them, then for each submodule:"
+	@echo "  git -C <submodule> branch -f mpy-debugpy mpy-debugpy_update"
+	@echo "  git -C <submodule> push andrewleech +mpy-debugpy:mpy-debugpy"
+	@echo "mbm's own push routing targets upstream, not the fork; never run"
+	@echo "mbm rebase without --local."
 
 mpy-cross:
 	$(MAKE) -C $(MPY)/mpy-cross

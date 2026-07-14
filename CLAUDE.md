@@ -28,25 +28,34 @@ As each piece is upstreamed, it should leave this repo.
 ```bash
 mbm config -s micropython           # show the composed branch set
 mbm add-pr <N> -s <submodule>       # add an upstream PR to an integration branch
-mbm rebase -s <submodule>           # rebuild the integration on latest upstream
+make integrate                      # rebuild both integrations on latest upstream
 ```
+
+Rules that keep mbm safe here (learned the hard way, full detail in
+`planning/tickets/s8.5_mbm-reproducible-composition.md`):
+
+- Both submodules need a remote literally named `upstream`; mbm hardcodes it
+  for PR fetches and the default rebase target.
+- Always `mbm rebase --local` (what `make integrate` does). Without `--local`
+  mbm force-pushes feature branches at the *upstream* repo, not the fork.
+- The rebuild lands on `mpy-debugpy_update`; verify it, then force-move
+  `mpy-debugpy` and push to the `andrewleech` fork by hand.
+- mbm force-moves local feature branches to rebased versions as a side
+  effect; reset them to the canonical fork tips afterwards.
 
 `git rerere` records conflict resolutions so rebuilds replay them. After a
 manual conflict resolution during `add-pr`, fast-forward the integration branch
 to the working tip (see the ampremote CLAUDE.md for the exact sequence).
 
-### Composing the debug branches (first integration task)
+### The composed branch set
 
-`mbm.toml` starts with both submodules registered and no branches. Populate it:
-
-- `micropython-lib`: PR #1022 (base debugpy), then the local `debugpy`
-  foundations branch (EPIC-1 work), then Jos's follow-up updates.
-- `micropython`: PR #8767 (settrace), then the local-variable branches. Note
-  #8767 is old relative to master; expect conflicts and record them via rerere.
-
-The exact fork/branch refs for the local branches depend on where they are
-pushed (see planning/ROADMAP.md). Register local-only branches by hand in
-`mbm.toml` with `pr_url` pointing at the fork branch, as ampremote does.
+Per submodule, one PR-number entry fetched live from upstream at each rebase
+plus one local-only entry (fork `/tree/` pr_url, no pr_number, must exist as a
+local branch): `micropython` = `pdb_support` (#8767) + `local_names_implementation`;
+`micropython-lib` = `add-debugpy-support` (#1022) + `mpy-debugpy-foundations`.
+Register new local-only branches by hand in `mbm.toml`, as ampremote does; the
+ampremote mpremote branches (#18436 etc.) get added only when the EPIC-4/5
+ticket that needs them starts (decision D6).
 
 ## Firmware
 

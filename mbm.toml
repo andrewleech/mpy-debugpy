@@ -3,25 +3,45 @@
 #          or: uv tool install micropython-branch-manager
 # Usage:   mbm --help
 #
-# Each integration branch is composed ONTO CURRENT UPSTREAM MASTER from the
-# andrewleech debug-support branches (a merge of the settrace / debugpy PRs plus
-# cherry-picked local-variable commits and integration fixes) — not a snapshot
-# frozen at an old master. The composition is currently done by hand (merge +
-# cherry-pick), so it is recorded here for provenance but is not yet reproducible
-# via `mbm rebase` / `mbm add-pr`; wiring that is the upstreaming epic in
-# planning/ROADMAP.md. Do not run `mbm rebase` expecting a clean rebuild yet.
+# This file DRIVES `mbm rebase` (run via `make integrate`); `make bootstrap`
+# stays checkout-only. Composed branches are pushed to the andrewleech forks
+# (andrewleech/micropython @ mpy-debugpy, andrewleech/micropython-lib @
+# mpy-debugpy). A branch entry without `pr_number` whose `pr_url` is a fork
+# `/tree/` URL is local-only: mbm uses the pre-existing local branch of that
+# name as-is, so it must exist locally in the submodule (and be pushed to the
+# fork for provenance) before running `mbm rebase`.
 #
-# Published on the andrewleech forks (andrewleech/micropython @ mpy-debugpy,
-# andrewleech/micropython-lib @ mpy-debugpy); .gitmodules points there, so
-# `git clone --recurse-submodules` + `make bootstrap` reproduces the tree.
+# D6 scoping: the ampremote mpremote branches (verify_hash #18436, QEMU PTY
+# #18327, reconnect #17322, rfc2217 #19062, fast transfer #18785) are not
+# registered here. They get added only when the EPIC-4/5 ticket that needs
+# them starts.
 
-submodules = [
-    { path = "micropython", integration_branch = "mpy-debugpy", branches = [
-        { name = "pdb_support", pr_url = "https://github.com/micropython/micropython/pull/8767", title = "sys.settrace: gettrace, _getframe, f_trace (merged onto master)" },
-        { name = "local_names_implementation", pr_url = "https://github.com/andrewleech/micropython/tree/local_names_implementation", title = "frame.f_locals + local-name preservation (cherry-picked locals commits)" },
-    ] },
-    { path = "micropython-lib", integration_branch = "mpy-debugpy", branches = [
-        { name = "add-debugpy-support", pr_url = "https://github.com/micropython/micropython-lib/pull/1022", title = "debugpy DAP server + enhancements (merged onto master)" },
-        { name = "mpy-debugpy-foundations", pr_url = "https://github.com/andrewleech/micropython-lib/tree/mpy-debugpy", title = "EPIC-1: DAP framing fix, wait_for_client, capability probe, read-only locals" },
-    ] },
-]
+[[submodules]]
+path = "micropython"
+integration_branch = "mpy-debugpy"
+
+[[submodules.branches]]
+name = "pdb_support"
+pr_url = "https://github.com/micropython/micropython/pull/8767"
+pr_number = 8767
+title = "sys.settrace: gettrace, _getframe, f_trace support (PR #8767)"
+
+[[submodules.branches]]
+name = "local_names_implementation"
+pr_url = "https://github.com/andrewleech/micropython/tree/local_names_implementation"
+title = "frame.f_locals with real local names + placeholder fallback"
+
+[[submodules]]
+path = "micropython-lib"
+integration_branch = "mpy-debugpy"
+
+[[submodules.branches]]
+name = "add-debugpy-support"
+pr_url = "https://github.com/micropython/micropython-lib/pull/1022"
+pr_number = 1022
+title = "debugpy DAP server (PR #1022)"
+
+[[submodules.branches]]
+name = "mpy-debugpy-foundations"
+pr_url = "https://github.com/andrewleech/micropython-lib/tree/mpy-debugpy-foundations"
+title = "debugpy enhancements + EPIC-1 foundations (DAP framing fix, wait_for_client, capability probe, read-only locals)"
