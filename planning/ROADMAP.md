@@ -19,6 +19,24 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **Phase 0 DONE (2026-07-15): STORY-8.6 + STORY-8.5.** The canonical locals
+  branch `andrewleech/local_names_implementation` is rebuilt as 7 bisect-clean
+  commits on `pdb_support` (`2ff9f3cd8` -> `7ae5f769c`, fork PR #5), carrying
+  the two integration fixes, the new param-names regression test, and repairs
+  for defects the recomposition never surfaced because the firmware tests had
+  never been run: a real qstr sentinel bug (`MP_QSTR_NULL` vs `MP_QSTRnull`),
+  three locals tests failing on stale expectations / CPython 3.13+ divergence,
+  a pre-existing one-extra-line-event tracer artifact on for-loops (now
+  documented via static `.exp`), in-tree scratch files, and two latent
+  feature-macro compile failures. `frame_f_locals` keeps the `local_NN`
+  fallback for code without name data (load-bearing for `.mpy` device
+  debugging). Both integration branches are now mbm-rebuildable from
+  `mbm.toml` (`make integrate`; always `--local`, pushes stay manual):
+  pinned-target proof runs had zero conflicts, micropython recomposed to
+  `6863e938a1` (differs from the old tip by exactly the reviewed 13-file
+  divergence manifest), micropython-lib to `d7b297dfd1` (tree-identical to the
+  old tip); `make test` gate exactly 13 passed / 1 xfailed. Full record:
+  `20260715_phase0-canonical-branches-mbm.md`.
 - **Integration recomposed onto current upstream master (2026-07-06).** The first
   migration into this repo vendored Josverl snapshot branches frozen at an old master;
   that was rejected and redone. Both submodule integration branches are now composed
@@ -893,6 +911,8 @@ parallel.
    rebuilt on top of `pdb_support` with the two fix commits (that IS STORY-8.6) before
    the composition can be expressed as mbm branch entries. EPIC-1 and STORY-3.1 are
    already DONE; Q6 is closed (no param fix needed, regression test only).
+   **DONE 2026-07-15** (both stories; see Status and
+   `20260715_phase0-canonical-branches-mbm.md`).
 1. **STORY-1.1**, **STORY-1.2** (independent) — and **STORY-3.1** can start here too.
 2. **STORY-1.3** (needs 1.2), **STORY-1.4** (needs 1.1+1.2), **STORY-3.2** (needs 3.1),
    **STORY-3.3** (needs 1.2+3.1) — parallel.
@@ -931,7 +951,7 @@ Notes:
 
 | risk | mitigation |
 |------|------------|
-| Hand-composed integration cannot be rebuilt when upstream master moves | STORY-8.5 (mbm + rerere); until then do NOT run `mbm rebase`; backup branches (`mpy-debugpy-vendored-backup`) are kept |
+| ~~Hand-composed integration cannot be rebuilt when upstream master moves~~ RESOLVED 2026-07-15: both branches rebuild from `mbm.toml` (`make integrate`) | Proven by pinned-target runs (zero conflicts, exact tree equivalence). Residual rules: never run `mbm rebase` without `--local` (its pushes target upstream, not the fork); reset local feature branches to the canonical fork tips after each run; backups `mpy-debugpy-pre-mbm` + `mpy-debugpy-vendored-backup` kept |
 | Firmware behaviour assumptions drift when branches are recomposed (e.g. Q6 parameter omission, line-event timing) | runtime capability probe (STORY-1.2) + behavioural DAP tests re-run on every recomposition; never trust names or prose over the probe |
 | Upstream review churn on #8767 invalidates the composition | keep integration deltas small and upstream-first (STORY-8.2/8.6); rerere replays conflict resolutions |
 | Prebuilt firmware provenance drift (legacy artifacts predate the recomposed branch) | STORY-3.1/3.2: CI-built, hash-verified artifacts from the pinned submodule SHA; the manifest never claims what the probe would contradict |

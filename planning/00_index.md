@@ -19,6 +19,7 @@ the current phase/epic → its tickets under `tickets/`.
 | `20260706_recomposition.md` | design note: canonical lineage = andrewleech branches composed onto current upstream master (D5) |
 | `20260706_flocals_params.md` | trace: params are NOT omitted from `f_locals` on the current branch (closes Q6) |
 | `20260706_vscode-extension-direction.md` | design note: VS Code extension fan-out — positioning (build new), decided questions (mbm-adopt overlaps, broker in mpremote, stubs best-practices, mpflash, mpbuild), feature set; seeds a future `vscode/ROADMAP.md` |
+| `20260715_phase0-canonical-branches-mbm.md` | progress record: phase-0 execution (STORY-8.6 canonical locals branch + STORY-8.5 mbm composition), the defects it surfaced, the divergence manifest, mbm operational rules |
 | `tickets/s<epic>.<story>_<slug>.md` | one self-contained execution brief per substantive work item, all phases, written upfront at peak knowledge |
 
 ## Conventions
