@@ -37,6 +37,14 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   divergence manifest), micropython-lib to `d7b297dfd1` (tree-identical to the
   old tip); `make test` gate exactly 13 passed / 1 xfailed. Full record:
   `20260715_phase0-canonical-branches-mbm.md`.
+- **STORY-6.5 DONE (2026-07-15).** DAP `evaluate` executes statements for
+  `repl`/`clipboard` contexts (eval-first, exec-on-SyntaxError against live
+  `f_globals`; shadowed-local writes warn; watch/hover regression-locked;
+  46 passed / 1 xfailed). Delivered through the new composition flow:
+  foundations branch `e359a95` -> `4fabcb3`, recomposed `mpy-debugpy`
+  `5f74950e9e`, both fork-pushed. Reentrancy proven safe via the VM's
+  `mp_prof_is_executing` guard. Known harness startup race noted in the
+  ticket for s5.5.
 - **STORY-3.3 DONE (2026-07-15).** Legacy manifest entries deprecated (provenance
   kept, excluded from selection; collapsed per-board entries land with s3.2),
   `launcher/firmware.py select` resolves required capabilities against manifest
