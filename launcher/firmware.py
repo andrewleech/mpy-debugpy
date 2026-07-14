@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -176,6 +177,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     except SelectionError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
+    except (urllib.error.URLError, OSError) as e:
+        print(f"error: failed to fetch {v['id']} from {url}: {e}", file=sys.stderr)
+        return 1
 
     print(f"OK   {v['id']}: fetched and verified at {artifact_path}")
     return 0
@@ -239,12 +243,22 @@ def select_variants(
 def _resolve_artifact(v: dict[str, Any]) -> Path:
     """Return the local path to `v`'s artifact, fetching it if not yet present.
 
+    If the artifact exists locally, re-verify its sha256 against the manifest.
     Raises `SelectionError` if the artifact is missing and the manifest has no
     real `download_url` yet - the placeholder means STORY-3.2 has not
-    published a Release asset for this variant.
+    published a Release asset for this variant. Also raises `SelectionError`
+    if a local artifact fails sha256 verification.
     """
     artifact_path = FIRMWARE_DIR / v["artifact"]
     if artifact_path.exists():
+        # Re-verify the sha256 of the existing artifact
+        actual = sha256_of(artifact_path)
+        expected = v["artifact_sha256"]
+        if actual != expected:
+            raise SelectionError(
+                f"{v['id']}: local artifact at {artifact_path} failed sha256 verification "
+                f"(expected {expected}, got {actual})"
+            )
         return artifact_path
 
     url = v.get("download_url", "")
