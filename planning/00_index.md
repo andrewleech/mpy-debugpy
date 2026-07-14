@@ -12,7 +12,7 @@ the current phase/epic → its tickets under `tickets/`.
 | file | what it is |
 |------|------------|
 | `00_index.md` | this file — conventions + phase-entry procedure |
-| `ROADMAP.md` | the living roadmap: epics/stories, status, settled decisions D1–D5, closed questions Q1–Q6, risk register, dependency-ordered execution sequence |
+| `ROADMAP.md` | the living roadmap: epics/stories, status, settled decisions D1–D6, questions (Q1–Q6 closed, Q7 open), risk register, dependency-ordered execution sequence |
 | `BACKGROUND.md` | architecture orientation, commit-anchored to the ORIGINAL Josverl tree (`05b7818`); superseded facts are marked inline — trust the anchor notes |
 | `SPIKE-2.1-mount.md` | decision record: mount works under settrace (D2); source of STORY-4.5/6.5 |
 | `SPIKE-2.2-serial-dap.md` | decision record: serial DAP is board-dependent (D3); retains the single-UART framing detail deferred by Q3 |
@@ -20,6 +20,7 @@ the current phase/epic → its tickets under `tickets/`.
 | `20260706_flocals_params.md` | trace: params are NOT omitted from `f_locals` on the current branch (closes Q6) |
 | `20260706_vscode-extension-direction.md` | design note: VS Code extension fan-out — positioning (build new), decided questions (mbm-adopt overlaps, broker in mpremote, stubs best-practices, mpflash, mpbuild), feature set; seeds a future `vscode/ROADMAP.md` |
 | `20260715_phase0-canonical-branches-mbm.md` | progress record: phase-0 execution (STORY-8.6 canonical locals branch + STORY-8.5 mbm composition), the defects it surfaced, the divergence manifest, mbm operational rules |
+| `20260715_roadmap-review.md` | checkpoint review: landed results verified against tree/fork/GitHub, harness-flake mechanism, `add-debugpy-support` reset correction, Q7 opened, upcoming-ticket drift notes for phase-entry revalidation |
 | `tickets/s<epic>.<story>_<slug>.md` | one self-contained execution brief per substantive work item, all phases, written upfront at peak knowledge |
 
 ## Conventions

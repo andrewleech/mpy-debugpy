@@ -143,3 +143,15 @@ ticket):
   branches (proven on the unmodified base); expect it until the next master
   bump.
 - Fork PR #5 body refreshed to describe the rebuilt branch.
+
+## Correction (2026-07-15, roadmap review)
+
+The reset-to-fork-tips rule above was applied incompletely: micropython-lib's
+`add-debugpy-support` was left at the mbm-rebased copy (`7c27698`) after the
+s6.5 recompose instead of the canonical PR #1022 head (`5d491e0`). Composition
+correctness was never affected — `pr_number` entries fetch `pull/N/head` live
+at every rebase and never read the local branch, and `7c27698` was verified to
+be exactly the fork head's commits replayed onto the pinned target — but the
+stale local branch misrepresents the PR state. Reset to `5d491e0`. The rule
+applies to every branch mbm force-moves, `pr_number`-tracked ones included.
+Full detail: `20260715_roadmap-review.md`.

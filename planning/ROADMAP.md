@@ -1,6 +1,7 @@
 # mpy-debugpy — Roadmap to a user-friendly, upstream-mergeable debugging experience
 
-Status: draft for review. This document records both the reasoning and the plan. The
+Status: living plan, in execution — the Status section below records what has
+landed. This document records both the reasoning and the plan. The
 plan is expressed as epics and stories so it can drive implementation and investigation
 workflows (some automated, some manual). Read the "Background research" section first if
 you want the why; jump to "Epics and stories" for the what.
@@ -19,6 +20,16 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **Roadmap review (2026-07-15, `20260715_roadmap-review.md`).** Landed results
+  re-verified against the tree, fork and GitHub: submodule pins, canonical
+  branch tips, PR #5 head and the mbm.toml composition all hold; `make test`
+  gate reproduced (46 passed / 1 xfailed on re-run — the first run hit the
+  harness interleaving flake, now a risk-register row with the mechanism pinned
+  down for s5.5). One hygiene gap found and fixed: micropython-lib's local
+  `add-debugpy-support` was left at its mbm-rebased copy instead of reset to
+  the fork tip (composition correctness unaffected; `pr_number` entries fetch
+  `pull/N/head` live). Q7 (push-to-origin) opened; upcoming-ticket drift
+  recorded in the review note for phase-entry revalidation.
 - **Phase 0 DONE (2026-07-15): STORY-8.6 + STORY-8.5.** The canonical locals
   branch `andrewleech/local_names_implementation` is rebuilt as 7 bisect-clean
   commits on `pdb_support` (`2ff9f3cd8` -> `7ae5f769c`, fork PR #5), carrying
@@ -263,7 +274,18 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-All open questions are now closed; see DECIDED entries below.
+Q1–Q6 are closed (DECIDED entries below); Q7 is open.
+
+**OPEN:**
+
+- **Q7 (raised 2026-07-15) — push-to-origin / CI iteration policy.** STORY-3.2's
+  GitHub Actions firmware builds need this repo pushed to `origin`
+  (git@github.com:andrewleech/mpy-debugpy.git, public) to iterate; local `main`
+  is 8 commits ahead of `origin/main` @ `59fab84` and earlier sessions'
+  commits were never pushed either, so pushing is not established convention —
+  it needs an explicit call. Blocks s3.2's Actions/Release half (and
+  transitively s3.4's fetch-URL sections); s3.2's local dockerised build path
+  and everything on the EPIC-4/5 front are not gated on it.
 
 **DECIDED (2026-07-06):**
 
@@ -299,19 +321,21 @@ Story fields: id, title, type, description, acceptance criteria, dependencies, c
 effort (S/M/L), risk (low/med/high), and model tier where a coding-workflow tier applies
 (implementation→sonnet, automated testing→haiku, review→opus; investigation/design→opus).
 
-**Tickets.** Every substantive not-yet-done story has a self-contained execution brief in
+**Tickets.** Every substantive story has a self-contained execution brief in
 `planning/tickets/s<epic>.<story>_<slug>.md`, written at planning time and revalidated at
 phase entry per `planning/00_index.md` (the ticket, not the story text here, is what an
-implementation workflow consumes):
+implementation workflow consumes). Story bodies below are point-in-time briefs: done-ness
+lives in the Status section and each executed ticket's Execution outcome section, and
+completed stories are tagged DONE here rather than having their briefs rewritten:
 
 | epic | tickets |
 |------|---------|
-| EPIC-3 | `s3.2_ci-firmware-builds` · `s3.3_variant-matrix-collapse` · `s3.4_firmware-docs` |
+| EPIC-3 | `s3.2_ci-firmware-builds` · `s3.3_variant-matrix-collapse` (DONE) · `s3.4_firmware-docs` |
 | EPIC-4 | `s4.1_device-debugpy-install` · `s4.2_incremental-sync` · `s4.3_staleness-guard-pathmappings` · `s4.4_sync-tests` · `s4.5_hot-reload-reimport` |
 | EPIC-5 | `s5.1_do-debug-skeleton` · `s5.2_target-model` · `s5.3_unix-flow` · `s5.4_handshake-plumbing` · `s5.5_command-tests` |
-| EPIC-6 | `s6.1_serial-transport` · `s6.2_network-transport` · `s6.3_dap-log` · `s6.4_hardware-tests` · `s6.5_evaluate-exec` |
+| EPIC-6 | `s6.1_serial-transport` · `s6.2_network-transport` · `s6.3_dap-log` · `s6.4_hardware-tests` · `s6.5_evaluate-exec` (DONE) |
 | EPIC-7 | `s7.1_debug-config-provider` · `s7.2_target-picker` · `s7.4_extension-smoke-test` |
-| EPIC-8 | `s8.1_mbm-debug-branch` · `s8.2_upstream-debugpy-foundations` · `s8.4_user-docs` · `s8.5_mbm-reproducible-composition` · `s8.6_upstream-firmware-fixes` |
+| EPIC-8 | `s8.1_mbm-debug-branch` · `s8.2_upstream-debugpy-foundations` · `s8.4_user-docs` · `s8.5_mbm-reproducible-composition` (DONE) · `s8.6_upstream-firmware-fixes` (DONE) |
 
 No tickets (intentional): EPIC-1 and EPIC-2 are DONE; STORY-3.1 is DONE; STORY-7.3 and
 STORY-8.3 are trivial — their story entries below are the full brief.
@@ -521,6 +545,8 @@ the tooling selects firmware by required capability, not by name.
   - component: firmware + CI · effort: M · risk: med · model: sonnet
 
 - **STORY-3.3 — Collapse variant matrix to the real set**
+  - **DONE 2026-07-15** — see Status and `s3.3_variant-matrix-collapse.md`
+    Execution outcome.
   - type: implementation
   - description: Remove variants whose names promise unimplemented features (e.g.
     `set_local` against firmware without `_set_local`). Keep `settrace` and
@@ -748,6 +774,9 @@ end-to-end; a device on WiFi reports its own address; serial devices need no IP.
   - component: CI/manual · effort: M · risk: high · model: haiku
 
 - **STORY-6.5 — Extend DAP `evaluate` to statement `exec` (repl/clipboard contexts)**
+  - **DONE 2026-07-15** — see Status and `s6.5_evaluate-exec.md` Execution
+    outcome. The description below (expression-only `evaluate`, `context`
+    ignored, anchored at `0d42fcd`) is the pre-fix state.
   - type: implementation
   - description: (Surfaced by SPIKE-2.1.) `evaluate` currently only `eval()`s
     expressions (`evaluate_expression`, `pdb_adapter.py:649-669` at `0d42fcd`; the DAP
@@ -881,6 +910,12 @@ lineages (Josverl vs andrewleech) reconciled.
   - component: wrapper · effort: M · risk: low · model: sonnet
 
 - **STORY-8.5 — Wire reproducible mbm composition (`mbm add-pr` / `mbm rebase`)**
+  - **DONE 2026-07-15** — see Status and `s8.5_mbm-reproducible-composition.md`
+    Execution outcome. The description below is superseded: the composition is
+    now mbm-rebuildable and `make integrate` runs `mbm rebase --local` for both
+    submodules (no longer a stub). The ampremote mpremote branches were NOT
+    registered in this pass — deferred to the EPIC-4/5 ticket that first needs
+    them, per D6 and the mbm.toml header note.
   - type: implementation
   - description: The integration branches are hand-composed (merge + cherry-pick;
     `mbm.toml` records them for provenance only). Express the same composition as mbm
@@ -898,6 +933,11 @@ lineages (Josverl vs andrewleech) reconciled.
   - component: wrapper/mbm · effort: M · risk: med · model: sonnet
 
 - **STORY-8.6 — Upstream the two firmware bug fixes to the canonical branches**
+  - **DONE 2026-07-15** — see Status and `s8.6_upstream-firmware-fixes.md`
+    Execution outcome. Executed by rebuilding `local_names_implementation` as
+    7 bisect-clean commits on `pdb_support` (`7ae5f769c`, fork PR #5), carrying
+    both fixes, the param-names regression test, and repairs for further
+    defects the rebuild surfaced (`20260715_phase0-canonical-branches-mbm.md`).
   - type: implementation
   - description: The recomposition fixed (a) `frame.f_locals` slot indexing (variables
     reported under wrong names) and (b) `LOCALNAMES_PERSIST` corrupting line numbers
@@ -929,13 +969,20 @@ parallel.
    **DONE 2026-07-15** (both stories; see Status and
    `20260715_phase0-canonical-branches-mbm.md`).
 1. **STORY-1.1**, **STORY-1.2** (independent) — and **STORY-3.1** can start here too.
+   **DONE.**
 2. **STORY-1.3** (needs 1.2), **STORY-1.4** (needs 1.1+1.2), **STORY-3.2** (needs 3.1),
-   **STORY-3.3** (needs 1.2+3.1) — parallel.
+   **STORY-3.3** (needs 1.2+3.1) — parallel. **DONE except STORY-3.2** — its
+   Actions/Release half is blocked on Q7; the local dockerised build half can proceed.
 3. **STORY-1.5** (needs 1.1–1.4), **STORY-3.4** (needs 3.1+3.3) — parallel.
-4. **STORY-1.6** (needs 1.5).
+   **STORY-1.5 DONE**; STORY-3.4 waits on s3.2's Release URLs (its capability-truth
+   section is decision-stable and can be drafted early).
+4. **STORY-1.6** (needs 1.5). **DONE.**
 5. **STORY-2.1**, **STORY-2.2** (both need 1.4) — parallel spikes. **Gate:** their yes/no
-   decides EPIC-4 scope and EPIC-6 shape.
+   decides EPIC-4 scope and EPIC-6 shape. **DONE (D2/D3).**
 6. **STORY-4.1** (needs 2.1 decision), **STORY-5.1** (needs 1.4) — parallel.
+   **← current frontier (2026-07-15).** Neither is gated on Q7; each opens the
+   mpremote front and triggers its D6 branch registration (drift notes in
+   `20260715_roadmap-review.md`).
 7. **STORY-4.2** (if 2.1=NO; needs 4.1), **STORY-5.2** (needs 5.1+3.3) — parallel.
 8. **STORY-4.3** (needs 4.2/4.1), **STORY-5.4** (needs 5.1+2.2) — parallel.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
@@ -957,8 +1004,9 @@ Notes:
 - If **STORY-2.2 = YES** (DAP over serial), STORY-6.1 is the primary device path and
   STORY-6.2 (network) becomes optional; no TCP proxy beyond the localhost↔serial bridge.
 - Added post-spike / post-recomposition: **STORY-4.5** slots in after STORY-4.1;
-  **STORY-6.5** any time after EPIC-1; **STORY-8.5** can run at any point (earlier =
-  cheaper upstream tracking — Q5); **STORY-8.6** after EPIC-1, ideally with STORY-8.2.
+  **STORY-6.5** any time after EPIC-1 (DONE 2026-07-15); **STORY-8.5** can run at any
+  point (earlier = cheaper upstream tracking — Q5) (DONE 2026-07-15); **STORY-8.6**
+  after EPIC-1, ideally with STORY-8.2 (DONE 2026-07-15 — executed first, before 8.5).
 
 ---
 
@@ -973,6 +1021,8 @@ Notes:
 | EPIC-4/5 assume mpremote primitives (verify_hash, QEMU PTY, reconnect, rfc2217) that exist only in ampremote's tree, not this repo's submodule | DECIDED as D6: register the needed ampremote branches into this repo's `mpy-debugpy` integration via mbm (folded into STORY-8.5 scope) until the PRs land upstream; tickets s4.1/s4.2/s4.4/s5.x carry the dependency explicitly |
 | Serial DAP framing on single-UART boards unproven | network transport stays mainline (D3); the framing prototype is a gated follow-up spike (Q3), not a dependency |
 | Busy-poll pause loop starves WiFi/housekeeping while paused on device | measure during STORY-6.4 hardware-in-loop tests; document the impact and tune the poll interval if measurable |
+| Host-harness DAP event/response interleaving race: asynchronous `stopped` events land between a response and the test's next read, so tests that index `rcv_messages` positionally flake (~1 in 5 full runs under load; mechanism in `20260715_roadmap-review.md`) | deterministic fix scheduled with STORY-5.5: use the message object `wait_for_msg` returns, never `rcv_messages[-1]`; until then re-run a flaky failure once before investigating |
+| `launcher/firmware.py` `KNOWN_CAPABILITIES` is a hand-maintained mirror of `debugpy.get_capabilities()` — a new/renamed probe key silently desynchronises selection and the capcheck guard | keep in lockstep by hand for now; add a host test asserting the two key sets match when STORY-5.3 wires the guard into the session flow (or at STORY-8.2) |
 
 ---
 
