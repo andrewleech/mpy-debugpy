@@ -37,6 +37,13 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   divergence manifest), micropython-lib to `d7b297dfd1` (tree-identical to the
   old tip); `make test` gate exactly 13 passed / 1 xfailed. Full record:
   `20260715_phase0-canonical-branches-mbm.md`.
+- **STORY-3.3 DONE (2026-07-15).** Legacy manifest entries deprecated (provenance
+  kept, excluded from selection; collapsed per-board entries land with s3.2),
+  `launcher/firmware.py select` resolves required capabilities against manifest
+  intent, and `launcher/capcheck.py` hard-errors any claimed-true-but-probed-false
+  key against the real MPDBG-READY handshake. Host suite 39 passed / 1 xfailed
+  (26 new tests). s3.2 is blocked on the push-to-origin policy call (CI needs
+  the repo pushed to iterate Actions); s3.4 waits on s3.2's Release URLs.
 - **Integration recomposed onto current upstream master (2026-07-06).** The first
   migration into this repo vendored Josverl snapshot branches frozen at an old master;
   that was rejected and redone. Both submodule integration branches are now composed
