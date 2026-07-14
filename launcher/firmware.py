@@ -16,6 +16,7 @@ Usage:
     uv run launcher/firmware.py list
     uv run launcher/firmware.py verify [VARIANT_ID ...]
     uv run launcher/firmware.py fetch VARIANT_ID [--force]
+    uv run launcher/firmware.py select --need CAP[,CAP...] [--port PORT] [--board BOARD]
 """
 
 from __future__ import annotations
@@ -38,6 +39,17 @@ MANIFEST_PATH = FIRMWARE_DIR / "firmware.toml"
 # Recognisable "not a real URL yet" markers a download_url is allowed to carry
 # instead of a working link. fetch() refuses to treat these as fetchable.
 PLACEHOLDER_URL_PREFIXES = ("TODO://",)
+
+# The exact capability vocabulary the runtime probe reports (STORY-1.2:
+# debugpy.get_capabilities(), echoed in the launcher's MPDBG-READY handshake).
+# `select --need` only accepts keys from this set - a manifest or CLI caller
+# asking for a capability the probe cannot verify is a hard error, not a
+# silently-ignored filter.
+KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back")
+
+
+class SelectionError(Exception):
+    """`select` cannot resolve its query to exactly one usable artifact."""
 
 
 def load_manifest(manifest_path: Path = MANIFEST_PATH) -> list[dict[str, Any]]:
@@ -74,6 +86,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         url = v.get("download_url", "")
         url_str = url if url else "(none)"
         print(f"{v['id']}")
+        print(f"  deprecated:  {v.get('deprecated', False)}")
         print(f"  artifact:    {v['artifact']}")
         print(f"  port/board:  {v.get('port')}/{v.get('board')}")
         print(f"  repo:        {v.get('repo')}")
@@ -115,6 +128,26 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def _download_and_verify(v: dict[str, Any], artifact_path: Path, url: str) -> None:
+    """Download `url` to `artifact_path` and verify it against `v`'s manifest sha256.
+
+    Raises `SelectionError` if the downloaded bytes don't match; the partial
+    file is removed either way so a failed fetch never leaves a corrupt
+    artifact behind for a later run to trust.
+    """
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(url) as resp, open(artifact_path, "wb") as out:
+        out.write(resp.read())
+
+    actual = sha256_of(artifact_path)
+    if actual != v["artifact_sha256"]:
+        artifact_path.unlink(missing_ok=True)
+        raise SelectionError(
+            f"{v['id']}: downloaded artifact failed sha256 verification "
+            f"(expected {v['artifact_sha256']}, got {actual}); file removed"
+        )
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
     variants = load_manifest()
     v = find_variant(variants, args.variant_id)
@@ -137,22 +170,129 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         )
         return 2
 
-    artifact_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"fetching {v['id']} from {url} ...")
-    with urllib.request.urlopen(url) as resp, open(artifact_path, "wb") as out:
-        out.write(resp.read())
-
-    actual = sha256_of(artifact_path)
-    if actual != v["artifact_sha256"]:
-        artifact_path.unlink(missing_ok=True)
-        print(
-            f"error: downloaded artifact for {v['id']} failed sha256 verification "
-            f"(expected {v['artifact_sha256']}, got {actual}); file removed",
-            file=sys.stderr,
-        )
+    try:
+        _download_and_verify(v, artifact_path, url)
+    except SelectionError as e:
+        print(f"error: {e}", file=sys.stderr)
         return 1
 
     print(f"OK   {v['id']}: fetched and verified at {artifact_path}")
+    return 0
+
+
+def parse_need(raw: str) -> list[str]:
+    """Split a `--need` argument into capability keys, rejecting unknown ones.
+
+    A key outside `KNOWN_CAPABILITIES` is one the runtime probe never reports,
+    so accepting it would let selection silently promise a capability nothing
+    can verify - raise instead of filtering it out. An empty or
+    separator-only argument (`""`, `","`) is also rejected: `select` exists to
+    resolve a required capability, so a query that needs nothing would match
+    every non-deprecated variant rather than reporting the caller's mistake.
+    """
+    keys = [k.strip() for k in raw.split(",") if k.strip()]
+    if not keys:
+        raise SelectionError(
+            f"--need must list at least one capability key, from: {', '.join(KNOWN_CAPABILITIES)}"
+        )
+    unknown = [k for k in keys if k not in KNOWN_CAPABILITIES]
+    if unknown:
+        raise SelectionError(
+            f"unknown capability key(s) in --need: {', '.join(unknown)}; "
+            f"the probe only reports {', '.join(KNOWN_CAPABILITIES)}"
+        )
+    return keys
+
+
+def select_variants(
+    variants: list[dict[str, Any]],
+    need: list[str],
+    port: str | None = None,
+    board: str | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Return `(candidates, matches)` for a capability-driven selection query.
+
+    `candidates` are the non-deprecated variants left after the optional
+    port/board filter; `matches` is the subset of those whose `capabilities`
+    table claims every key in `need` as exactly `True`. Deprecated variants
+    (see firmware.toml) are provenance records and never participate.
+
+    Raises `SelectionError` for an empty `need`: with no required key, every
+    candidate would vacuously match, silently resolving a capability-driven
+    query to whatever variant happens to be first rather than to a build the
+    caller has actually justified needing.
+    """
+    if not need:
+        raise SelectionError("select_variants requires at least one capability key in `need`")
+    candidates = [
+        v
+        for v in variants
+        if not v.get("deprecated", False)
+        and (port is None or v.get("port") == port)
+        and (board is None or v.get("board") == board)
+    ]
+    matches = [v for v in candidates if all(v.get("capabilities", {}).get(key) is True for key in need)]
+    return candidates, matches
+
+
+def _resolve_artifact(v: dict[str, Any]) -> Path:
+    """Return the local path to `v`'s artifact, fetching it if not yet present.
+
+    Raises `SelectionError` if the artifact is missing and the manifest has no
+    real `download_url` yet - the placeholder means STORY-3.2 has not
+    published a Release asset for this variant.
+    """
+    artifact_path = FIRMWARE_DIR / v["artifact"]
+    if artifact_path.exists():
+        return artifact_path
+
+    url = v.get("download_url", "")
+    if is_placeholder_url(url):
+        raise SelectionError(
+            f"{v['id']}: artifact not found at {artifact_path} and the manifest has no "
+            "real download_url yet (STORY-3.2 has not published Release artifacts)"
+        )
+
+    print(f"fetching {v['id']} from {url} ...", file=sys.stderr)
+    _download_and_verify(v, artifact_path, url)
+    return artifact_path
+
+
+def cmd_select(args: argparse.Namespace) -> int:
+    variants = load_manifest()
+    try:
+        need = parse_need(args.need)
+    except SelectionError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
+    candidates, matches = select_variants(variants, need, port=args.port, board=args.board)
+
+    if len(matches) != 1:
+        filters = ", ".join(
+            f"{k}={v}" for k, v in (("port", args.port), ("board", args.board)) if v is not None
+        )
+        filter_str = f" ({filters})" if filters else ""
+        print(
+            f"error: --need {','.join(need)}{filter_str} resolved to {len(matches)} variant(s), "
+            "expected exactly 1",
+            file=sys.stderr,
+        )
+        print("candidates considered (non-deprecated, port/board filtered):", file=sys.stderr)
+        for v in candidates:
+            caps = v.get("capabilities", {})
+            cap_str = ", ".join(f"{k}={caps.get(k)}" for k in KNOWN_CAPABILITIES if k in caps)
+            print(f"  {v['id']}: {cap_str}", file=sys.stderr)
+        return 1
+
+    try:
+        artifact_path = _resolve_artifact(matches[0])
+    except SelectionError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
+    print(artifact_path)
     return 0
 
 
@@ -169,6 +309,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch.add_argument("variant_id", help="variant id to fetch")
     p_fetch.add_argument("--force", action="store_true", help="re-fetch even if a verified local copy exists")
 
+    p_select = sub.add_parser(
+        "select",
+        help="resolve a required-capability query to exactly one artifact path",
+    )
+    p_select.add_argument(
+        "--need",
+        required=True,
+        help=f"comma-separated capability keys the session needs, from: {', '.join(KNOWN_CAPABILITIES)}",
+    )
+    p_select.add_argument("--port", default=None, help="restrict to variants with this port")
+    p_select.add_argument("--board", default=None, help="restrict to variants with this board")
+
     return parser
 
 
@@ -180,6 +332,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_verify(args)
     if args.command == "fetch":
         return cmd_fetch(args)
+    if args.command == "select":
+        return cmd_select(args)
     raise AssertionError("unreachable")
 
 

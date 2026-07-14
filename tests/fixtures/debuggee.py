@@ -1,12 +1,23 @@
 import fcntl
+import json
 import os
 import random
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 import pytest
+
+# Add launcher/ to sys.path to reuse the manifest-vs-probe mismatch guard
+# (STORY-3.3) rather than duplicating it for tests.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_launcher_dir = str(_REPO_ROOT / "launcher")
+if _launcher_dir not in sys.path:
+    sys.path.insert(0, _launcher_dir)
+
+import capcheck
 
 random.seed()
 
@@ -231,3 +242,65 @@ def micropython_debuggee(
             process.kill()
             process.wait(timeout=1)
             process.terminate()
+
+
+def read_mpdbg_ready(process, timeout=5):
+    """Drain `process.stdout` (already non-blocking, per `micropython_debuggee`)
+    until the launcher's `MPDBG-READY <json>` handshake line shows up, and
+    return its decoded payload.
+
+    `debugpy.listen()` does not print this line until it has accepted a
+    connection and handled an `initialize` request, so a caller needs a
+    connected DAP client first - request `attach_server` (or an equivalent)
+    alongside `micropython_debuggee`, not `micropython_debuggee` alone.
+    """
+    deadline = time.time() + timeout
+    stdout_data = ""
+    while time.time() < deadline:
+        try:
+            chunk = process.stdout.read(4096)
+            if chunk:
+                stdout_data += chunk
+        except (BlockingIOError, OSError):
+            pass
+        if "MPDBG-READY " in stdout_data:
+            break
+        time.sleep(0.05)
+
+    ready_lines = [line for line in stdout_data.splitlines() if line.startswith("MPDBG-READY ")]
+    assert len(ready_lines) == 1, f"Expected exactly one MPDBG-READY line, got {len(ready_lines)}: {ready_lines!r}"
+    return json.loads(ready_lines[0][len("MPDBG-READY ") :])
+
+
+@pytest.fixture()
+def claimed_capabilities(request):
+    """Capability claim to cross-check the real probe result against.
+
+    `None` (the default, when unparametrized and MPY_DEBUG_CLAIMED_CAPS is
+    unset) leaves `probed_capabilities` a plain lookup with no guard, so
+    existing callers that don't ask for a claim are unaffected. Parametrize
+    this fixture with a dict (e.g. a firmware.toml [[variant]] entry's
+    `capabilities` table) to exercise the mismatch guard, or set
+    MPY_DEBUG_CLAIMED_CAPS to a JSON object for the same effect.
+    """
+    if hasattr(request, "param"):
+        return request.param
+    raw = os.environ.get("MPY_DEBUG_CLAIMED_CAPS")
+    return json.loads(raw) if raw else None
+
+
+@pytest.fixture()
+def probed_capabilities(micropython_debuggee, attach_server, claimed_capabilities):
+    """Real capabilities from the running debuggee's MPDBG-READY handshake.
+
+    When `claimed_capabilities` is set, cross-checks it against the probe
+    result first and raises `capcheck.CapabilityMismatch` on any
+    claimed-true-but-probed-false key (D4: the probe is truth, a manifest
+    entry is only intent) - the check runs before this fixture yields, so a
+    mismatch fails the test during setup rather than corrupting the session.
+    """
+    payload = read_mpdbg_ready(micropython_debuggee)
+    probed = payload["caps"]
+    if claimed_capabilities is not None:
+        capcheck.check_capabilities(claimed_capabilities, probed)
+    return probed

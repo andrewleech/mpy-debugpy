@@ -15,48 +15,21 @@ regresses even when the surrounding code is refactored:
   reports no `set_local` support, while global-scope variables never do.
 """
 
-import json
 import time
 from pathlib import Path
 from typing import List
 
 import pytest
+from fixtures.debuggee import read_mpdbg_ready
 from helpers import set_breakpoints, wait_for_msg
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _TARGET_PY = str(_REPO_ROOT / "src" / "target.py")
 
 
-def _read_mpdbg_ready(process, timeout=5):
-    """Drain `process.stdout` (already non-blocking, per the debuggee fixture)
-    until the launcher's `MPDBG-READY <json>` handshake line shows up, and
-    return its decoded payload.
-    """
-    deadline = time.time() + timeout
-    stdout_data = ""
-    while time.time() < deadline:
-        try:
-            chunk = process.stdout.read(4096)
-            if chunk:
-                stdout_data += chunk
-        except (BlockingIOError, OSError):
-            pass
-        if "MPDBG-READY " in stdout_data:
-            break
-        time.sleep(0.05)
-
-    ready_lines = [
-        line for line in stdout_data.splitlines() if line.startswith("MPDBG-READY ")
-    ]
-    assert len(ready_lines) == 1, (
-        f"Expected exactly one MPDBG-READY line, got {len(ready_lines)}: {ready_lines!r}"
-    )
-    return json.loads(ready_lines[0][len("MPDBG-READY ") :])
-
-
 def test_epic1_mpdbg_ready_handshake(attach_server, micropython_debuggee):
     """STORY-1.2/1.4: the handshake line is valid JSON with a boolean caps dict."""
-    payload = _read_mpdbg_ready(micropython_debuggee)
+    payload = read_mpdbg_ready(micropython_debuggee)
 
     assert "host" in payload and "port" in payload and "caps" in payload
 
@@ -100,7 +73,7 @@ def test_epic1_readonly_locals_hint(attach_server, micropython_debuggee):
     process = micropython_debuggee
     client = server.client
 
-    caps = _read_mpdbg_ready(process)["caps"]
+    caps = read_mpdbg_ready(process)["caps"]
 
     # Break on line 80 (the `for` header) rather than line 79 (`x = 78`):
     # sys.settrace fires the `line` event BEFORE the statement runs (correct

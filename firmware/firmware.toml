@@ -33,9 +33,20 @@
 # `set_local` for those is recorded from what `strings` on the binary itself shows
 # (symbol presence is necessary but not sufficient for a working write-back path —
 # only a runtime probe, STORY-1.2, can confirm behaviour).
+#
+# `deprecated` (STORY-3.3): true on every `[[variant]]` below. A deprecated entry
+# is a provenance record only; `launcher/firmware.py select` excludes it from its
+# candidate pool regardless of what its `capabilities` table claims, so none of
+# these four legacy artifacts can be resolved by a capability query. The
+# manifest currently has no non-deprecated entries — STORY-3.2's CI-built
+# Release artifacts, pinned to the composed integration SHA under the collapsed
+# per-board id scheme (unix-standard-debug, rp2-rpi-pico-w-debug,
+# stm32-pybd-sf6-debug, esp32-generic-debug), will be the first `select` can
+# ever match.
 
 [[variant]]
 id = "unix-settrace-save-names"
+deprecated = true
 description = "Unix port, sys.settrace enabled, real local variable names (MICROPY_PY_SYS_SETTRACE_SAVE_NAMES)."
 repo = "https://github.com/josverl/micropython.git"
 source_commit = "a7c7a75eef"
@@ -54,6 +65,7 @@ download_url = ""  # TODO: no GitHub Release published yet for this artifact (ST
 
 [[variant]]
 id = "unix-settrace-local-xx"
+deprecated = true
 description = "Unix port, sys.settrace enabled, placeholder local names (local_N; SAVE_NAMES off). Matched the submodule pin at capture time (see header note)."
 repo = "https://github.com/josverl/micropython.git"
 source_commit = "05b7818c80defd927d7edf11cef47e3bab892629"
@@ -71,6 +83,7 @@ download_url = ""  # TODO: no GitHub Release published yet for this artifact.
 
 [[variant]]
 id = "unix-settrace-set-local"
+deprecated = true
 description = "Unix port, sys.settrace enabled. Directory/variant name claims local-variable write-back support (set_local); do not trust that name — see capabilities_note."
 repo = "https://github.com/josverl/micropython.git"
 source_commit = "87ff9ef78"
@@ -91,6 +104,7 @@ download_url = ""  # TODO: no GitHub Release published yet for this artifact.
 
 [[variant]]
 id = "esp32-generic-settrace-save-names"
+deprecated = true
 description = "ESP32_GENERIC board, sys.settrace enabled, real local variable names (MICROPY_PY_SYS_SETTRACE_SAVE_NAMES)."
 repo = "https://github.com/josverl/micropython.git"
 source_commit = "a7c7a75eef"
