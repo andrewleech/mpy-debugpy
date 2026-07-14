@@ -76,6 +76,18 @@ class DAPClient:
     def configuration_done(self):
         return self.send_request("configurationDone", {})
 
+    def evaluate(self, expression, frame_id=0, context="watch"):
+        """Send a DAP `evaluate` request with an explicit `context`.
+
+        `context` is one of the DAP-defined values (`watch`, `hover`,
+        `repl`, `clipboard`, ...); the debugpy server dispatches statement
+        execution only for `repl`/`clipboard` (STORY-6.5).
+        """
+        return self.send_request(
+            "evaluate",
+            {"expression": expression, "frameId": frame_id, "context": context},
+        )
+
 
 class ThreadedServer:
     """Fake VS Code: connects to a debugpy listener and drives it over DAP."""
