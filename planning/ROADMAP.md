@@ -20,6 +20,18 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-3.4 DONE (2026-08-05).** `docs/firmware.md` (variant/capability
+  tables with an evidence column separating probe-confirmed from build
+  intent, fetch/select usage, CI-parity build commands per port, capability
+  truth incl. the `_SAVE_NAMES` no-op and PERSIST warnings) + README link.
+  Doc-tested verbatim (launcher commands, unix build, live
+  `get_capabilities()` cross-check of the unix row; the rp2 docker command
+  run to a complete in-container build) and hardened over three opus
+  factual-review rounds plus a final inline pass — review killed two real
+  over-claims (local-vs-Release reproducibility scope; capcheck guard is
+  opt-in, not per-session). EPIC-3 is now fully closed except the
+  STORY-6.4-deferred hardware checks.
+
 - **STORY-3.2 DONE (2026-08-04): stage 5 — first deliberate master bump +
   second Release.** Default-target `mbm rebase --local` moved both
   compositions onto current upstream/master (micropython `1f70f60684` →
@@ -598,12 +610,15 @@ the tooling selects firmware by required capability, not by name.
   - component: wrapper · effort: S · risk: low · model: sonnet
 
 - **STORY-3.4 — Docs: firmware provenance + capability matrix**
+  - **DONE 2026-08-05** — see Status and `s3.4_firmware-docs.md` Execution
+    outcome (`docs/firmware.md` + README link; BACKGROUND banner already
+    carried the settrace-by-default correction and now links the doc).
   - type: docs
   - description: Document what each variant is, its flags, what capability it yields
     (real local names vs `local_N` placeholders; no local editing), and how to fetch vs
     build. Correct the BACKGROUND note about settrace-by-default (it is not).
-  - acceptance criteria: [ ] table of variant→flags→capabilities; [ ] fetch and build both
-    documented; [ ] no capability claim that the probe would contradict.
+  - acceptance criteria: [x] table of variant→flags→capabilities; [x] fetch and build both
+    documented; [x] no capability claim that the probe would contradict.
   - dependencies: STORY-3.1, STORY-3.3
   - component: wrapper · effort: S · risk: low · model: sonnet
 
@@ -1012,8 +1027,7 @@ parallel.
    **STORY-3.3** (needs 1.2+3.1) — parallel. **DONE** (STORY-3.2 completed
    2026-08-04; hardware boot-check deferred to STORY-6.4).
 3. **STORY-1.5** (needs 1.1–1.4), **STORY-3.4** (needs 3.1+3.3) — parallel.
-   **STORY-1.5 DONE**; STORY-3.4 fully unblocked since the fw-f9d7c96b96
-   Release (2026-08-04). **← current frontier alongside step 6.**
+   **DONE** (STORY-3.4 completed 2026-08-05: `docs/firmware.md`).
 4. **STORY-1.6** (needs 1.5). **DONE.**
 5. **STORY-2.1**, **STORY-2.2** (both need 1.4) — parallel spikes. **Gate:** their yes/no
    decides EPIC-4 scope and EPIC-6 shape. **DONE (D2/D3).**

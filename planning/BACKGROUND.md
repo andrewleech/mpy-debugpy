@@ -13,6 +13,7 @@ not a design decision record.
 > on the integration branch enables settrace by default; the `f_locals` slot-assignment
 > heuristic was fixed; the `line` event fires before the statement executes. File/line
 > references in "Firmware (C) internals" are valid only against `05b7818`.
+> Current firmware variants, flags and capabilities: `docs/firmware.md`.
 
 ## What this project is
 
