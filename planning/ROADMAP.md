@@ -20,8 +20,26 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
-- **STORY-3.2 stages 1–4 DONE (2026-08-04); only the deliberate master bump
-  and the STORY-6.4-deferred hardware boot-check remain.** The composition
+- **STORY-3.2 DONE (2026-08-04): stage 5 — first deliberate master bump +
+  second Release.** Default-target `mbm rebase --local` moved both
+  compositions onto current upstream/master (micropython `1f70f60684` →
+  `f9d7c96b96` on `06bcfd5b74`, ~690 commits; micropython-lib `5f74950e9e` →
+  `00d364e7fb` on `dbb3b45fde`; the known profile.c/mpconfigvariant.h
+  conflict replayed from rerere, debugpy tree content-identical across the
+  bump). Release `fw-f9d7c96b96` published and re-runnability proven
+  stronger than before: the dispatch and push-triggered runs built **all
+  four artifacts byte-identical** (the first Release had proven unix only).
+  Manifest updated to the new entries; e2e re-verified (fetch detects the
+  stale cached artifacts, re-fetches, verifies; select resolves; the fetched
+  unix binary runs the suite 82 passed / 1 xfailed). The unix gate's flake
+  retry budget rose to 4 attempts (measured ~1-in-2 full-run flake rate),
+  and one interleaving flake was observed OUTSIDE the four-id allowlist
+  (`test_epic1_breakpoint_stops_target`) — risk row updated; the s5.5
+  harness fix is the real cure. Historical submodule pins are preserved as
+  `mpy-debugpy-pin-<sha12>` tags on both forks (mbm force-pushes orphan old
+  tips). Hardware boot-check stays deferred to STORY-6.4. Frontier: s3.4
+  (now fully unblocked), s5.1, s4.1.
+- **STORY-3.2 stages 1–4 DONE (2026-08-04).** The composition
   gained the `debug_board_flags` local-only branch (settrace committed in the
   three device board configs; integration tip `1f70f60684`), which also
   surfaced and fixed a real firmware bug (missing `stdio.h` in `py/profile.c`,
@@ -550,15 +568,17 @@ the tooling selects firmware by required capability, not by name.
   - component: wrapper + CI · effort: M · risk: med · model: sonnet
 
 - **STORY-3.2 — Reproducible docker build for firmware variants**
+  - **DONE 2026-08-04** — see Status and `s3.2_ci-firmware-builds.md`
+    Execution progress (hardware boot-check deferred to STORY-6.4).
   - type: implementation
   - description: Dockerised/CI build producing the v1 artifacts from the pinned
     integration SHA with pinned flags (`MICROPY_PY_SYS_SETTRACE` +
     `MICROPY_PY_SYS_SETTRACE_LOCALNAMES`; PERSIST off). Host-uid/path convention per
     user CLAUDE.md. Boards (Q2 DECIDED): unix, rpi_pico_w, PYBD_SF6, ESP32_GENERIC.
   - acceptance criteria:
-    - [ ] each of the four boards builds reproducibly in CI from the pinned SHA.
-    - [ ] output artifact hash matches the manifest when inputs match.
-    - [ ] the legacy pre-recomposition manifest entries are replaced by these builds.
+    - [x] each of the four boards builds reproducibly in CI from the pinned SHA.
+    - [x] output artifact hash matches the manifest when inputs match.
+    - [x] the legacy pre-recomposition manifest entries are replaced by these builds.
   - dependencies: STORY-3.1
   - component: firmware + CI · effort: M · risk: med · model: sonnet
 
@@ -989,18 +1009,18 @@ parallel.
 1. **STORY-1.1**, **STORY-1.2** (independent) — and **STORY-3.1** can start here too.
    **DONE.**
 2. **STORY-1.3** (needs 1.2), **STORY-1.4** (needs 1.1+1.2), **STORY-3.2** (needs 3.1),
-   **STORY-3.3** (needs 1.2+3.1) — parallel. **DONE except STORY-3.2** — was
-   blocked on Q7, executable in full since Q7 DECIDED (2026-07-15).
+   **STORY-3.3** (needs 1.2+3.1) — parallel. **DONE** (STORY-3.2 completed
+   2026-08-04; hardware boot-check deferred to STORY-6.4).
 3. **STORY-1.5** (needs 1.1–1.4), **STORY-3.4** (needs 3.1+3.3) — parallel.
-   **STORY-1.5 DONE**; STORY-3.4 waits on s3.2's Release URLs (its capability-truth
-   section is decision-stable and can be drafted early).
+   **STORY-1.5 DONE**; STORY-3.4 fully unblocked since the fw-f9d7c96b96
+   Release (2026-08-04). **← current frontier alongside step 6.**
 4. **STORY-1.6** (needs 1.5). **DONE.**
 5. **STORY-2.1**, **STORY-2.2** (both need 1.4) — parallel spikes. **Gate:** their yes/no
    decides EPIC-4 scope and EPIC-6 shape. **DONE (D2/D3).**
 6. **STORY-4.1** (needs 2.1 decision), **STORY-5.1** (needs 1.4) — parallel.
-   **← current frontier (2026-07-15).** Neither is gated on Q7; each opens the
-   mpremote front and triggers its D6 branch registration (drift notes in
-   `20260715_roadmap-review.md`).
+   **← current frontier (2026-07-15, still open 2026-08-04).** Neither is
+   gated on Q7; each opens the mpremote front and triggers its D6 branch
+   registration (drift notes in `20260715_roadmap-review.md`).
 7. **STORY-4.2** (if 2.1=NO; needs 4.1), **STORY-5.2** (needs 5.1+3.3) — parallel.
 8. **STORY-4.3** (needs 4.2/4.1), **STORY-5.4** (needs 5.1+2.2) — parallel.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
@@ -1039,7 +1059,7 @@ Notes:
 | EPIC-4/5 assume mpremote primitives (verify_hash, QEMU PTY, reconnect, rfc2217) that exist only in ampremote's tree, not this repo's submodule | DECIDED as D6: register the needed ampremote branches into this repo's `mpy-debugpy` integration via mbm (folded into STORY-8.5 scope) until the PRs land upstream; tickets s4.1/s4.2/s4.4/s5.x carry the dependency explicitly |
 | Serial DAP framing on single-UART boards unproven | network transport stays mainline (D3); the framing prototype is a gated follow-up spike (Q3), not a dependency |
 | Busy-poll pause loop starves WiFi/housekeeping while paused on device | measure during STORY-6.4 hardware-in-loop tests; document the impact and tune the poll interval if measurable |
-| Host-harness DAP event/response interleaving race: asynchronous `stopped` events land between a response and the test's next read, so tests that index `rcv_messages` positionally flake (~1 in 5 full runs under load; mechanism in `20260715_roadmap-review.md`) | deterministic fix scheduled with STORY-5.5: use the message object `wait_for_msg` returns, never `rcv_messages[-1]`; until then re-run a flaky failure once before investigating |
+| Host-harness DAP event/response interleaving race: asynchronous `stopped` events land between a response and the test's next read, so tests that index `rcv_messages` positionally flake (measured ~1 in 2 full runs on 2026-08-04; mechanism in `20260715_roadmap-review.md`; not confined to the four ids the CI allowlist names — `test_epic1_breakpoint_stops_target` flaked on 2026-08-04) | deterministic fix scheduled with STORY-5.5: use the message object `wait_for_msg` returns, never `rcv_messages[-1]`; until then the CI unix gate retries up to 4 attempts on all-allowlisted failures, and a locally flaky failure gets one re-run before investigating |
 | `launcher/firmware.py` `KNOWN_CAPABILITIES` is a hand-maintained mirror of `debugpy.get_capabilities()` — a new/renamed probe key silently desynchronises selection and the capcheck guard | keep in lockstep by hand for now; add a host test asserting the two key sets match when STORY-5.3 wires the guard into the session flow (or at STORY-8.2) |
 
 ---

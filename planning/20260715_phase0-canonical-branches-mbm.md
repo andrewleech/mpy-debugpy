@@ -139,9 +139,6 @@ ticket):
 - Commit-hygiene nits for the upstreaming pass (s8.2/s8.3), from the final
   review: `b2aff0c74`'s subject/filename mismatch (`_persist` test named as
   RAM-lookup regression) and its no-op Phase-2 stub.
-- `extmod/select_poll_fd.py` fails on this master snapshot independent of our
-  branches (proven on the unmodified base); expect it until the next master
-  bump.
 - Fork PR #5 body refreshed to describe the rebuilt branch.
 
 ## Correction (2026-07-15, roadmap review)
@@ -155,3 +152,14 @@ be exactly the fork head's commits replayed onto the pinned target — but the
 stale local branch misrepresents the PR state. Reset to `5d491e0`. The rule
 applies to every branch mbm force-moves, `pr_number`-tracked ones included.
 Full detail: `20260715_roadmap-review.md`.
+
+## Correction (2026-08-04, s3.2 master-bump review)
+
+The carried-forward `extmod/select_poll_fd.py` item above was wrong and is
+retired rather than carried further. The test does not fail on any master
+snapshot — it needs `OPEN_MAX` around 1024 to reach the `EINVAL` branch it
+asserts (test comment: "on GitHub CI we force this via `ulimit -n 1024`",
+`tools/ci.sh:10`); this dev machine's default `ulimit -n` (1048576) is too
+high. Under `ulimit -n 1024`, the test passes on the composed build. Any
+local test procedure that runs the unix suite should set `ulimit -n 1024`
+first for a deterministic result.
