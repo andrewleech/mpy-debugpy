@@ -190,13 +190,12 @@ jobs:
         env:
           MPY_DEBUG_FIRMWARE: ${{ github.workspace }}/micropython/ports/unix/build-standard/micropython
         run: |
-          if make test; then
-            exit 0
-          fi
           # Known event-interleaving flakes (5s DAP-response timeout races);
-          # any failure outside this set is real. Retry once only if every
-          # failed id is a member - a co-occurring flake must not defeat
-          # the check the way single-line string equality did.
+          # any failure outside this set is real. A local measurement saw
+          # this set trip on 2 of 4 runs, so retry up to 3 times (4 attempts
+          # total) rather than once, and only while every failed id stays a
+          # member - a co-occurring flake must not defeat the check the way
+          # single-line string equality did.
           known_flakes=(
             "tests/test_dbg_04_breakpoints.py::test_debug_breakpoints"
             "tests/test_dbg_06_evaluate.py::test_evaluate_repl_shadowed_local_warns_and_leaves_local_unchanged"
@@ -220,27 +219,40 @@ jobs:
               exit 1
             fi
           done
-          failed=$(uv run --extra test python -m pytest tests/ --collect-only -q --lf | grep '::' || true)
-          if [ -z "${failed}" ]; then
-            echo "::error::unix test suite failed but no failing test ids were collected"
-            exit 1
-          fi
-          unrelated=""
-          while IFS= read -r id; do
-            known=0
-            for flake in "${known_flakes[@]}"; do
-              [ "${id%%[*}" = "${flake}" ] && known=1 && break
-            done
-            [ "${known}" -eq 0 ] && unrelated="${unrelated}${id}"$'\n'
-          done <<< "${failed}"
-          if [ -n "${unrelated}" ]; then
-            echo "::error::unix test suite failed with unrelated failure(s):"
-            echo "${unrelated}"
-            exit 1
-          fi
-          echo "::warning::only known interleaving flake(s) failed; retrying once:"
-          echo "${failed}"
-          make test
+
+          max_attempts=4
+          attempt=1
+          while true; do
+            if make test; then
+              exit 0
+            fi
+            failed=$(uv run --extra test python -m pytest tests/ --collect-only -q --lf | grep '::' || true)
+            if [ -z "${failed}" ]; then
+              echo "::error::unix test suite failed but no failing test ids were collected"
+              exit 1
+            fi
+            unrelated=""
+            while IFS= read -r id; do
+              known=0
+              for flake in "${known_flakes[@]}"; do
+                [ "${id%%[*}" = "${flake}" ] && known=1 && break
+              done
+              [ "${known}" -eq 0 ] && unrelated="${unrelated}${id}"$'\n'
+            done <<< "${failed}"
+            if [ -n "${unrelated}" ]; then
+              echo "::error::unix test suite failed with unrelated failure(s):"
+              echo "${unrelated}"
+              exit 1
+            fi
+            if [ "${attempt}" -ge "${max_attempts}" ]; then
+              echo "::error::only known interleaving flake(s) failed but ${max_attempts} attempts were exhausted:"
+              echo "${failed}"
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            echo "::warning::only known interleaving flake(s) failed; retrying (attempt ${attempt}/${max_attempts}):"
+            echo "${failed}"
+          done
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
