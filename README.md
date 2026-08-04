@@ -62,6 +62,10 @@ uv run launcher/firmware.py list           # show known variants + provenance
 uv run launcher/firmware.py verify         # check any local artifacts
 ```
 
+See [`docs/firmware.md`](docs/firmware.md) for the full variant/capability
+table, `fetch`/`select` usage, CI-equivalent per-port build commands, and the
+capability-probe doctrine.
+
 ### 3. Start a debug session
 
 Unix:
