@@ -51,9 +51,11 @@ firmware-unix: mpy-cross
 	$(MAKE) -C $(UNIX_PORT) VARIANT=$(UNIX_VARIANT) CFLAGS_EXTRA="$(DEBUG_CFLAGS)"
 	@echo "Built: $(UNIX_PORT)/build-$(UNIX_VARIANT)/micropython"
 
-# Run the host-side DAP test harness against a built unix firmware.
+# Run the host-side DAP test harness against a built unix firmware. Uses the
+# project's `test` extra (pyproject.toml) so deps resolve from uv.lock rather
+# than whatever `--with` would pull at run time.
 test:
-	uv run --with pytest --with anyio --with debugpy python -m pytest tests/ -q
+	uv run --extra test python -m pytest tests/ -q
 
 # Run the sample target under the debug launcher (unix). Attach VS Code to the
 # host/port from the MPDBG-READY line.

@@ -1,0 +1,764 @@
+name: firmware
+
+# Builds the four debug-enabled firmware variants (STORY-3.2) from the pinned
+# `micropython` submodule and, on a manual run against `main`, publishes them
+# to a GitHub Release keyed on the micropython commit. Branch pushes only
+# exercise the four build jobs (and their unix acceptance-test gate); the
+# release job is gated to workflow_dispatch on main so branch iteration never
+# publishes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_republish:
+        description: "Allow overwriting an existing Release at this tag (re-dispatch at the same micropython pin)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "micropython"
+      - "micropython-lib"
+      - "mbm.toml"
+      - ".github/workflows/firmware.yml"
+      - ".github/scripts/**"
+      - "launcher/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Keyed by event type as well as ref so a `push` run can never cancel an
+  # in-progress `workflow_dispatch` publish (or vice versa) - only iteration
+  # of the same event type on the same ref pre-empts itself. Dispatch runs
+  # queue instead of cancelling each other, so a Release publish always runs
+  # to completion.
+  group: firmware-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  setup:
+    name: compute version metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      micropython_sha: ${{ steps.version.outputs.full_sha }}
+      micropython_short_sha: ${{ steps.version.outputs.short_sha }}
+      git_tag: ${{ steps.version.outputs.git_tag }}
+      git_hash: ${{ steps.version.outputs.git_hash }}
+      micropython_repo: ${{ steps.version.outputs.repo_url }}
+      source_date_epoch: ${{ steps.version.outputs.source_date_epoch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
+
+      - name: Compute micropython version info
+        id: version
+        # `git describe` needs release-tag history the shallow submodule
+        # checkout doesn't have (fetch-depth 0 is unnecessary overhead just
+        # for a version banner). Derive a deterministic banner instead: the
+        # base version from py/mpconfig.h (the same fallback source
+        # makeversionhdr.py itself uses when git history is unavailable)
+        # plus the exact commit short-sha (from the submodule pin itself, no
+        # fetch required) appended in the `.g<sha>` form `git describe` uses,
+        # so the source commit stays recoverable from the built banner - this
+        # loses only the commit-count component of a real `git describe`, not
+        # the commit identity. Consumed by build jobs as MICROPY_GIT_TAG/HASH.
+        # source_date_epoch pins SOURCE_DATE_EPOCH so the embedded build date
+        # (and therefore the artifact bytes) doesn't depend on which day the
+        # workflow happens to run.
+        run: |
+          set -euo pipefail
+          cd micropython
+          full_sha=$(git rev-parse HEAD)
+          short_sha=${full_sha:0:10}
+          major=$(sed -n 's/^#define MICROPY_VERSION_MAJOR *//p' py/mpconfig.h)
+          minor=$(sed -n 's/^#define MICROPY_VERSION_MINOR *//p' py/mpconfig.h)
+          micro=$(sed -n 's/^#define MICROPY_VERSION_MICRO *//p' py/mpconfig.h)
+          prerelease=$(sed -n 's/^#define MICROPY_VERSION_PRERELEASE *//p' py/mpconfig.h)
+          tag="v${major}.${minor}.${micro}"
+          if [ "${prerelease}" != "0" ]; then
+            tag="${tag}-preview"
+          fi
+          tag="${tag}.g${short_sha}"
+          repo_url=$(git config --get remote.origin.url)
+          source_date_epoch=$(git show -s --format=%ct HEAD)
+          echo "full_sha=${full_sha}" | tee -a "$GITHUB_OUTPUT"
+          echo "short_sha=${short_sha}" | tee -a "$GITHUB_OUTPUT"
+          echo "git_tag=${tag}" | tee -a "$GITHUB_OUTPUT"
+          echo "git_hash=${short_sha}" | tee -a "$GITHUB_OUTPUT"
+          echo "repo_url=${repo_url}" | tee -a "$GITHUB_OUTPUT"
+          echo "source_date_epoch=${source_date_epoch}" | tee -a "$GITHUB_OUTPUT"
+
+  unix:
+    name: unix (standard)
+    needs: setup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      MICROPY_GIT_TAG: ${{ needs.setup.outputs.git_tag }}
+      MICROPY_GIT_HASH: ${{ needs.setup.outputs.git_hash }}
+      SOURCE_DATE_EPOCH: ${{ needs.setup.outputs.source_date_epoch }}
+      MICROPY_REPO: ${{ needs.setup.outputs.micropython_repo }}
+      MICROPY_SHA: ${{ needs.setup.outputs.micropython_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
+
+      - name: Record toolchain versions
+        id: toolchain
+        run: |
+          gcc_version="$(gcc --version | head -1)"
+          glibc_version="$(ldd --version | head -1)"
+          runner_image="${ImageOS:-unknown} ${ImageVersion:-unknown}"
+          {
+            echo "### unix toolchain"
+            echo "- gcc: ${gcc_version}"
+            echo "- glibc: ${glibc_version}"
+            echo "- runner image: ${runner_image}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "gcc=${gcc_version}"
+            echo "glibc=${glibc_version}"
+            echo "runner_image=${runner_image}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross
+
+      - name: Build unix (VARIANT=standard)
+        run: |
+          make -C micropython/ports/unix VARIANT=standard submodules
+          make -C micropython/ports/unix VARIANT=standard
+
+      - name: Verify settrace capability macros
+        id: capabilities
+        run: |
+          make -C micropython/ports/unix VARIANT=standard build-standard/py/modsys.pp
+          python3 .github/scripts/verify_capabilities.py \
+            --pp-file micropython/ports/unix/build-standard/py/modsys.pp \
+            --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Stage release asset
+        run: |
+          mkdir -p out
+          cp micropython/ports/unix/build-standard/micropython out/firmware-unix-standard
+
+      - name: Hash artifact
+        id: hash
+        run: |
+          set -euo pipefail
+          sha256=$(sha256sum out/firmware-unix-standard | cut -d' ' -f1)
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+          echo "unix sha256: ${sha256}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Write manifest fragment
+        run: |
+          mkdir -p fragments
+          python3 .github/scripts/write_fragment.py \
+            --id unix-standard-debug \
+            --description "Unix port (VARIANT=standard), sys.settrace enabled with real local variable names, built from the mpy-debugpy integration branch." \
+            --repo "${MICROPY_REPO}" \
+            --source-commit "${MICROPY_SHA}" \
+            --port unix \
+            --board standard \
+            --build-flags MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --artifact unix-standard-debug/micropython \
+            --release-asset firmware-unix-standard \
+            --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
+            --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
+            --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --capabilities-note "Flags enabled by ports/unix/variants/standard/mpconfigvariant.h on the mpy-debugpy integration branch (no CFLAGS_EXTRA needed)." \
+            --toolchain \
+              "gcc=${{ steps.toolchain.outputs.gcc }}" \
+              "glibc=${{ steps.toolchain.outputs.glibc }}" \
+              "runner_image=${{ steps.toolchain.outputs.runner_image }}" \
+              "ci_run_id=${{ github.run_id }}" \
+              "ci_run_attempt=${{ github.run_attempt }}" \
+            --output fragments/unix-standard-debug.json
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: Run host DAP test suite against the fresh artifact
+        env:
+          MPY_DEBUG_FIRMWARE: ${{ github.workspace }}/micropython/ports/unix/build-standard/micropython
+        run: |
+          if make test; then
+            exit 0
+          fi
+          # Known event-interleaving flakes (5s DAP-response timeout races);
+          # any failure outside this set is real. Retry once only if every
+          # failed id is a member - a co-occurring flake must not defeat
+          # the check the way single-line string equality did.
+          known_flakes=(
+            "tests/test_dbg_04_breakpoints.py::test_debug_breakpoints"
+            "tests/test_dbg_06_evaluate.py::test_evaluate_repl_shadowed_local_warns_and_leaves_local_unchanged"
+            "tests/test_dbg_06_evaluate.py::test_evaluate_repl_statement_mutates_running_global"
+            "tests/test_epic1_foundations.py::test_epic1_readonly_locals_hint"
+          )
+          # Node ids are compared with the parametrisation suffix stripped
+          # ("${id%%[*}"): parametrised ids embed machine-local absolute
+          # paths, so full-id equality can never match on a runner. Guard
+          # the allowlist itself first - an entry that matches no
+          # collectable test (e.g. after a rename) is a loud error, not a
+          # silent no-op.
+          collected=$(uv run --extra test python -m pytest tests/ --collect-only -q | grep '::' || true)
+          for flake in "${known_flakes[@]}"; do
+            found=0
+            while IFS= read -r id; do
+              [ "${id%%[*}" = "${flake}" ] && found=1 && break
+            done <<< "${collected}"
+            if [ "${found}" -eq 0 ]; then
+              echo "::error::known_flakes entry matches no collectable test: ${flake}"
+              exit 1
+            fi
+          done
+          failed=$(uv run --extra test python -m pytest tests/ --collect-only -q --lf | grep '::' || true)
+          if [ -z "${failed}" ]; then
+            echo "::error::unix test suite failed but no failing test ids were collected"
+            exit 1
+          fi
+          unrelated=""
+          while IFS= read -r id; do
+            known=0
+            for flake in "${known_flakes[@]}"; do
+              [ "${id%%[*}" = "${flake}" ] && known=1 && break
+            done
+            [ "${known}" -eq 0 ] && unrelated="${unrelated}${id}"$'\n'
+          done <<< "${failed}"
+          if [ -n "${unrelated}" ]; then
+            echo "::error::unix test suite failed with unrelated failure(s):"
+            echo "${unrelated}"
+            exit 1
+          fi
+          echo "::warning::only known interleaving flake(s) failed; retrying once:"
+          echo "${failed}"
+          make test
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: firmware-unix-standard
+          path: out/firmware-unix-standard
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Upload manifest fragment
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manifest-fragment-unix-standard
+          path: fragments/unix-standard-debug.json
+          if-no-files-found: error
+          overwrite: true
+
+  rp2:
+    name: rp2 (RPI_PICO_W)
+    needs: setup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      MICROPY_GIT_TAG: ${{ needs.setup.outputs.git_tag }}
+      MICROPY_GIT_HASH: ${{ needs.setup.outputs.git_hash }}
+      SOURCE_DATE_EPOCH: ${{ needs.setup.outputs.source_date_epoch }}
+      MICROPY_REPO: ${{ needs.setup.outputs.micropython_repo }}
+      MICROPY_SHA: ${{ needs.setup.outputs.micropython_sha }}
+      # CMake's own capability-verification support (finding (2)): emit
+      # compile_commands.json so the resolved macros can be checked against
+      # one compiled translation unit after the build, instead of trusting
+      # the board header's intent.
+      CMAKE_ARGS: -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-newlib \
+            libstdc++-arm-none-eabi-dev \
+            build-essential \
+            ninja-build
+
+      - name: Record toolchain versions
+        id: toolchain
+        run: |
+          gcc_version="$(arm-none-eabi-gcc --version | head -1)"
+          cmake_version="$(cmake --version | head -1)"
+          runner_image="${ImageOS:-unknown} ${ImageVersion:-unknown}"
+          {
+            echo "### rp2 toolchain"
+            echo "- arm-none-eabi-gcc: ${gcc_version}"
+            echo "- cmake: ${cmake_version}"
+            echo "- runner image: ${runner_image}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "gcc=${gcc_version}"
+            echo "cmake=${cmake_version}"
+            echo "runner_image=${runner_image}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross
+
+      - name: Build rp2 (BOARD=RPI_PICO_W)
+        run: |
+          make -C micropython/ports/rp2 BOARD=RPI_PICO_W submodules
+          make -C micropython/ports/rp2 BOARD=RPI_PICO_W
+
+      - name: Verify settrace capability macros
+        id: capabilities
+        run: |
+          python3 .github/scripts/verify_capabilities.py \
+            --compile-commands micropython/ports/rp2/build-RPI_PICO_W/compile_commands.json \
+            --source py/modsys.c \
+            --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Stage release asset
+        run: |
+          mkdir -p out
+          cp micropython/ports/rp2/build-RPI_PICO_W/firmware.uf2 out/firmware-RPI_PICO_W.uf2
+
+      - name: Hash artifact
+        id: hash
+        run: |
+          set -euo pipefail
+          sha256=$(sha256sum out/firmware-RPI_PICO_W.uf2 | cut -d' ' -f1)
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+          echo "rp2 sha256: ${sha256}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Write manifest fragment
+        run: |
+          mkdir -p fragments
+          python3 .github/scripts/write_fragment.py \
+            --id rp2-rpi-pico-w-debug \
+            --description "rp2 port, BOARD=RPI_PICO_W, sys.settrace enabled with real local variable names." \
+            --repo "${MICROPY_REPO}" \
+            --source-commit "${MICROPY_SHA}" \
+            --port rp2 \
+            --board RPI_PICO_W \
+            --build-flags MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --artifact rp2-rpi-pico-w-debug/firmware.uf2 \
+            --release-asset firmware-RPI_PICO_W.uf2 \
+            --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
+            --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
+            --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --capabilities-note "Flags committed in boards/RPI_PICO_W/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA." \
+            --toolchain \
+              "gcc=${{ steps.toolchain.outputs.gcc }}" \
+              "cmake=${{ steps.toolchain.outputs.cmake }}" \
+              "runner_image=${{ steps.toolchain.outputs.runner_image }}" \
+              "ci_run_id=${{ github.run_id }}" \
+              "ci_run_attempt=${{ github.run_attempt }}" \
+            --output fragments/rp2-rpi-pico-w-debug.json
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: firmware-rp2-rpi-pico-w
+          path: out/firmware-RPI_PICO_W.uf2
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Upload manifest fragment
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manifest-fragment-rp2-rpi-pico-w
+          path: fragments/rp2-rpi-pico-w-debug.json
+          if-no-files-found: error
+          overwrite: true
+
+  stm32:
+    name: stm32 (PYBD_SF6)
+    needs: setup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      MICROPY_GIT_TAG: ${{ needs.setup.outputs.git_tag }}
+      MICROPY_GIT_HASH: ${{ needs.setup.outputs.git_hash }}
+      SOURCE_DATE_EPOCH: ${{ needs.setup.outputs.source_date_epoch }}
+      MICROPY_REPO: ${{ needs.setup.outputs.micropython_repo }}
+      MICROPY_SHA: ${{ needs.setup.outputs.micropython_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            build-essential
+
+      - name: Record toolchain versions
+        id: toolchain
+        run: |
+          gcc_version="$(arm-none-eabi-gcc --version | head -1)"
+          runner_image="${ImageOS:-unknown} ${ImageVersion:-unknown}"
+          {
+            echo "### stm32 toolchain"
+            echo "- arm-none-eabi-gcc: ${gcc_version}"
+            echo "- runner image: ${runner_image}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "gcc=${gcc_version}"
+            echo "runner_image=${runner_image}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross
+
+      - name: Build stm32 (BOARD=PYBD_SF6)
+        run: |
+          make -C micropython/ports/stm32 BOARD=PYBD_SF6 submodules
+          make -C micropython/ports/stm32 BOARD=PYBD_SF6
+
+      - name: Verify settrace capability macros
+        id: capabilities
+        run: |
+          make -C micropython/ports/stm32 BOARD=PYBD_SF6 build-PYBD_SF6/py/modsys.pp
+          python3 .github/scripts/verify_capabilities.py \
+            --pp-file micropython/ports/stm32/build-PYBD_SF6/py/modsys.pp \
+            --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Stage release asset
+        run: |
+          mkdir -p out
+          cp micropython/ports/stm32/build-PYBD_SF6/firmware.dfu out/firmware-PYBD_SF6.dfu
+
+      - name: Hash artifact
+        id: hash
+        run: |
+          set -euo pipefail
+          sha256=$(sha256sum out/firmware-PYBD_SF6.dfu | cut -d' ' -f1)
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+          echo "stm32 sha256: ${sha256}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Write manifest fragment
+        run: |
+          mkdir -p fragments
+          python3 .github/scripts/write_fragment.py \
+            --id stm32-pybd-sf6-debug \
+            --description "stm32 port, BOARD=PYBD_SF6, sys.settrace enabled with real local variable names. Raw application image (TEXT0_ADDR 0x08008000): mboot must already be resident on the board; this artifact does not include or replace mboot." \
+            --repo "${MICROPY_REPO}" \
+            --source-commit "${MICROPY_SHA}" \
+            --port stm32 \
+            --board PYBD_SF6 \
+            --build-flags MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --artifact stm32-pybd-sf6-debug/firmware.dfu \
+            --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
+            --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --release-asset firmware-PYBD_SF6.dfu \
+            --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
+            --capabilities-note "Flags committed in boards/PYBD_SF6/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA." \
+            --notes "mboot must already be resident on the board (true for stock PYBD_SF6 hardware); this is the raw application firmware.dfu, not an mboot-inclusive image." \
+            --toolchain \
+              "gcc=${{ steps.toolchain.outputs.gcc }}" \
+              "runner_image=${{ steps.toolchain.outputs.runner_image }}" \
+              "ci_run_id=${{ github.run_id }}" \
+              "ci_run_attempt=${{ github.run_attempt }}" \
+            --output fragments/stm32-pybd-sf6-debug.json
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: firmware-stm32-pybd-sf6
+          path: out/firmware-PYBD_SF6.dfu
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Upload manifest fragment
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manifest-fragment-stm32-pybd-sf6
+          path: fragments/stm32-pybd-sf6-debug.json
+          if-no-files-found: error
+          overwrite: true
+
+  esp32:
+    name: esp32 (ESP32_GENERIC)
+    needs: setup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    container:
+      # Tag pinned to a digest: ports_esp32.yml floats `v5.3` as its "oldest
+      # supported" IDF, but a mutable tag would let the toolchain drift under
+      # this workflow with no diff in this repo to show it.
+      image: espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7
+    # A `container:` job's default shell is `sh`, not `bash` - `set -o
+    # pipefail` (as `Hash artifact` uses) is a dash/POSIX-sh syntax error.
+    defaults:
+      run:
+        shell: bash
+    env:
+      MICROPY_GIT_TAG: ${{ needs.setup.outputs.git_tag }}
+      MICROPY_GIT_HASH: ${{ needs.setup.outputs.git_hash }}
+      SOURCE_DATE_EPOCH: ${{ needs.setup.outputs.source_date_epoch }}
+      MICROPY_REPO: ${{ needs.setup.outputs.micropython_repo }}
+      MICROPY_SHA: ${{ needs.setup.outputs.micropython_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
+
+      - name: Install build tools
+        # The espressif/idf image ships the ESP-IDF toolchain (cmake/ninja/
+        # xtensa-gcc) but the micropython/ports/esp32 Makefile is a GNU Make
+        # wrapper around idf.py, so `make` itself must be present.
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential
+
+      - name: Record toolchain versions
+        id: toolchain
+        # idf.py and the xtensa toolchain are only on PATH once export.sh is
+        # sourced, and that has to happen in the same shell as anything that
+        # needs it (GITHUB_ENV/GITHUB_PATH don't apply until the *next* step).
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf_ver="$(cat "$IDF_PATH/version.txt" 2>/dev/null || echo v5.3)"
+          gcc_version="$(xtensa-esp32-elf-gcc --version | head -1)"
+          {
+            echo "### esp32 toolchain"
+            echo "- IDF_VER: ${idf_ver}"
+            echo "- xtensa-esp32-elf-gcc: ${gcc_version}"
+            echo "- container image: espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "idf_ver=${idf_ver}"
+            echo "gcc=${gcc_version}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build esp32 (BOARD=ESP32_GENERIC)
+        run: |
+          . "$IDF_PATH/export.sh"
+          make -C micropython/mpy-cross
+          make -C micropython/ports/esp32 BOARD=ESP32_GENERIC submodules
+          make -C micropython/ports/esp32 BOARD=ESP32_GENERIC
+
+      - name: Verify settrace capability macros
+        id: capabilities
+        # ESP-IDF's cmake build already emits compile_commands.json by
+        # default; no extra -D flag needed (unlike rp2).
+        run: |
+          python3 .github/scripts/verify_capabilities.py \
+            --compile-commands micropython/ports/esp32/build-ESP32_GENERIC/compile_commands.json \
+            --source py/modsys.c \
+            --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Stage release asset
+        run: |
+          mkdir -p out
+          cp micropython/ports/esp32/build-ESP32_GENERIC/firmware.bin out/firmware-ESP32_GENERIC.bin
+
+      - name: Hash artifact
+        id: hash
+        run: |
+          set -euo pipefail
+          sha256=$(sha256sum out/firmware-ESP32_GENERIC.bin | cut -d' ' -f1)
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+          echo "esp32 sha256: ${sha256}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Write manifest fragment
+        run: |
+          mkdir -p fragments
+          python3 .github/scripts/write_fragment.py \
+            --id esp32-generic-debug \
+            --description "esp32 port, BOARD=ESP32_GENERIC, sys.settrace enabled with real local variable names. Merged flash-from-0 image (bootloader + partition table + application)." \
+            --repo "${MICROPY_REPO}" \
+            --source-commit "${MICROPY_SHA}" \
+            --port esp32 \
+            --board ESP32_GENERIC \
+            --build-flags MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --artifact esp32-generic-debug/firmware.bin \
+            --release-asset firmware-ESP32_GENERIC.bin \
+            --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
+            --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
+            --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --capabilities-note "Flags committed in boards/ESP32_GENERIC/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA." \
+            --notes "Built with ESP-IDF v5.3 (espressif/idf:v5.3 container image, pinned by digest in the toolchain table)." \
+            --toolchain \
+              "idf_ver=${{ steps.toolchain.outputs.idf_ver }}" \
+              "gcc=${{ steps.toolchain.outputs.gcc }}" \
+              "container_image=espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7" \
+              "ci_run_id=${{ github.run_id }}" \
+              "ci_run_attempt=${{ github.run_attempt }}" \
+            --output fragments/esp32-generic-debug.json
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: firmware-esp32-generic
+          path: out/firmware-ESP32_GENERIC.bin
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Upload manifest fragment
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: manifest-fragment-esp32-generic
+          path: fragments/esp32-generic-debug.json
+          if-no-files-found: error
+          overwrite: true
+
+  release:
+    name: publish Release
+    needs: [setup, unix, rp2, stm32, esp32]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      # The v1 STORY-3.2 scope is exactly these four variants; a fragment set
+      # short of (or beyond) this list must fail the gate rather than publish
+      # silently (round-2 finding (1)).
+      EXPECTED_VARIANT_IDS: >-
+        unix-standard-debug rp2-rpi-pico-w-debug stm32-pybd-sf6-debug esp32-generic-debug
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: firmware-*
+          path: dl/firmware
+          merge-multiple: true
+
+      - name: Download manifest fragments
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: manifest-fragment-*
+          path: dl/fragments
+          merge-multiple: true
+
+      - name: Validate manifest fragments
+        run: uv run launcher/gen_manifest.py --check --fragments-dir dl/fragments --expect-ids ${EXPECTED_VARIANT_IDS}
+
+      - name: Compute checksums
+        run: |
+          cd dl/firmware
+          sha256sum firmware-unix-standard firmware-RPI_PICO_W.uf2 firmware-PYBD_SF6.dfu firmware-ESP32_GENERIC.bin > checksums.txt
+          cat checksums.txt
+
+      - name: Cross-check fragment sha256 against downloaded assets
+        # The manifest's sha256 comes from each build job's fragment; the
+        # bytes come from a separately-downloaded artifact. Nothing else
+        # ties them together, so verify here that what gets published as a
+        # Release asset is exactly what the manifest will claim its hash is.
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+
+          lines = []
+          for path in sorted(pathlib.Path("dl/fragments").glob("*.json")):
+              frag = json.loads(path.read_text())
+              lines.append(f"{frag['artifact_sha256']}  dl/firmware/{frag['release_asset']}\n")
+          pathlib.Path("dl/firmware/SHA256SUMS.fragments").write_text("".join(lines))
+          PY
+          cat dl/firmware/SHA256SUMS.fragments
+          # --strict: a malformed line (e.g. an empty artifact_sha256, which
+          # validate_fragment now also rejects) must fail the gate instead of
+          # printing a WARNING and exiting 0.
+          sha256sum --strict -c dl/firmware/SHA256SUMS.fragments
+
+      - name: Assemble manifest fragments
+        env:
+          TAG: fw-${{ needs.setup.outputs.micropython_short_sha }}
+        run: |
+          uv run launcher/gen_manifest.py \
+            --fragments-dir dl/fragments \
+            --repo-slug "${{ github.repository }}" \
+            --tag "${TAG}" \
+            --expect-ids ${EXPECTED_VARIANT_IDS} \
+            --output dl/manifest-fragments.toml
+          cat dl/manifest-fragments.toml
+
+      - name: Write release notes
+        env:
+          MICROPY_SHA: ${{ needs.setup.outputs.micropython_sha }}
+          MICROPY_REPO: ${{ needs.setup.outputs.micropython_repo }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          cat > dl/release-notes.md <<EOF
+          Debug-enabled MicroPython firmware built from
+          ${MICROPY_REPO} @ \`${MICROPY_SHA}\` (mpy-debugpy integration branch),
+          composed via this repo at \`${GITHUB_SHA}\`.
+
+          Published by workflow run [\`${RUN_ID}\`](https://github.com/${{ github.repository }}/actions/runs/${RUN_ID}) (attempt ${RUN_ATTEMPT}) on ${build_date}.
+
+          Variants: unix-standard-debug, rp2-rpi-pico-w-debug,
+          stm32-pybd-sf6-debug, esp32-generic-debug. All four build with
+          \`sys.settrace\` and real local-variable names
+          (\`MICROPY_PY_SYS_SETTRACE\`, \`MICROPY_PY_SYS_SETTRACE_LOCALNAMES\`);
+          \`set_local\` write-back is not built into any of them.
+          Capability fields in the manifest are build intent, not a runtime
+          behaviour guarantee - probe at session start (see firmware.toml's
+          header note).
+
+          **PYBD_SF6 note**: \`firmware-PYBD_SF6.dfu\` is the raw application
+          image (TEXT0_ADDR 0x08008000). mboot must already be resident on
+          the board; this asset does not include or replace mboot.
+
+          \`checksums.txt\` holds the sha256 of each firmware asset;
+          \`manifest-fragments.toml\` holds the corresponding
+          \`firmware.toml\` \`[[variant]]\` entries (see
+          \`launcher/gen_manifest.py\`).
+          EOF
+          cat dl/release-notes.md
+
+      - name: Create or update Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: fw-${{ needs.setup.outputs.micropython_short_sha }}
+          ALLOW_REPUBLISH: ${{ inputs.allow_republish }}
+        run: |
+          set -euo pipefail
+          assets=(
+            dl/firmware/firmware-unix-standard
+            dl/firmware/firmware-RPI_PICO_W.uf2
+            dl/firmware/firmware-PYBD_SF6.dfu
+            dl/firmware/firmware-ESP32_GENERIC.bin
+            dl/firmware/checksums.txt
+            dl/manifest-fragments.toml
+          )
+          if gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            if [ "${ALLOW_REPUBLISH}" != "true" ]; then
+              echo "::error::Release ${TAG} already exists. Re-dispatch with allow_republish=true to overwrite its assets - this replaces the bytes behind every existing download_url, including checksums.txt and manifest-fragments.toml." >&2
+              exit 1
+            fi
+            gh release upload "${TAG}" "${assets[@]}" --repo "${{ github.repository }}" --clobber
+            gh release edit "${TAG}" --repo "${{ github.repository }}" \
+              --title "${TAG}" --notes-file dl/release-notes.md
+          else
+            gh release create "${TAG}" "${assets[@]}" --repo "${{ github.repository }}" \
+              --target "${GITHUB_SHA}" --title "${TAG}" --notes-file dl/release-notes.md
+          fi
