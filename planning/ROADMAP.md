@@ -20,6 +20,24 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-3.2 stages 1–4 DONE (2026-08-04); only the deliberate master bump
+  and the STORY-6.4-deferred hardware boot-check remain.** The composition
+  gained the `debug_board_flags` local-only branch (settrace committed in the
+  three device board configs; integration tip `1f70f60684`), which also
+  surfaced and fixed a real firmware bug (missing `stdio.h` in `py/profile.c`,
+  exposed by rp2's `-Werror`; fixed bisect-clean on
+  `local_names_implementation`, PR #5 refreshed). `.github/workflows/
+  firmware.yml` builds all four targets (first push green; hardened over four
+  opus review rounds: SOURCE_DATE_EPOCH reproducibility — unix sha256 proven
+  identical across independent runs — sha-in-banner provenance, digest-pinned
+  IDF container, fragment-vs-bytes cross-check, republish guard, per-device
+  settrace symbol assertions, toolchain provenance in fragments). First
+  Release `fw-1f70f60684` published; `firmware/firmware.toml` now carries
+  exactly the four CI entries (legacy dropped) and the full chain is verified
+  end-to-end: fetch → sha256 verify → select → the fetched unix binary runs
+  the host DAP suite green (82 passed / 1 xfailed; suite grew 46 → 82 across
+  the story: fetch/corruption/fragment/capability-verifier tests). s3.4's
+  Release-URL sections are now unblocked.
 - **Roadmap review (2026-07-15, `20260715_roadmap-review.md`).** Landed results
   re-verified against the tree, fork and GitHub: submodule pins, canonical
   branch tips, PR #5 head and the mbm.toml composition all hold; `make test`
