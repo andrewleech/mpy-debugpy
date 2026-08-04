@@ -7,6 +7,7 @@ session involved. The real-handshake mismatch-guard test lives in
 """
 
 import io
+import os
 import sys
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -18,21 +19,9 @@ _LAUNCHER_DIR = str(Path(__file__).resolve().parents[1] / "launcher")
 if _LAUNCHER_DIR not in sys.path:
     sys.path.insert(0, _LAUNCHER_DIR)
 
-import firmware  # noqa: E402
+from helpers import firmware_variant as _variant
 
-
-def _variant(id, port="unix", board="standard", deprecated=False, sha256="0" * 64, url="", **caps):
-    return {
-        "id": id,
-        "port": port,
-        "board": board,
-        "deprecated": deprecated,
-        "artifact": f"{id}/micropython",
-        "artifact_sha256": sha256,
-        "download_url": url,
-        "capabilities": caps,
-    }
-
+import firmware
 
 # --- parse_need ---------------------------------------------------------
 
@@ -117,16 +106,7 @@ def test_select_variants_treats_unknown_string_as_not_satisfying():
 
 
 # --- cmd_select (CLI-level, against a temp manifest + firmware dir) ------
-
-
-@pytest.fixture()
-def temp_firmware(tmp_path, monkeypatch):
-    """Point the module's manifest/firmware-dir globals at a scratch directory."""
-    firmware_dir = tmp_path / "firmware"
-    firmware_dir.mkdir()
-    monkeypatch.setattr(firmware, "FIRMWARE_DIR", firmware_dir)
-    monkeypatch.setattr(firmware, "MANIFEST_PATH", firmware_dir / "firmware.toml")
-    return firmware_dir
+# `temp_firmware` fixture is shared via conftest.py.
 
 
 def _run_select(args):
@@ -148,6 +128,27 @@ def test_cmd_select_resolves_single_match_with_local_artifact(temp_firmware, mon
     rc, out, err = _run_select(["--need", "settrace,save_names", "--port", "unix"])
     assert rc == 0, err
     assert out.strip() == str(artifact_path)
+
+
+def test_cmd_select_repairs_executable_bit_on_existing_artifact(temp_firmware, monkeypatch):
+    """`select` hands the resolved path straight to a caller that runs it; a
+    hash-valid unix artifact already on disk without the execute bit (e.g. a
+    hand-placed download) must be repaired before the path is returned."""
+    artifact_path = temp_firmware / "unix-standard-debug" / "micropython"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_bytes(b"fake-firmware")
+    artifact_path.chmod(0o644)
+    sha256 = firmware.sha256_of(artifact_path)
+
+    variants = [
+        _variant("unix-standard-debug", port="unix", sha256=sha256, settrace=True, save_names=True)
+    ]
+    monkeypatch.setattr(firmware, "load_manifest", lambda *a, **k: variants)
+
+    rc, out, err = _run_select(["--need", "settrace,save_names", "--port", "unix"])
+    assert rc == 0, err
+    assert out.strip() == str(artifact_path)
+    assert os.access(artifact_path, os.X_OK), "select must repair a non-executable unix artifact"
 
 
 def test_cmd_select_zero_matches_is_an_error(temp_firmware, monkeypatch):

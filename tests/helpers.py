@@ -1,15 +1,27 @@
 import time
 from pathlib import Path
-from pickle import TRUE
-from typing import Dict, List
 
 from dap import ThreadedServer
+
+
+def firmware_variant(id, port="unix", board="standard", deprecated=False, sha256="0" * 64, url="", **caps):
+    """Build a `firmware.toml` `[[variant]]`-shaped dict for `launcher/firmware.py` tests."""
+    return {
+        "id": id,
+        "port": port,
+        "board": board,
+        "deprecated": deprecated,
+        "artifact": f"{id}/micropython",
+        "artifact_sha256": sha256,
+        "download_url": url,
+        "capabilities": caps,
+    }
 
 
 class PerfServer(ThreadedServer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rcv_messages: List[Dict] = []  # Instance variable, not class variable
+        self.rcv_messages: list[dict] = []  # Instance variable, not class variable
 
     def handle_message(self, message):
         """Handle a message from the client or adapter."""
@@ -50,7 +62,7 @@ def wait_for_msg(server, *, count=0, event="", response="", timeout=5):
 def set_breakpoints(
     server: PerfServer,
     source_file: str,
-    bp_lines: List[int],
+    bp_lines: list[int],
     wait=False,
 ):
     """Set breakpoints in the debug server.

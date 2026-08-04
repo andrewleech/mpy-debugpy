@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -52,7 +54,12 @@ class SelectionError(Exception):
     """`select` cannot resolve its query to exactly one usable artifact."""
 
 
-def load_manifest(manifest_path: Path = MANIFEST_PATH) -> list[dict[str, Any]]:
+def load_manifest(manifest_path: Path | None = None) -> list[dict[str, Any]]:
+    # `manifest_path` resolves against the module-level MANIFEST_PATH at call
+    # time, not def time, so a monkeypatched MANIFEST_PATH (as the test
+    # fixtures do) actually takes effect for every no-arg caller below.
+    if manifest_path is None:
+        manifest_path = MANIFEST_PATH
     with open(manifest_path, "rb") as f:
         data = tomllib.load(f)
     return data.get("variant", [])
@@ -78,6 +85,32 @@ def is_placeholder_url(url: str) -> bool:
     return not url or url.startswith(PLACEHOLDER_URL_PREFIXES)
 
 
+def _ensure_executable(v: dict[str, Any], path: Path) -> None:
+    """Set the execute bit on `path` if `v` is a host-executable (unix) variant.
+
+    GitHub Release assets carry no execute bit, so every path that hands back
+    a verified artifact for a `port == "unix"` variant - freshly downloaded or
+    already present on disk - must repair the bit rather than trust it.
+    """
+    if v.get("port") == "unix" and not (path.stat().st_mode & 0o100):
+        path.chmod(path.stat().st_mode | 0o755)
+
+
+def _artifact_path(v: dict[str, Any]) -> Path:
+    """Resolve `v`'s artifact to a path, refusing one that escapes FIRMWARE_DIR.
+
+    `gen_manifest.py --check` rejects an absolute or `..`-containing `artifact`
+    field before it ever reaches a manifest, but a hand-edited or otherwise
+    unvalidated manifest must not be able to make `fetch`/`select` write
+    outside the firmware directory.
+    """
+    firmware_dir = FIRMWARE_DIR.resolve()
+    path = (FIRMWARE_DIR / v["artifact"]).resolve()
+    if not path.is_relative_to(firmware_dir):
+        raise SystemExit(f"error: variant {v['id']!r} has an unsafe artifact path {v['artifact']!r}")
+    return path
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     variants = load_manifest()
     for v in variants:
@@ -99,63 +132,86 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _verify_one(v: dict[str, Any]) -> bool:
-    artifact_path = FIRMWARE_DIR / v["artifact"]
+def _verify_one(v: dict[str, Any], *, strict: bool) -> str:
+    """Verify one variant's local artifact against its manifest sha256.
+
+    Returns "OK", "FAIL", or "SKIP". `strict` (an explicitly-named variant
+    id) treats a missing artifact as FAIL; the no-args "check everything"
+    mode treats a deprecated entry (a legacy provenance record, never
+    fetchable - see firmware.toml's header note) or one simply not fetched
+    yet as SKIP, not FAIL, so a fresh checkout with nothing downloaded isn't
+    a red `verify`.
+    """
+    if not strict and v.get("deprecated"):
+        print(f"SKIP {v['id']}: deprecated manifest entry (legacy provenance record, not fetchable)")
+        return "SKIP"
+    artifact_path = _artifact_path(v)
     expected = v["artifact_sha256"]
     if not artifact_path.exists():
-        print(f"FAIL {v['id']}: artifact not found at {artifact_path}")
-        return False
+        if strict:
+            print(f"FAIL {v['id']}: artifact not found at {artifact_path}")
+            return "FAIL"
+        print(f"SKIP {v['id']}: artifact not fetched locally (run `fetch {v['id']}` to check it)")
+        return "SKIP"
     actual = sha256_of(artifact_path)
     if actual != expected:
         print(f"FAIL {v['id']}: sha256 mismatch")
         print(f"     expected {expected}")
         print(f"     actual   {actual}")
-        return False
+        return "FAIL"
     print(f"OK   {v['id']}: {artifact_path} matches manifest sha256")
-    return True
+    return "OK"
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
     variants = load_manifest()
     if args.variant_id:
         selected = [find_variant(variants, vid) for vid in args.variant_id]
+        results = [_verify_one(v, strict=True) for v in selected]
     else:
-        selected = variants
-    results = [_verify_one(v) for v in selected]
-    ok = all(results)
+        results = [_verify_one(v, strict=False) for v in variants]
+    ok = "FAIL" not in results
     if not ok:
         print("\nverify FAILED: one or more artifacts missing or hash mismatch", file=sys.stderr)
     return 0 if ok else 1
 
 
 def _download_and_verify(v: dict[str, Any], artifact_path: Path, url: str) -> None:
-    """Download `url` to `artifact_path` and verify it against `v`'s manifest sha256.
+    """Download `url`, verify it against `v`'s manifest sha256, then place it at `artifact_path`.
 
-    Raises `SelectionError` if the downloaded bytes don't match; the partial
-    file is removed either way so a failed fetch never leaves a corrupt
-    artifact behind for a later run to trust.
+    Downloads to a sibling temp file and only replaces `artifact_path` after a
+    successful hash match, so a truncated or otherwise failed download never
+    truncates or corrupts a previously-valid artifact already at that path.
+    Raises `SelectionError` on a hash mismatch.
     """
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(url) as resp, open(artifact_path, "wb") as out:
-        out.write(resp.read())
+    tmp_path = artifact_path.with_name(artifact_path.name + ".part")
+    try:
+        with urllib.request.urlopen(url) as resp, open(tmp_path, "wb") as out:
+            out.write(resp.read())
 
-    actual = sha256_of(artifact_path)
-    if actual != v["artifact_sha256"]:
-        artifact_path.unlink(missing_ok=True)
-        raise SelectionError(
-            f"{v['id']}: downloaded artifact failed sha256 verification "
-            f"(expected {v['artifact_sha256']}, got {actual}); file removed"
-        )
+        actual = sha256_of(tmp_path)
+        if actual != v["artifact_sha256"]:
+            raise SelectionError(
+                f"{v['id']}: downloaded artifact failed sha256 verification "
+                f"(expected {v['artifact_sha256']}, got {actual}); file removed"
+            )
+
+        _ensure_executable(v, tmp_path)
+        tmp_path.replace(artifact_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
     variants = load_manifest()
     v = find_variant(variants, args.variant_id)
     url = v.get("download_url", "")
-    artifact_path = FIRMWARE_DIR / v["artifact"]
+    artifact_path = _artifact_path(v)
 
     if artifact_path.exists() and not args.force:
         if sha256_of(artifact_path) == v["artifact_sha256"]:
+            _ensure_executable(v, artifact_path)
             print(f"{v['id']}: already present and verified at {artifact_path}, skipping fetch")
             return 0
         print(f"{v['id']}: local artifact present but hash mismatch; re-fetching")
@@ -175,6 +231,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         _download_and_verify(v, artifact_path, url)
     except SelectionError as e:
         print(f"error: {e}", file=sys.stderr)
+        return 1
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+        print(f"error: failed to fetch {v['id']} from {url}: {e}", file=sys.stderr)
         return 1
 
     print(f"OK   {v['id']}: fetched and verified at {artifact_path}")
@@ -239,12 +298,23 @@ def select_variants(
 def _resolve_artifact(v: dict[str, Any]) -> Path:
     """Return the local path to `v`'s artifact, fetching it if not yet present.
 
+    If the artifact exists locally, re-verify its sha256 against the manifest.
     Raises `SelectionError` if the artifact is missing and the manifest has no
     real `download_url` yet - the placeholder means STORY-3.2 has not
-    published a Release asset for this variant.
+    published a Release asset for this variant. Also raises `SelectionError`
+    if a local artifact fails sha256 verification.
     """
-    artifact_path = FIRMWARE_DIR / v["artifact"]
+    artifact_path = _artifact_path(v)
     if artifact_path.exists():
+        # Re-verify the sha256 of the existing artifact
+        actual = sha256_of(artifact_path)
+        expected = v["artifact_sha256"]
+        if actual != expected:
+            raise SelectionError(
+                f"{v['id']}: local artifact at {artifact_path} failed sha256 verification "
+                f"(expected {expected}, got {actual})"
+            )
+        _ensure_executable(v, artifact_path)
         return artifact_path
 
     url = v.get("download_url", "")
@@ -291,6 +361,10 @@ def cmd_select(args: argparse.Namespace) -> int:
     except SelectionError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+        url = matches[0].get("download_url", "")
+        print(f"error: failed to fetch {matches[0]['id']} from {url}: {e}", file=sys.stderr)
+        return 1
 
     print(artifact_path)
     return 0
