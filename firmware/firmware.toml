@@ -29,7 +29,7 @@ id = "esp32-generic-debug"
 deprecated = false
 description = "esp32 port, BOARD=ESP32_GENERIC, sys.settrace enabled with real local variable names. Merged flash-from-0 image (bootloader + partition table + application)."
 repo = "https://github.com/andrewleech/micropython.git"
-source_commit = "1f70f6068496cf274383144892e1a320a0c9d689"
+source_commit = "f9d7c96b96a4fa8ea0d0d139cbfee19ec10f46ee"
 port = "esp32"
 board = "ESP32_GENERIC"
 build_flags = [
@@ -39,17 +39,17 @@ build_flags = [
 capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
 capabilities_note = "Flags committed in boards/ESP32_GENERIC/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA."
 artifact = "esp32-generic-debug/firmware.bin"
-artifact_sha256 = "621f0e795ffea6bf1556ae9e8be26760d38f27379028c41342f3b669a6270d93"
-download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-1f70f60684/firmware-ESP32_GENERIC.bin"
+artifact_sha256 = "62b3bf77d6513f868f2e2ca23225005c1cb65b86483c94e1840e68f7c1160b35"
+download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-f9d7c96b96/firmware-ESP32_GENERIC.bin"
 notes = "Built with ESP-IDF v5.3 (espressif/idf:v5.3 container image, pinned by digest in the toolchain table)."
-toolchain = { idf_ver = "v5.3", gcc = "xtensa-esp-elf-gcc (crosstool-NG esp-13.2.0_20240530) 13.2.0", container_image = "espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7", ci_run_id = "30907011385", ci_run_attempt = "1" }
+toolchain = { idf_ver = "v5.3", gcc = "xtensa-esp-elf-gcc (crosstool-NG esp-13.2.0_20240530) 13.2.0", container_image = "espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7", ci_run_id = "30912616619", ci_run_attempt = "1" }
 
 [[variant]]
 id = "rp2-rpi-pico-w-debug"
 deprecated = false
 description = "rp2 port, BOARD=RPI_PICO_W, sys.settrace enabled with real local variable names."
 repo = "https://github.com/andrewleech/micropython.git"
-source_commit = "1f70f6068496cf274383144892e1a320a0c9d689"
+source_commit = "f9d7c96b96a4fa8ea0d0d139cbfee19ec10f46ee"
 port = "rp2"
 board = "RPI_PICO_W"
 build_flags = [
@@ -59,16 +59,16 @@ build_flags = [
 capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
 capabilities_note = "Flags committed in boards/RPI_PICO_W/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA."
 artifact = "rp2-rpi-pico-w-debug/firmware.uf2"
-artifact_sha256 = "2999ffb8501bd7a29ebe5de105868d762c53b0eb5b4c9bdc35026c0c23b9d709"
-download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-1f70f60684/firmware-RPI_PICO_W.uf2"
-toolchain = { gcc = "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009", cmake = "cmake version 3.31.6", runner_image = "ubuntu24 20260720.247.2", ci_run_id = "30907011385", ci_run_attempt = "1" }
+artifact_sha256 = "51c133c71d65d3ef0bf4ac88355b9f2c6498029b3ed3396bb117840239c2188d"
+download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-f9d7c96b96/firmware-RPI_PICO_W.uf2"
+toolchain = { gcc = "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009", cmake = "cmake version 3.31.6", runner_image = "ubuntu24 20260720.247.2", ci_run_id = "30912616619", ci_run_attempt = "1" }
 
 [[variant]]
 id = "stm32-pybd-sf6-debug"
 deprecated = false
 description = "stm32 port, BOARD=PYBD_SF6, sys.settrace enabled with real local variable names. Raw application image (TEXT0_ADDR 0x08008000): mboot must already be resident on the board; this artifact does not include or replace mboot."
 repo = "https://github.com/andrewleech/micropython.git"
-source_commit = "1f70f6068496cf274383144892e1a320a0c9d689"
+source_commit = "f9d7c96b96a4fa8ea0d0d139cbfee19ec10f46ee"
 port = "stm32"
 board = "PYBD_SF6"
 build_flags = [
@@ -78,17 +78,17 @@ build_flags = [
 capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
 capabilities_note = "Flags committed in boards/PYBD_SF6/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA."
 artifact = "stm32-pybd-sf6-debug/firmware.dfu"
-artifact_sha256 = "99714f28dbe5d06515d9d7dfeaa901ea2699f53064ba4f6b6c035b04c218eccd"
-download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-1f70f60684/firmware-PYBD_SF6.dfu"
+artifact_sha256 = "12baf712cf5c1895dbda27e6c9a953ecb25039f6169c2a77ffb3169727deab09"
+download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-f9d7c96b96/firmware-PYBD_SF6.dfu"
 notes = "mboot must already be resident on the board (true for stock PYBD_SF6 hardware); this is the raw application firmware.dfu, not an mboot-inclusive image."
-toolchain = { gcc = "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009", runner_image = "ubuntu24 20260720.247.2", ci_run_id = "30907011385", ci_run_attempt = "1" }
+toolchain = { gcc = "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009", runner_image = "ubuntu24 20260720.247.2", ci_run_id = "30912616619", ci_run_attempt = "1" }
 
 [[variant]]
 id = "unix-standard-debug"
 deprecated = false
 description = "Unix port (VARIANT=standard), sys.settrace enabled with real local variable names, built from the mpy-debugpy integration branch."
 repo = "https://github.com/andrewleech/micropython.git"
-source_commit = "1f70f6068496cf274383144892e1a320a0c9d689"
+source_commit = "f9d7c96b96a4fa8ea0d0d139cbfee19ec10f46ee"
 port = "unix"
 board = "standard"
 build_flags = [
@@ -98,6 +98,6 @@ build_flags = [
 capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
 capabilities_note = "Flags enabled by ports/unix/variants/standard/mpconfigvariant.h on the mpy-debugpy integration branch (no CFLAGS_EXTRA needed)."
 artifact = "unix-standard-debug/micropython"
-artifact_sha256 = "ce1038367f8bc300070d61dfb0d96029cec9c2cd6b447ee69425457c0b262271"
-download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-1f70f60684/firmware-unix-standard"
-toolchain = { gcc = "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0", glibc = "ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39", runner_image = "ubuntu24 20260720.247.2", ci_run_id = "30907011385", ci_run_attempt = "1" }
+artifact_sha256 = "ba031c4aab66d463b6a874c72f1c0c5e1b4658a415e4b4579023f0ea557a13d2"
+download_url = "https://github.com/andrewleech/mpy-debugpy/releases/download/fw-f9d7c96b96/firmware-unix-standard"
+toolchain = { gcc = "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0", glibc = "ldd (Ubuntu GLIBC 2.39-0ubuntu8.7) 2.39", runner_image = "ubuntu24 20260720.247.2", ci_run_id = "30912616619", ci_run_attempt = "1" }
