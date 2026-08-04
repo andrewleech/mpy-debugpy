@@ -3,6 +3,7 @@
 firmware/**/*.bin
 firmware/**/*.elf
 firmware/**/*.uf2
+firmware/**/*.dfu
 firmware/**/micropython
 firmware/build*/
 
