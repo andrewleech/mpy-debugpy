@@ -20,6 +20,17 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-5.4 DONE (2026-08-06, commit e5cf83d).** One `MPDBG-READY` parser
+  now serves both control planes (pin `2ba7cf660087`, suite 239 passed /
+  1 xfailed), returning a record with an endpoint kind so a future serial data
+  plane needs no caller change. Review caught that the refactor had silently
+  dropped s5.1's raw-REPL exception drain — the new synthetic streams were too
+  tidy to expose it. The 0.0.0.0 rules also earned more than expected: as
+  specified they left the suite with no end-to-end success path, since the unix
+  build always reports a wildcard; resolving a wildcard-over-pty to loopback
+  (a pty peer is local by construction) means `mpremote debug` now reports an
+  address a client really connects to, proven by the pty test attaching to
+  exactly what it printed. Detail in the ticket.
 - **STORY-5.2 DONE (2026-08-05, commit 505ac27).** `mpremote debug <name>`
   resolves kind/device/firmware/program from the nearest `mpdebug.toml` (pin
   `38a903b8de20`, suite 197 passed / 1 xfailed). Review killed a shape-based
@@ -855,6 +866,8 @@ mpremote house style; delivered as an mbm-registered branch.
   - component: mpremote + wrapper · effort: M · risk: med · model: sonnet
 
 - **STORY-5.4 — Handshake plumbing (control plane / data plane split)**
+  - **DONE 2026-08-06** — see Status and `s5.4_handshake-plumbing.md` Execution
+    progress.
   - type: implementation
   - description: Generalise handshake parsing so the control plane is subprocess stdout
     (unix), raw-REPL output (serial), or serial (network device before it has an IP), and
@@ -1144,11 +1157,13 @@ parallel.
    STORY-4.2 is not reachable (2.1=YES, D2) and **STORY-5.2 is DONE
    (2026-08-05)**, so this step is closed.
 8. **STORY-4.3** (needs 4.2/4.1), **STORY-5.4** (needs 5.1+2.2) — parallel.
-   **← current frontier (2026-08-05).** STORY-4.3 depends on 4.2, which is
+   **STORY-5.4 DONE 2026-08-06.** STORY-4.3 depends on 4.2, which is
    unreachable (2.1=YES), so read its dependency as 4.1 — check whether
    attach-time staleness of user source still has scope once mount is the
-   delivery mechanism. STORY-5.4 (generalised handshake plumbing across
-   control planes) is the one Q8 was a prerequisite for.
+   delivery mechanism.
+   **← the frontier is step 9's STORY-5.3** (unix flow), now that its
+   dependencies 5.1/5.2/3.1/EPIC-1 are all done and 5.4 gives it the shared
+   parser to consume.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
 10. **STORY-5.5** (needs 5.3,5.4), **STORY-6.3** (needs 5.1) — parallel.
 11. **STORY-6.1** (needs 2.2,5.4), **STORY-6.2** (needs 5.4,EPIC-4) — parallel.
