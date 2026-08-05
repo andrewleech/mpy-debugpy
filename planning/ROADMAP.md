@@ -31,8 +31,11 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   surfaced: mpremote's `nargs=REMAINDER` chaining silently swallows options
   written after the positionals (upstream-wide trap, needs documenting plus
   tests that a flag takes effect), and an early device exit stalls for the full
-  timeout while discarding the device's own error text. Not yet registered in
-  `mbm.toml`; nothing pushed.
+  timeout while discarding the device's own error text. Both are now fixed and
+  the branch is pushed (`mpremote_debug_command` @ `f240be068a`, 17 tests,
+  suite 99 passed / 1 xfailed); the top-repo side is parked on branch
+  `s5.1-do-debug`. `mbm.toml` is deliberately unchanged and the composition
+  not moved until Q8 is decided.
 - **STORY-3.4 DONE (2026-08-05).** `docs/firmware.md` (variant/capability
   tables with an evidence column separating probe-confirmed from build
   intent, fetch/select usage, CI-parity build commands per port, capability
