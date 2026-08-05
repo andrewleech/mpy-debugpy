@@ -10,7 +10,12 @@
 #
 # `source_commit` is the exact commit the binary was built from, recoverable
 # from the `MicroPython vX.Y.Z[-preview].g<sha>` version string embedded in each
-# artifact (readable via `strings <binary> | grep MicroPython`).
+# artifact (readable via `strings <binary> | grep MicroPython`). It tracks the
+# last composition that changed firmware sources, so it lags the submodule pin
+# whenever a pin move touches only host-side code under tools/mpremote -
+# republishing there would mint a new tag for firmware differing solely in its
+# embedded build date and sha. Check `git diff <source_commit> <pin> --
+# . ':(exclude)tools/mpremote'` before concluding the manifest is stale.
 #
 # Entries are produced by CI (.github/workflows/firmware.yml): each Release
 # tagged fw-<micropython-sha10> carries the four artifacts, a checksums file,
