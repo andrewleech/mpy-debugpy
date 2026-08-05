@@ -11,10 +11,10 @@
 # name as-is, so it must exist locally in the submodule (and be pushed to the
 # fork for provenance) before running `mbm rebase`.
 #
-# D6 scoping: the ampremote mpremote branches (verify_hash #18436, QEMU PTY
-# #18327, reconnect #17322, rfc2217 #19062, fast transfer #18785) are not
-# registered here. They get added only when the EPIC-4/5 ticket that needs
-# them starts.
+# D6 scoping: per-decision, ampremote mpremote branches are registered here
+# only when the EPIC-4/5 ticket that needs them starts. verify_hash (#18436,
+# renamed mpremote_file_cp_hash) is registered for STORY-4.1; QEMU PTY #18327,
+# reconnect #17322, rfc2217 #19062, fast transfer #18785 remain unregistered.
 
 [[submodules]]
 path = "micropython"
@@ -35,6 +35,12 @@ title = "frame.f_locals with real local names + placeholder fallback"
 name = "debug_board_flags"
 pr_url = "https://github.com/andrewleech/micropython/tree/debug_board_flags"
 title = "Enable sys.settrace on the RPI_PICO_W, PYBD_SF6, ESP32_GENERIC debug-firmware build targets"
+
+[[submodules.branches]]
+name = "mpremote_file_cp_hash"
+pr_url = "https://github.com/micropython/micropython/pull/18436"
+pr_number = 18436
+title = "tools/mpremote: Add streaming hash verification to file transfers"
 
 [[submodules]]
 path = "micropython-lib"
