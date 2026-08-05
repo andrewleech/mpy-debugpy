@@ -53,6 +53,11 @@ name = "mpremote_debug_command"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_command"
 title = "tools/mpremote: Add debug command skeleton"
 
+[[submodules.branches]]
+name = "mpremote_debug_targets"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_targets"
+title = "tools/mpremote: Add mpdebug.toml named-target resolution"
+
 [[submodules]]
 path = "micropython-lib"
 integration_branch = "mpy-debugpy"

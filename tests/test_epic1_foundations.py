@@ -16,6 +16,7 @@ regresses even when the surrounding code is refactored:
 """
 
 import os
+import sys
 import time
 from pathlib import Path
 from typing import List
@@ -27,16 +28,29 @@ from helpers import set_breakpoints, wait_for_msg
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _TARGET_PY = str(_REPO_ROOT / "src" / "target.py")
 
+_LAUNCHER_DIR = str(_REPO_ROOT / "launcher")
+if _LAUNCHER_DIR not in sys.path:
+    sys.path.insert(0, _LAUNCHER_DIR)
+
+import firmware  # noqa: E402
+
 
 def test_epic1_mpdbg_ready_handshake(attach_server, micropython_debuggee):
-    """STORY-1.2/1.4: the handshake line is valid JSON with a boolean caps dict."""
+    """STORY-1.2/1.4: the handshake line is valid JSON with a boolean caps dict.
+
+    Also checks the live caps keys against `firmware.KNOWN_CAPABILITIES` so a
+    probe key rename shows up here rather than as a silent mismatch further
+    down the pipeline.
+    """
     payload = read_mpdbg_ready(micropython_debuggee)
 
     assert "host" in payload and "port" in payload and "caps" in payload
 
     caps = payload["caps"]
-    for key in ("settrace", "save_names", "set_local", "f_back"):
-        assert key in caps, f"caps missing '{key}': {caps}"
+    assert set(caps) == set(firmware.KNOWN_CAPABILITIES), (
+        f"caps keys {set(caps)} != {set(firmware.KNOWN_CAPABILITIES)}"
+    )
+    for key in firmware.KNOWN_CAPABILITIES:
         assert isinstance(caps[key], bool), f"caps['{key}'] should be a bool, got {caps[key]!r}"
 
 
