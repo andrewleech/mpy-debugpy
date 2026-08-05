@@ -1,14 +1,19 @@
+# fmt: off
+# This file is vendored byte-for-byte between repos with different ruff
+# line-length settings; `ruff format` must leave it alone everywhere so a
+# routine reformat in either repo can't silently break the copies apart.
 """Single parameterised boot script for MicroPython debugpy sessions.
 
 Usage: mpy_launch_debugpy.py [target_module] [target_method] [port]
 
-Replaces the former mpy_launch_debugpy_unix.py / mpy_launch_debugpy_esp32.py
-pair: the bind address is chosen at runtime by probing for the `network`
-module rather than by shipping two near-identical scripts, one per
-transport. There are no IP or port literals in this file - port 0 means
-"pick any free port", and the actual bound endpoint plus the probed firmware
-capabilities are reported in a single machine-readable handshake line on
-stdout:
+The bind address is probed at runtime rather than passed in: boards with a
+`network` module report their own address, everything else binds all
+interfaces. No device IP is hardcoded by the caller; the port, if given, is
+supplied by the caller (0 is rejected by `debugpy.listen()` on every current
+MicroPython port, since none implements `socket.getsockname()`). The actual
+bound endpoint plus the probed firmware capabilities are reported in a
+single machine-readable handshake line on stdout, printed as soon as the
+socket is bound and before any client has attached:
 
     MPDBG-READY {"host": "...", "port": ..., "caps": {...}}
 
@@ -20,8 +25,6 @@ are already applied by the time the target starts running.
 
 import json
 import sys
-
-import debugpy
 
 _banner = r"""
  _____  _______ ______ _______ _______ ______ ___ ___
@@ -55,18 +58,24 @@ def _detect_host():
 
 
 def _parse_args():
+    import debugpy
+
     args = sys.argv[1:]
     target_module = args[0] if len(args) > 0 else "target"
     target_method = args[1] if len(args) > 1 else "main"
-    port = int(args[2]) if len(args) > 2 else 0
+    port = int(args[2]) if len(args) > 2 else debugpy.DEFAULT_PORT
     if len(args) > 3:
         raise ValueError(
-            "Too many arguments. Usage: mpy_launch_debugpy.py [target_module] [target_method] [port]"
+            "Too many arguments. Usage: mpy_launch_debugpy.py "
+            "[target_module] [target_method] [port]"
         )
     return target_module, target_method, port
 
 
 def _run():
+    import debugpy
+
+
     print(_banner)
     print("MicroPython VS Code Debugging")
     print("Usage: mpy_launch_debugpy.py [target_module] [target_method] [port]")
@@ -78,7 +87,9 @@ def _run():
     print("==================================")
 
     if not hasattr(sys, "settrace"):
-        print("sys.settrace is not available. You need a firmware compiled with debugging features.")
+        print(
+            "sys.settrace is not available. You need a firmware compiled with debugging features."
+        )
         return
 
     host = _detect_host()
@@ -124,9 +135,16 @@ def _run():
         print("Result:", result)
 
 
-try:
-    _run()
-except KeyboardInterrupt:
-    print("\nTest interrupted by user")
-except Exception as e:
-    print(f"Error: {e}")
+# Guarded so importing this module does not run device boot code: it ships as
+# a resource inside the mpremote package, where a package walk or autodoc pass
+# would otherwise execute it on the host. Both real invocations - `micropython
+# mpy_launch_debugpy.py ...` and the raw-REPL exec mpremote performs - run it
+# as __main__.
+if __name__ == "__main__":
+    try:
+        _run()
+    except KeyboardInterrupt:
+        print("\nTest interrupted by user")
+    except Exception as e:
+        print(f"Error: {e}")
+# fmt: on

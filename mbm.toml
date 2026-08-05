@@ -48,6 +48,11 @@ name = "mpremote_debugpy_install"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debugpy_install"
 title = "tools/mpremote: Add cached, cross-compiled debugpy package installer"
 
+[[submodules.branches]]
+name = "mpremote_debug_command"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_command"
+title = "tools/mpremote: Add debug command skeleton"
+
 [[submodules]]
 path = "micropython-lib"
 integration_branch = "mpy-debugpy"
