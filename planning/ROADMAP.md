@@ -368,22 +368,28 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-Q1–Q7 are closed; see DECIDED entries below. Q8 is open.
+All questions Q1–Q8 are closed; see DECIDED entries below.
 
-**OPEN:**
+**DECIDED (2026-08-05):**
 
-- **Q8 (raised 2026-08-05, `20260805_handshake-ordering-blocker.md`) — how do we
-  make the device endpoint learnable before attach?** `debugpy.listen()` binds,
-  accepts, and handles `initialize` in one call and only then returns, so the
-  launcher's `MPDBG-READY` line is emitted after a client has already attached.
-  The "endpoint truth comes from the device" design position is therefore not
-  implementable today, and s5.1's endpoint-printing acceptance criterion is
-  unreachable. Recommended resolution: split bind from accept in
-  `public_api.listen()` (endpoint returned after bind; `accept()`/`initialize`
-  move into `wait_for_client()`), which also matches CPython debugpy semantics.
-  Decide before s5.4/EPIC-6, since both depend on the endpoint being readable.
-  Sub-question: `--port 0` on ports lacking `getsockname()` currently
-  substitutes `DEFAULT_PORT` — hard-error or documented default?
+- **Q8 → split bind from accept in `public_api.listen()`.** The endpoint is
+  returned as soon as the socket is bound; `accept()` and the `initialize`
+  handshake move into `wait_for_client()`. The launcher then emits
+  `MPDBG-READY` before any client exists, so `mpremote debug` (and s5.4's
+  transport plumbing, and EPIC-6's network flows) can read the endpoint and
+  attach to it. This also aligns the API with CPython debugpy, where
+  `listen()` returns the endpoint and `wait_for_client()` blocks. Rejected:
+  parsing the human-readable `Debugpy listening on <host>:<port>` line, which
+  would make a log string the contract in place of the JSON handshake built
+  for it, and still could not report a device-assigned port. Sub-question
+  decided too: `--port 0` hard-errors on targets whose `getsockname()` cannot
+  report the bound port, rather than silently substituting `DEFAULT_PORT` and
+  advertising an endpoint nothing is listening on. The change lands on
+  `mpy-debugpy-foundations`, the local-only branch that already owns
+  `wait_for_client` and the capability probe, so it survives recomposition
+  (`add-debugpy-support` is fetched live from PR #1022 and cannot carry local
+  commits). Raised and analysed the same day in
+  `20260805_handshake-ordering-blocker.md`; unblocks STORY-5.1.
 
 **DECIDED (2026-07-15):**
 
