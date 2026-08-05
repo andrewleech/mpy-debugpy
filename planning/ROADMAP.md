@@ -30,8 +30,15 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   unregistered. Chief finding: the documented write-order safety invariant
   does not hold, because MicroPython imports an `__init__`-less directory as
   a namespace package, so partial-install detection rests entirely on the
-  marker — which is currently checked for existence only, never against the
-  per-file hashes it already records. Detail in the ticket.
+  marker. Two further rounds closed that and the rest: the fast path now
+  hashes each recorded file device-side AND rejects any unrecorded file under
+  `device_dir` (a later `.py` shadows the installed `.mpy`), a sweep that
+  cannot delete a stale file raises rather than recording a clean install,
+  and a `device_dir` broad enough to reach the marker or `/` is refused.
+  Review is clean at `mpremote_debugpy_install` @ `dcd4fb702c` /
+  `s4.1-debugpy-install` @ `7b1160f`, still unregistered: its suite passes
+  only against firmware from the composed tip, so the numbers must be
+  re-taken after composition. Detail in the ticket.
 - **STORY-5.1 in review, blocked on Q8 (2026-08-05).** The `mpremote debug`
   skeleton exists on `andrewleech/micropython` branch `mpremote_debug_command`
   (registration, argument surface with validation before any device contact,
