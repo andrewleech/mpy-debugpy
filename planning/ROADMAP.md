@@ -20,7 +20,18 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
-- **STORY-4.1 part-landed (2026-08-05).** The `#18436` verify_hash branch is
+- **STORY-4.1 DONE (2026-08-05).** Both halves are composed: `#18436`
+  verify_hash, then the installer itself (`760f6597db44`, commit `d14de9d`).
+  The installer's 41 tests run against the composed tree — the first run that
+  exercises `fs_writefile(verify_hash=True)` against a transport that has it —
+  and the suite is 123 passed / 1 xfailed. Two review findings are worth
+  remembering as patterns rather than incidents: a documented safety
+  invariant that was simply false (write ordering cannot keep a package
+  non-importable, because MicroPython treats an `__init__`-less directory as
+  a namespace package), and a fast path that trusted existence over content
+  in a story whose whole premise is "trust content, not names". Detail below
+  and in the ticket.
+- **STORY-4.1 detail (superseded by the line above).** The `#18436` verify_hash branch is
   registered and composed (integration `f9d7c96b96` -> `f8852e8fb2ca`,
   commit `700c311`); its rebase needed a real conflict resolution, since
   upstream's later `_quote_path()` hardening and the PR's unquoted path
@@ -689,13 +700,15 @@ is a hard warning before the session starts; path mappings are generated from th
 record, not hand-written. **If STORY-2.1 is YES:** this epic collapses to STORY-4.1.
 
 - **STORY-4.1 — Ensure debugpy module present on device (compiled, cached)**
+  - **DONE 2026-08-05** — see Status and `s4.1_device-debugpy-install.md`
+    Execution progress (hardware install check deferred to STORY-6.4).
   - type: implementation
   - description: Ensure the debugpy package is installed on the device, cross-compiled to
     `.mpy` and cached keyed on (source hash, mpy-cross version, flags); only reinstall when
     the package hash changes. Reuse mpremote `fs_writefile(verify_hash=True)`.
   - acceptance criteria:
-    - [ ] first run installs; subsequent runs with unchanged package skip reinstall.
-    - [ ] install verified by device-side hash.
+    - [x] first run installs; subsequent runs with unchanged package skip reinstall.
+    - [x] install verified by device-side hash.
   - dependencies: EPIC-2 decision (STORY-2.1)
   - component: mpremote + wrapper · effort: M · risk: med · model: sonnet
 
@@ -1082,9 +1095,11 @@ parallel.
 5. **STORY-2.1**, **STORY-2.2** (both need 1.4) — parallel spikes. **Gate:** their yes/no
    decides EPIC-4 scope and EPIC-6 shape. **DONE (D2/D3).**
 6. **STORY-4.1** (needs 2.1 decision), **STORY-5.1** (needs 1.4) — parallel.
-   **← current frontier (2026-07-15, still open 2026-08-04).** Neither is
-   gated on Q7; each opens the mpremote front and triggers its D6 branch
-   registration (drift notes in `20260715_roadmap-review.md`).
+   **STORY-4.1 DONE 2026-08-05.** STORY-5.1 is code-complete but blocked on
+   Q8 (the device endpoint is not learnable before attach), so **← the
+   frontier is Q8 plus step 7's STORY-5.2**; note STORY-4.2 is only reachable
+   if 2.1 had said NO, and it said yes (D2), so EPIC-4's unconditional part
+   is finished.
 7. **STORY-4.2** (if 2.1=NO; needs 4.1), **STORY-5.2** (needs 5.1+3.3) — parallel.
 8. **STORY-4.3** (needs 4.2/4.1), **STORY-5.4** (needs 5.1+2.2) — parallel.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
