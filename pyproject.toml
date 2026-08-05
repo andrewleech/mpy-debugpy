@@ -6,7 +6,9 @@ requires-python = ">=3.10"
 
 [project.optional-dependencies]
 # Host-side DAP test harness dependencies (see Makefile `test`).
-test = ["pytest", "anyio", "debugpy"]
+# pyserial + platformdirs: transitively required to import
+# mpremote.debugpy_install (tests/test_s4_1_debugpy_install.py).
+test = ["pytest", "anyio", "debugpy", "pyserial", "platformdirs"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

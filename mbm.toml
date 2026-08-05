@@ -13,8 +13,9 @@
 #
 # D6 scoping: per-decision, ampremote mpremote branches are registered here
 # only when the EPIC-4/5 ticket that needs them starts. verify_hash (#18436,
-# renamed mpremote_file_cp_hash) is registered for STORY-4.1; QEMU PTY #18327,
-# reconnect #17322, rfc2217 #19062, fast transfer #18785 remain unregistered.
+# renamed mpremote_file_cp_hash) is registered for STORY-4.1, alongside that
+# story's own mpremote_debugpy_install; QEMU PTY #18327, reconnect #17322,
+# rfc2217 #19062, fast transfer #18785 remain unregistered.
 
 [[submodules]]
 path = "micropython"
@@ -41,6 +42,11 @@ name = "mpremote_file_cp_hash"
 pr_url = "https://github.com/micropython/micropython/pull/18436"
 pr_number = 18436
 title = "tools/mpremote: Add streaming hash verification to file transfers"
+
+[[submodules.branches]]
+name = "mpremote_debugpy_install"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debugpy_install"
+title = "tools/mpremote: Add cached, cross-compiled debugpy package installer"
 
 [[submodules]]
 path = "micropython-lib"
