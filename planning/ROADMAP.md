@@ -20,6 +20,18 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-5.3 DONE (2026-08-06, commit b89d533).** `mpremote debug` with a unix
+  target resolves a binary, runs the boot script under it, reports the endpoint
+  and supervises the child (pin `b874d8854419`, suite 250 passed / 1 xfailed).
+  Two findings are worth carrying as patterns. The test harness `pkill`ed stray
+  firmware processes before every run, hiding the very leak it should have
+  caught: deleting it turned five tests red at once, all written against the
+  earlier behaviour where the command returned instead of supervising. And a
+  stray uncommitted edit to the unix variant header had switched on
+  `LOCALNAMES_PERSIST` — the flag kept off deliberately because it corrupts
+  line numbers — apparently to make a master-based branch behave like the
+  composition; it plausibly explains two failures reported as pre-existing.
+  Reverted, and the composed tip carries no such define.
 - **STORY-5.4 DONE (2026-08-06, commit e5cf83d).** One `MPDBG-READY` parser
   now serves both control planes (pin `2ba7cf660087`, suite 239 passed /
   1 xfailed), returning a record with an endpoint kind so a future serial data
@@ -855,6 +867,8 @@ mpremote house style; delivered as an mbm-registered branch.
   - component: mpremote · effort: M · risk: med · model: sonnet
 
 - **STORY-5.3 — Unix flow end-to-end**
+  - **DONE 2026-08-06** — see Status and `s5.3_unix-flow.md` Execution
+    progress (breakpoint-drive proof rides with STORY-5.5).
   - type: implementation
   - description: For `kind=unix`: ensure firmware (fetch/build), set module path, launch
     the boot script as a subprocess, parse `MPDBG-READY` from stdout (control plane), start
@@ -1165,6 +1179,9 @@ parallel.
    dependencies 5.1/5.2/3.1/EPIC-1 are all done and 5.4 gives it the shared
    parser to consume.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
+   **STORY-5.3 DONE 2026-08-06**; STORY-4.4 needs 4.2/4.3, unreachable (2.1=YES).
+   **← the frontier is step 10's STORY-5.5** (harness rework: the interleaving
+   race, and the end-to-end breakpoint drive s5.3 could not prove).
 10. **STORY-5.5** (needs 5.3,5.4), **STORY-6.3** (needs 5.1) — parallel.
 11. **STORY-6.1** (needs 2.2,5.4), **STORY-6.2** (needs 5.4,EPIC-4) — parallel.
 12. **STORY-6.4** (needs 6.1,6.2).
