@@ -20,6 +20,18 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-4.1 part-landed (2026-08-05).** The `#18436` verify_hash branch is
+  registered and composed (integration `f9d7c96b96` -> `f8852e8fb2ca`,
+  commit `700c311`); its rebase needed a real conflict resolution, since
+  upstream's later `_quote_path()` hardening and the PR's unquoted path
+  interpolation each lose something if taken wholesale. The installer itself
+  (`mpremote_debugpy_install` @ `75245612f9`, 13 tests) did NOT converge in
+  four review rounds and is parked on top-repo branch `s4.1-debugpy-install`,
+  unregistered. Chief finding: the documented write-order safety invariant
+  does not hold, because MicroPython imports an `__init__`-less directory as
+  a namespace package, so partial-install detection rests entirely on the
+  marker — which is currently checked for existence only, never against the
+  per-file hashes it already records. Detail in the ticket.
 - **STORY-5.1 in review, blocked on Q8 (2026-08-05).** The `mpremote debug`
   skeleton exists on `andrewleech/micropython` branch `mpremote_debug_command`
   (registration, argument surface with validation before any device contact,
