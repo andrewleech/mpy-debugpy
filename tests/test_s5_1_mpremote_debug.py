@@ -161,12 +161,26 @@ def test_malformed_spec_empty_module():
     assert "Traceback" not in stderr, "should not have uncaught exception traceback"
 
 
-def test_unix_target_not_implemented():
-    """Unix target reports as not-yet-supported, with no traceback."""
-    code, stdout, stderr = _mpremote_cmd(["debug", "unix"])
-    assert code != 0, "should have exited with error"
-    assert "target 'unix' is not supported yet" in stderr, f"expected clear error; got: {stderr}"
-    assert "Traceback" not in stderr, "should not have uncaught exception traceback"
+def test_unix_target_without_a_binary_reports_a_build_hint():
+    """Unix target with no resolvable binary names the fix, not a traceback.
+
+    No mpdebug.toml in _SUBMODULE_DIR and MPY_DEBUG_FIRMWARE unset (the test
+    environment's own value, if any, is dropped) means binary resolution has
+    nothing to try.
+    """
+    env = dict(os.environ)
+    env.pop("MPY_DEBUG_FIRMWARE", None)
+    result = subprocess.run(
+        [sys.executable, "-m", "mpremote", "debug", "unix"],
+        cwd=str(_SUBMODULE_DIR),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=90,
+    )
+    assert result.returncode != 0, "should have exited with error"
+    assert "no unix debug binary found" in result.stderr, f"expected clear error; got: {result.stderr}"
+    assert "Traceback" not in result.stderr, "should not have uncaught exception traceback"
 
 
 def test_program_spec_validated_before_connect():

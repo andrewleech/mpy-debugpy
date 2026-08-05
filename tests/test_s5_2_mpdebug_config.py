@@ -31,9 +31,9 @@ import firmware  # noqa: E402
 import gen_manifest  # noqa: E402
 
 
-def _mpremote_cmd(args, cwd):
+def _mpremote_cmd(args, cwd, env=None):
     """Run mpremote with the given arguments and cwd; return (code, stdout, stderr)."""
-    env = dict(os.environ, PYTHONPATH=str(_SUBMODULE_DIR))
+    env = dict(env if env is not None else os.environ, PYTHONPATH=str(_SUBMODULE_DIR))
     result = subprocess.run(
         [sys.executable, "-m", "mpremote"] + args,
         cwd=str(cwd),
@@ -314,17 +314,22 @@ def test_cli_resolves_named_unix_target_as_not_supported_yet(tmp_path):
         kind = "unix"
         """,
     )
-    code, stdout, stderr = _mpremote_cmd(["debug", "sim"], cwd=tmp_path)
+    # The unix flow runs (s5.3), so resolution is proven by how far it gets:
+    # past kind dispatch and into binary resolution, which fails here because
+    # the environment names no built binary.
+    env = {k: v for k, v in os.environ.items() if k != "MPY_DEBUG_FIRMWARE"}
+    code, stdout, stderr = _mpremote_cmd(["debug", "sim"], cwd=tmp_path, env=env)
     assert code != 0
-    assert "target 'sim' has kind 'unix', which is not supported yet" in stderr
+    assert "no unix debug binary found" in stderr, stderr
     assert "Traceback" not in stderr
 
 
 def test_cli_unresolved_raw_connect_string_unaffected_by_absent_config(tmp_path):
     """Without an mpdebug.toml, a raw connect string behaves exactly as in s5.1."""
-    code, stdout, stderr = _mpremote_cmd(["debug", "unix"], cwd=tmp_path)
+    env = {k: v for k, v in os.environ.items() if k != "MPY_DEBUG_FIRMWARE"}
+    code, stdout, stderr = _mpremote_cmd(["debug", "unix"], cwd=tmp_path, env=env)
     assert code != 0
-    assert "target 'unix' is not supported yet" in stderr
+    assert "no unix debug binary found" in stderr, stderr
     assert "Traceback" not in stderr
 
 
