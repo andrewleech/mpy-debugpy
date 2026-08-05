@@ -19,6 +19,17 @@ if _launcher_dir not in sys.path:
 
 import capcheck
 
+# Add the mpremote package to sys.path to reuse its MPDBG-READY handshake
+# parser (STORY-5.4) rather than a second hand-rolled copy for tests. A plain
+# import (not importorskip): the harness cannot run without the composed
+# submodule anyway, so a missing/renamed parser should fail collection loudly
+# rather than silently skip every test that depends on this fixture.
+_mpremote_dir = str(_REPO_ROOT / "micropython" / "tools" / "mpremote")
+if _mpremote_dir not in sys.path:
+    sys.path.insert(0, _mpremote_dir)
+
+from mpremote import mpdebug_handshake
+
 random.seed()
 
 
@@ -252,29 +263,37 @@ def micropython_debuggee(
 def read_mpdbg_ready(process, timeout=5):
     """Drain `process.stdout` (already non-blocking, per `micropython_debuggee`)
     until the launcher's `MPDBG-READY <json>` handshake line shows up, and
-    return its decoded payload.
+    return the resolved endpoint (`mpdebug_handshake.read_handshake`).
 
     The line is emitted as soon as `debugpy.listen()` has bound its socket, so
     it is available without a client attached - that is what lets a caller read
     the endpoint and then connect to it. Starts from whatever the fixture
-    already drained at startup, since the line usually lands there.
+    already drained at startup, since the line usually lands there. The unix
+    debuggee has no network address of its own, so a reported `0.0.0.0`
+    resolves to `127.0.0.1` here rather than erroring (see the handshake
+    resolution matrix - a real device with no known address would not get
+    this pass).
     """
-    deadline = time.time() + timeout
-    stdout_data = getattr(process, "mpdbg_stdout", "")
-    while time.time() < deadline:
+
+    def read_chunk():
         try:
             chunk = process.stdout.read(4096)
-            if chunk:
-                stdout_data += chunk
         except (BlockingIOError, OSError):
-            pass
-        if "MPDBG-READY " in stdout_data:
-            break
-        time.sleep(0.05)
+            chunk = None
+        if not chunk:
+            time.sleep(0.05)
+            return ""
+        return chunk
 
-    ready_lines = [line for line in stdout_data.splitlines() if line.startswith("MPDBG-READY ")]
-    assert len(ready_lines) == 1, f"Expected exactly one MPDBG-READY line, got {len(ready_lines)}: {ready_lines!r}"
-    return json.loads(ready_lines[0][len("MPDBG-READY ") :])
+    try:
+        return mpdebug_handshake.read_handshake(
+            read_chunk,
+            timeout,
+            mpdebug_handshake.CONTROL_KIND_UNIX,
+            initial=getattr(process, "mpdbg_stdout", ""),
+        )
+    except mpdebug_handshake.HandshakeError as er:
+        pytest.fail(str(er))
 
 
 @pytest.fixture()

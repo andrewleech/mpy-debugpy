@@ -231,6 +231,9 @@ def test_endpoint_is_published_before_any_client_attaches(pytestconfig, free_tcp
 
     process = _spawn_launcher(Path(pytestconfig.rootpath), free_tcp_port)
     try:
+        # Hand-rolled rather than mpdebug_handshake.read_handshake: this
+        # asserts the launcher's raw emission, deliberately not routed
+        # through the resolving parser.
         line = _read_until(process, lambda ln: ln.startswith("MPDBG-READY "))
         assert line is not None, "no MPDBG-READY line before any client attached"
 

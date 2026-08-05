@@ -58,6 +58,11 @@ name = "mpremote_debug_targets"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_targets"
 title = "tools/mpremote: Add mpdebug.toml named-target resolution"
 
+[[submodules.branches]]
+name = "mpremote_debug_handshake"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_handshake"
+title = "tools/mpremote: Share one MPDBG-READY parser across control planes"
+
 [[submodules]]
 path = "micropython-lib"
 integration_branch = "mpy-debugpy"

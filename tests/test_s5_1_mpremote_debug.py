@@ -278,10 +278,19 @@ def test_debug_boot_script_runs_under_real_interpreter(free_tcp_port):
 
 
 class _FakeTransport:
-    """Minimal stand-in for SerialTransport's read_until/exec_raw_no_follow."""
+    """Minimal stand-in for SerialTransport's read_until/exec_raw_no_follow.
+
+    `read_until` mirrors the real primitive: the scripted bytes are one
+    continuous stream, and each call returns everything up to and including
+    the first occurrence of `ending` (or whatever remains, if `ending` never
+    shows up) - never the caller-supplied chunk boundaries verbatim. Real
+    framing glues bytes together regardless of how a test lists them (e.g.
+    the raw-REPL `\x04` marker always arrives stuck to the line after it),
+    so tests must not assume `ending` splits the stream where they wrote it.
+    """
 
     def __init__(self, lines, device_name="/dev/fake-tty"):
-        self._lines = list(lines)
+        self._buf = b"".join(lines)
         self.exec_calls = []
         # SerialTransport always sets this (transport_serial.py), and do_debug
         # reads it to decide whether the open transport already names the
@@ -292,9 +301,10 @@ class _FakeTransport:
         self.exec_calls.append(command)
 
     def read_until(self, min_num_bytes, ending, timeout=10, data_consumer=None, timeout_overall=None):
-        if self._lines:
-            return self._lines.pop(0)
-        return b""  # no more data: never matches `ending`, caller treats it as a timeout
+        idx = self._buf.find(ending)
+        end = len(self._buf) if idx == -1 else idx + len(ending)
+        chunk, self._buf = self._buf[:end], self._buf[end:]
+        return chunk  # b"" once the buffer is drained: caller treats it as a timeout
 
 
 def test_read_mpdbg_ready_times_out_naming_expected_line():
@@ -319,23 +329,32 @@ def test_read_mpdbg_ready_reports_last_line_on_early_exit():
     assert elapsed < 1, f"should not wait out the full timeout, took {elapsed:.2f}s"
 
 
-def test_read_mpdbg_ready_quotes_device_exception():
-    """The device's exception text reaches the error message.
+def test_read_mpdbg_ready_quotes_device_exception(monkeypatch):
+    """The device's exception text reaches the error message, not stdout.
 
-    The raw REPL frames output as <stdout> \\x04 <exception> \\x04>, so a script
-    that dies on a top-level import prints nothing to stdout and the traceback
-    - the only useful diagnostic - arrives after the first marker.
+    The raw REPL frames output as <stdout> \\x04 <exception> \\x04>, and
+    `read_until(1, b"\\n", ...)` returns through the first newline - so on
+    real hardware the marker always arrives glued to the traceback line that
+    follows it, e.g. `b"\\x04Traceback (most recent call last):\\r\\n"`, never
+    as a chunk of its own. That framing must not be echoed as ordinary
+    program output.
     """
+    printed = []
+    monkeypatch.setattr(commands, "stdout_write_bytes", printed.append)
     transport = _FakeTransport(
         [
-            b"\x04",  # end of (empty) stdout
+            b"\x04Traceback (most recent call last):\r\n",
             b'  File "<stdin>", line 47, in <module>\r\n',
             b"ImportError: no module named 'debugpy'\r\n",
             b"\x04>",
         ]
     )
-    with pytest.raises(commands.CommandError, match="no module named 'debugpy'"):
+    with pytest.raises(commands.CommandError, match="no module named 'debugpy'") as exc_info:
         commands._read_mpdbg_ready(transport, timeout=6)
+    assert not any(b"Traceback" in p for p in printed), (
+        f"exception text must not be echoed to stdout: {printed}"
+    )
+    assert "Traceback" in str(exc_info.value)
 
 
 def test_read_mpdbg_ready_rejects_malformed_json():
@@ -435,7 +454,10 @@ def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
     """
     monkeypatch.setattr(commands, "do_connect", lambda state, device=None: None)
 
-    handshake = {"host": "0.0.0.0", "port": 5678, "caps": {"can_set_local": True}}
+    # A real reported address (not the 0.0.0.0 wildcard): this test is about
+    # the print/did_action plumbing, not endpoint resolution - see
+    # test_do_debug_hard_errors_on_unreachable_device for that.
+    handshake = {"host": "192.0.2.10", "port": 5678, "caps": {"can_set_local": True}}
     transport = _FakeTransport(
         [
             b"MicroPython VS Code Debugging\n",
@@ -452,11 +474,29 @@ def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
     commands.do_debug(state, args)
 
     out = capsys.readouterr().out
-    assert "debug server listening on 0.0.0.0:5678" in out
+    assert "debug server listening on 192.0.2.10:5678" in out
     assert "capabilities:" in out
     assert "can_set_local" in out
     assert state.run_repl_on_completion() is False
     assert len(transport.exec_calls) == 1
+
+
+def test_do_debug_hard_errors_on_unreachable_device(monkeypatch):
+    """A serial device reporting the 0.0.0.0 wildcard with no known address
+    is a hard CommandError - mpremote has no route to it and must not guess."""
+    monkeypatch.setattr(commands, "do_connect", lambda state, device=None: None)
+
+    handshake = {"host": "0.0.0.0", "port": 5678, "caps": {}}
+    transport = _FakeTransport([("MPDBG-READY " + json.dumps(handshake) + "\n").encode()])
+    state = _FakeState(transport)
+    args = type(
+        "Args",
+        (),
+        {"target": "u0", "program": "mod:main", "port": None, "dap_log": False, "timeout": 60},
+    )()
+
+    with pytest.raises(commands.CommandError, match="no network address"):
+        commands.do_debug(state, args)
 
 
 def test_do_debug_missing_caps_key(monkeypatch):
@@ -483,9 +523,11 @@ def test_port_before_positionals_takes_effect(free_tcp_port):
     Runs the real `mpremote` CLI (not `do_debug` directly) against a pty so
     the REMAINDER-swallowing failure mode - flags placed after the
     positionals silently becoming the next command - would show up as
-    `--port` having no effect. Verifies it by checking that the device
-    actually bound to that port (listen() returns as soon as the socket is
-    bound, before any client connects).
+    `--port` having no effect. The unix build has no `network` module, so it
+    always reports the 0.0.0.0 wildcard and the command hard-errors rather
+    than printing an endpoint (see the handshake resolution matrix); the
+    port the device actually bound to still reaches that error message,
+    which is what proves `--port` took effect here.
     """
     master_fd, slave_fd = pty.openpty()
     slave_path = os.ttyname(slave_fd)
@@ -518,14 +560,16 @@ def test_port_before_positionals_takes_effect(free_tcp_port):
             proc.wait(timeout=2)
 
     # listen() returns as soon as the socket is bound, before any client
-    # connects, so the endpoint is readable without a client. This proves
-    # --port took effect and was honored by the device binding to the
-    # specified port.
-    assert f"debug server listening on 0.0.0.0:{free_tcp_port}" in stdout, (
-        f"--port was not honoured; got stdout: {stdout}"
+    # connects, so the handshake is readable without a client. The device
+    # binds the wildcard, and a pty peer is a local process, so the reported
+    # endpoint resolves to the loopback address a client can actually use.
+    assert code == 0, f"expected success; stdout: {stdout}; stderr: {stderr}"
+    assert f"127.0.0.1:{free_tcp_port}" in stdout, (
+        f"--port was not honoured, or the wildcard was not resolved; stdout: {stdout}"
     )
-    assert code == 0, f"command should succeed after reading the handshake; stderr: {stderr}"
-    assert "capabilities:" in stdout, f"handshake should be parsed and printed; stdout: {stdout}"
+    assert "0.0.0.0" not in stdout.split("debug server listening on")[-1], (
+        f"a wildcard must never be reported as the endpoint; stdout: {stdout}"
+    )
     assert elapsed < 5, f"handshake should arrive quickly, took {elapsed:.1f}s; stdout: {stdout}"
 
 
@@ -535,7 +579,9 @@ def test_debug_with_default_port_reads_handshake():
 
     The plain invocation from the acceptance criterion: no `--port` anywhere
     on the command line, so the endpoint reported is entirely the device's
-    choice (`debugpy.DEFAULT_PORT`), not something the host contributed.
+    choice (`debugpy.DEFAULT_PORT`), not something the host contributed. The
+    The device binds the wildcard and a pty peer is local, so the reported
+    endpoint resolves to loopback on that default port.
     """
     master_fd, slave_fd = pty.openpty()
     slave_path = os.ttyname(slave_fd)
@@ -563,12 +609,11 @@ def test_debug_with_default_port_reads_handshake():
             proc.kill()
             proc.wait(timeout=2)
 
-    assert code == 0, f"command should succeed after reading the handshake; stderr: {stderr}"
+    assert code == 0, f"expected success; stdout: {stdout}; stderr: {stderr}"
     # debugpy.DEFAULT_PORT (micropython-lib python-ecosys/debugpy/debugpy/common/constants.py).
-    assert "debug server listening on 0.0.0.0:5678" in stdout, (
-        f"expected the device's default port with no --port given; got stdout: {stdout}"
+    assert "127.0.0.1:5678" in stdout, (
+        f"expected the device's default port, resolved to loopback; stdout: {stdout}"
     )
-    assert "capabilities:" in stdout, f"handshake should be parsed and printed; stdout: {stdout}"
 
 
 @requires_settrace_firmware
@@ -622,19 +667,20 @@ def test_timeout_before_positionals_takes_effect(tmp_path, free_tcp_port):
 
 
 @requires_settrace_firmware
-def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_port, capsys):
-    """`do_debug` reads and prints the handshake before any client attaches.
+def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_port):
+    """`do_debug` reads the real handshake before any client attaches.
 
     A real `SerialTransport` is connected to the built unix firmware's
     stdin/stdout via a pty pair (the firmware holds the master side, exactly
     as QEMU or a USB-serial bridge would); `do_debug` execs the real boot
     script through it. No client exists until after `do_debug` has returned,
     so if it needed a client to reach the handshake this test would time out
-    inside `do_debug` rather than reach the assertions below. Connecting a
-    client afterwards and completing the DAP `initialize` handshake proves
-    the endpoint `do_debug` reported is the one the device actually bound.
-    `state.transport.device_name` already matches `args.target`, exercising
-    the connection-reuse path.
+    inside `do_debug` rather than reach the assertions below. The device binds
+    the wildcard, and a pty peer is a local process, so the endpoint resolves
+    to loopback; connecting a client to it afterwards proves the resolved
+    address is one a DAP client can really use, rather than a value that
+    merely parsed. `state.transport.device_name` already matches
+    `args.target`, exercising the connection-reuse path.
     """
     master_fd, slave_fd = pty.openpty()
     slave_path = os.ttyname(slave_fd)
@@ -673,17 +719,17 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
             },
         )()
 
-        commands.do_debug(state, args)
-
-        out = capsys.readouterr().out
-        assert f"debug server listening on 0.0.0.0:{free_tcp_port}" in out
-        assert "capabilities:" in out
+        handshake = commands.do_debug(state, args)
         assert state.run_repl_on_completion() is False
 
-        # No client attached yet: connecting now and completing `initialize`
-        # proves the reported endpoint is live and correct without relying
-        # on a client having raced the handshake read.
-        client = socket.create_connection(("127.0.0.1", free_tcp_port), timeout=5)
+        # Connect to exactly what do_debug reported, rather than to a hardcoded
+        # address: that is what makes this prove the resolved endpoint usable.
+        assert handshake["host"] == "127.0.0.1", handshake
+        assert handshake["port"] == free_tcp_port, handshake
+        assert handshake["raw_host"] == "0.0.0.0", (
+            f"expected the device to report a wildcard bind; got {handshake['raw_host']!r}"
+        )
+        client = socket.create_connection((handshake["host"], handshake["port"]), timeout=5)
         with client:
             body = json.dumps(
                 {"seq": 1, "type": "request", "command": "initialize", "arguments": {}}

@@ -532,7 +532,10 @@ def _args(target=None, program=None, port=None, dap_log=False, timeout=60):
 
 
 def _handshake_transport(caps, device_name):
-    handshake = {"host": "0.0.0.0", "port": 5678, "caps": caps}
+    # A real reported address, not the 0.0.0.0 wildcard: these tests are about
+    # target resolution/requires-checking, not endpoint resolution - see
+    # test_s5_1_mpremote_debug.py for the wildcard-handling coverage.
+    handshake = {"host": "192.0.2.10", "port": 5678, "caps": caps}
     return _FakeTransport([("MPDBG-READY " + json.dumps(handshake) + "\n").encode()], device_name=device_name)
 
 
@@ -641,8 +644,9 @@ def test_do_debug_malformed_caps_shape_is_command_error_not_traceback(tmp_path, 
         commands.do_debug(state, _args(target="pico", program="mod:main"))
 
 
-def test_do_debug_requires_rejects_non_boolean_truthy_cap(tmp_path, monkeypatch):
-    """A non-boolean truthy caps value (e.g. "unknown") doesn't satisfy `requires`."""
+def test_do_debug_rejects_non_boolean_cap_value(tmp_path, monkeypatch):
+    """A non-boolean caps value (e.g. "unknown") is a schema violation, not a
+    truthy pass: the handshake parser rejects it before `requires` ever sees it."""
     _write(
         tmp_path,
         """
@@ -657,7 +661,7 @@ def test_do_debug_requires_rejects_non_boolean_truthy_cap(tmp_path, monkeypatch)
     transport = _handshake_transport({"settrace": "unknown"}, "/dev/serial/by-id/usb-a")
     state = _FakeState(transport)
 
-    with pytest.raises(CommandError, match="requires settrace"):
+    with pytest.raises(CommandError, match="not a table of booleans"):
         commands.do_debug(state, _args(target="pico", program="mod:main"))
 
 
