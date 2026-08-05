@@ -20,6 +20,19 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-5.1 in review, blocked on Q8 (2026-08-05).** The `mpremote debug`
+  skeleton exists on `andrewleech/micropython` branch `mpremote_debug_command`
+  (registration, argument surface with validation before any device contact,
+  raw-REPL upload/exec of the boot script now shipped as an mpremote package
+  resource, private handshake reader) with host-side coverage in
+  `tests/test_s5_1_mpremote_debug.py`. Adversarial review found the story's
+  endpoint-printing criterion unreachable: `MPDBG-READY` is only emitted after
+  a DAP client attaches (Q8, `20260805_handshake-ordering-blocker.md`). Also
+  surfaced: mpremote's `nargs=REMAINDER` chaining silently swallows options
+  written after the positionals (upstream-wide trap, needs documenting plus
+  tests that a flag takes effect), and an early device exit stalls for the full
+  timeout while discarding the device's own error text. Not yet registered in
+  `mbm.toml`; nothing pushed.
 - **STORY-3.4 DONE (2026-08-05).** `docs/firmware.md` (variant/capability
   tables with an evidence column separating probe-confirmed from build
   intent, fetch/select usage, CI-parity build commands per port, capability
@@ -322,7 +335,22 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-All questions Q1–Q7 are closed; see DECIDED entries below.
+Q1–Q7 are closed; see DECIDED entries below. Q8 is open.
+
+**OPEN:**
+
+- **Q8 (raised 2026-08-05, `20260805_handshake-ordering-blocker.md`) — how do we
+  make the device endpoint learnable before attach?** `debugpy.listen()` binds,
+  accepts, and handles `initialize` in one call and only then returns, so the
+  launcher's `MPDBG-READY` line is emitted after a client has already attached.
+  The "endpoint truth comes from the device" design position is therefore not
+  implementable today, and s5.1's endpoint-printing acceptance criterion is
+  unreachable. Recommended resolution: split bind from accept in
+  `public_api.listen()` (endpoint returned after bind; `accept()`/`initialize`
+  move into `wait_for_client()`), which also matches CPython debugpy semantics.
+  Decide before s5.4/EPIC-6, since both depend on the endpoint being readable.
+  Sub-question: `--port 0` on ports lacking `getsockname()` currently
+  substitutes `DEFAULT_PORT` — hard-error or documented default?
 
 **DECIDED (2026-07-15):**
 
@@ -1075,6 +1103,7 @@ Notes:
 | Busy-poll pause loop starves WiFi/housekeeping while paused on device | measure during STORY-6.4 hardware-in-loop tests; document the impact and tune the poll interval if measurable |
 | Host-harness DAP event/response interleaving race: asynchronous `stopped` events land between a response and the test's next read, so tests that index `rcv_messages` positionally flake (measured ~1 in 2 full runs on 2026-08-04; mechanism in `20260715_roadmap-review.md`; not confined to the four ids the CI allowlist names — `test_epic1_breakpoint_stops_target` flaked on 2026-08-04) | deterministic fix scheduled with STORY-5.5: use the message object `wait_for_msg` returns, never `rcv_messages[-1]`; until then the CI unix gate retries up to 4 attempts on all-allowlisted failures, and a locally flaky failure gets one re-run before investigating |
 | `launcher/firmware.py` `KNOWN_CAPABILITIES` is a hand-maintained mirror of `debugpy.get_capabilities()` — a new/renamed probe key silently desynchronises selection and the capcheck guard | keep in lockstep by hand for now; add a host test asserting the two key sets match when STORY-5.3 wires the guard into the session flow (or at STORY-8.2) |
+| The host harness supplies the debug port itself, so no test ever required the endpoint to be *discoverable* from the device — a design position stayed decorative through a green suite (found 2026-08-05, Q8) | when Q8's fix lands, add coverage that reads the endpoint from `MPDBG-READY` before connecting; more generally, prefer tests that consume a value the way production will over tests that assert it merely parses |
 
 ---
 
