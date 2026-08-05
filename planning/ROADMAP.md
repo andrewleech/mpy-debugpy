@@ -62,7 +62,18 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   `s4.1-debugpy-install` @ `7b1160f`, still unregistered: its suite passes
   only against firmware from the composed tip, so the numbers must be
   re-taken after composition. Detail in the ticket.
-- **STORY-5.1 in review, blocked on Q8 (2026-08-05).** The `mpremote debug`
+- **STORY-5.1 DONE (2026-08-05, commit 86b4625).** `mpremote debug` is composed
+  (pin `60d32aa0a736`) and meets its criteria: against the unix firmware over a
+  pty with no client attached it prints the device-reported endpoint and
+  capability dict. Composition is what made that testable — parked on a side
+  branch the story pinned a submodule with no `sys.settrace`, so every
+  device-path test silently SKIPPED and the reported pass count was not
+  reproducible (19 passed / 5 skipped then; 24 passed / 0 skipped now, suite
+  150 passed / 1 xfailed). Same trap as s4.1, now recorded in both tickets.
+  Review also caught the boot script executing on import (it ships inside the
+  mpremote package) and a test renamed to claim it proved the Q8 ordering while
+  still starting a client first. Detail in the ticket.
+- **STORY-5.1 history (superseded by the line above).** The `mpremote debug`
   skeleton exists on `andrewleech/micropython` branch `mpremote_debug_command`
   (registration, argument surface with validation before any device contact,
   raw-REPL upload/exec of the boot script now shipped as an mpremote package
@@ -794,15 +805,17 @@ line; no IPs/ports are typed; the command is registered in `_COMMANDS` and follo
 mpremote house style; delivered as an mbm-registered branch.
 
 - **STORY-5.1 — `do_debug` command skeleton + argparse, registered in `_COMMANDS`**
+  - **DONE 2026-08-05** — see Status and `s5.1_do-debug-skeleton.md` Execution
+    progress.
   - type: implementation
   - description: Add `do_debug(state, args)` and `argparse_debug()` in `commands.py`,
     import into `main.py`, add to `_COMMANDS`. Follow the `do_run`/`do_mount` pattern
     (`ensure_raw_repl`, `did_action`). Args: target/transport selection, target
     module[:method], optional port, `--dap-log`. Reuse `state.transport` for connection.
   - acceptance criteria:
-    - [ ] `mpremote debug --help` lists the command with a real description.
-    - [ ] command connects via existing transport handling and reaches the boot script.
-    - [ ] follows house style (byte-literal comments, extend existing primitives,
+    - [x] `mpremote debug --help` lists the command with a real description.
+    - [x] command connects via existing transport handling and reaches the boot script.
+    - [x] follows house style (byte-literal comments, extend existing primitives,
       new-arg defaults preserve old behaviour, underscore-prefix single-caller helpers).
   - dependencies: STORY-1.4
   - component: mpremote · effort: M · risk: med · model: sonnet
@@ -1113,12 +1126,13 @@ parallel.
 5. **STORY-2.1**, **STORY-2.2** (both need 1.4) — parallel spikes. **Gate:** their yes/no
    decides EPIC-4 scope and EPIC-6 shape. **DONE (D2/D3).**
 6. **STORY-4.1** (needs 2.1 decision), **STORY-5.1** (needs 1.4) — parallel.
-   **STORY-4.1 DONE 2026-08-05.** STORY-5.1 is code-complete but blocked on
-   Q8 (the device endpoint is not learnable before attach), so **← the
-   frontier is Q8 plus step 7's STORY-5.2**; note STORY-4.2 is only reachable
-   if 2.1 had said NO, and it said yes (D2), so EPIC-4's unconditional part
-   is finished.
+   **DONE 2026-08-05** (both; Q8 was raised and closed to unblock 5.1).
+   STORY-4.2 was only reachable if 2.1 had said NO, and it said yes (D2), so
+   EPIC-4's unconditional part is finished.
 7. **STORY-4.2** (if 2.1=NO; needs 4.1), **STORY-5.2** (needs 5.1+3.3) — parallel.
+   STORY-4.2 is not reachable (2.1=YES, D2), so **← STORY-5.2 is the frontier
+   (2026-08-05)**: named target model in `mpdebug.toml` plus target resolution,
+   which replaces s5.1's placeholder handling of `target`.
 8. **STORY-4.3** (needs 4.2/4.1), **STORY-5.4** (needs 5.1+2.2) — parallel.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
 10. **STORY-5.5** (needs 5.3,5.4), **STORY-6.3** (needs 5.1) — parallel.
