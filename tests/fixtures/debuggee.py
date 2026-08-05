@@ -225,6 +225,11 @@ def micropython_debuggee(
 
     # ======================================
 
+    # Hand the startup output on rather than dropping it: the launcher emits
+    # MPDBG-READY as soon as the socket is bound, which falls inside the drain
+    # above, so a later read_mpdbg_ready() would find the pipe already empty.
+    process.mpdbg_stdout = stdout_data
+
     yield process
 
     # Terminate the process after the test if it's still running
@@ -249,13 +254,13 @@ def read_mpdbg_ready(process, timeout=5):
     until the launcher's `MPDBG-READY <json>` handshake line shows up, and
     return its decoded payload.
 
-    `debugpy.listen()` does not print this line until it has accepted a
-    connection and handled an `initialize` request, so a caller needs a
-    connected DAP client first - request `attach_server` (or an equivalent)
-    alongside `micropython_debuggee`, not `micropython_debuggee` alone.
+    The line is emitted as soon as `debugpy.listen()` has bound its socket, so
+    it is available without a client attached - that is what lets a caller read
+    the endpoint and then connect to it. Starts from whatever the fixture
+    already drained at startup, since the line usually lands there.
     """
     deadline = time.time() + timeout
-    stdout_data = ""
+    stdout_data = getattr(process, "mpdbg_stdout", "")
     while time.time() < deadline:
         try:
             chunk = process.stdout.read(4096)

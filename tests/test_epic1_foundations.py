@@ -15,6 +15,7 @@ regresses even when the surrounding code is refactored:
   reports no `set_local` support, while global-scope variables never do.
 """
 
+import os
 import time
 from pathlib import Path
 from typing import List
@@ -125,3 +126,126 @@ def test_epic1_readonly_locals_hint(attach_server, micropython_debuggee):
     for var in global_vars:
         attributes = var.get("presentationHint", {}).get("attributes", [])
         assert "readOnly" not in attributes, f"global '{var['name']}' unexpectedly readOnly: {var}"
+
+
+def _spawn_launcher(root_path, port):
+    """Start the launcher directly, without the debuggee fixture.
+
+    The fixture drains stdout and attaches a client during setup; these tests
+    need to observe the handshake before anything connects.
+    """
+    import os
+    import subprocess
+
+    micropython_path = Path(
+        os.environ.get(
+            "MPY_DEBUG_FIRMWARE",
+            root_path / "micropython/ports/unix/build-standard/micropython",
+        )
+    )
+    env = os.environ.copy()
+    env["MICROPYPATH"] = "{}:{}".format(
+        root_path / "src", root_path / "micropython-lib/python-ecosys/debugpy"
+    )
+    return subprocess.Popen(
+        [
+            str(micropython_path),
+            str(root_path / "launcher/mpy_launch_debugpy.py"),
+            "target",
+            "main",
+            str(port),
+        ],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+
+
+def _read_until(process, predicate, timeout=15):
+    """Return the first stdout line satisfying `predicate`, or None on timeout.
+
+    Reads non-blocking so a regression that never emits the awaited line fails
+    on the deadline instead of hanging the suite.
+    """
+    import fcntl
+
+    fcntl.fcntl(process.stdout, fcntl.F_SETFL, os.O_NONBLOCK)
+    deadline = time.time() + timeout
+    buffered = ""
+    while time.time() < deadline:
+        try:
+            chunk = process.stdout.read(4096)
+        except (BlockingIOError, OSError, TypeError):
+            chunk = None
+        if chunk:
+            buffered += chunk
+            for line in buffered.splitlines():
+                if predicate(line):
+                    return line
+        elif process.poll() is not None:
+            return None
+        time.sleep(0.05)
+    return None
+
+
+def _terminate(process):
+    import subprocess
+
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
+def test_endpoint_is_published_before_any_client_attaches(pytestconfig, free_tcp_port):
+    """Q8: the handshake is readable with nothing attached, so a client can use it.
+
+    Before the bind/accept split, `listen()` only returned - and the launcher
+    only printed MPDBG-READY - after a client had connected and sent
+    `initialize`, so this read would find nothing and the endpoint was
+    unknowable in advance. Reads the handshake first, then connects to the port
+    it advertises.
+
+    An explicit port is used because this target has no `getsockname()`; see
+    `test_port_zero_refuses_when_the_target_cannot_report_the_port`.
+    """
+    import json
+    import socket
+
+    process = _spawn_launcher(Path(pytestconfig.rootpath), free_tcp_port)
+    try:
+        line = _read_until(process, lambda ln: ln.startswith("MPDBG-READY "))
+        assert line is not None, "no MPDBG-READY line before any client attached"
+
+        payload = json.loads(line[len("MPDBG-READY ") :])
+        assert payload["port"] == free_tcp_port, payload
+        assert isinstance(payload["caps"], dict) and payload["caps"], payload
+
+        # The proof: connect to the advertised endpoint, having read it first.
+        with socket.create_connection(("localhost", payload["port"]), timeout=10):
+            pass
+    finally:
+        _terminate(process)
+
+
+def test_port_zero_refuses_when_the_target_cannot_report_the_port(pytestconfig):
+    """Q8 sub-decision: refuse rather than advertise an endpoint nothing serves.
+
+    `port=0` needs `getsockname()` to learn what the system assigned. The unix
+    port does not implement it, so the request fails loudly instead of
+    reporting DEFAULT_PORT, which would send a client to an address the socket
+    is not bound to.
+    """
+    process = _spawn_launcher(Path(pytestconfig.rootpath), 0)
+    try:
+        line = _read_until(process, lambda ln: "getsockname" in ln or ln.startswith("MPDBG-READY "))
+        assert line is not None, "expected either a clean refusal or a handshake"
+        assert not line.startswith("MPDBG-READY "), (
+            f"port=0 must not advertise an endpoint on a target that cannot report it: {line}"
+        )
+        assert "pass an explicit port" in line, line
+    finally:
+        _terminate(process)

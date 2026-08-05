@@ -83,17 +83,11 @@ def _run():
 
     host = _detect_host()
     actual_host, actual_port = debugpy.listen(host=host, port=port)
-    print(f"Debug server attached on {actual_host}:{actual_port}")
+    print(f"Debug server listening on {actual_host}:{actual_port}")
 
     caps = debugpy.get_capabilities()
     # Exactly one MPDBG-READY line, valid JSON, nothing else on this line.
     print("MPDBG-READY " + json.dumps({"host": actual_host, "port": actual_port, "caps": caps}))
-
-    try:
-        target = __import__(target_module, None, None, ("*",))
-    except ImportError as e:
-        print(f"Error importing target module '{target_module}': {e}")
-        return
 
     print("Waiting for the client to finish configuring (configurationDone)...")
     if not debugpy.wait_for_client():
@@ -105,6 +99,15 @@ def _run():
         return
 
     debugpy.debug_this_thread()
+
+    # Imported only once a client is configured: the module's top-level code
+    # runs on import, and it should run under the debugger with the client's
+    # breakpoints already in place, not before the session exists.
+    try:
+        target = __import__(target_module, None, None, ("*",))
+    except ImportError as e:
+        print(f"Error importing target module '{target_module}': {e}")
+        return
 
     method = getattr(target, target_method, None)
     if method is None:
