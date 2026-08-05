@@ -10,9 +10,10 @@ import http.server
 import io
 import os
 import sys
+import time
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
-from threading import Thread
+from threading import Event, Thread
 
 import pytest
 
@@ -51,6 +52,38 @@ def ephemeral_truncating_http_server(sent_content, declared_length):
     try:
         yield url
     finally:
+        server.shutdown()
+
+
+@contextmanager
+def ephemeral_stalling_http_server():
+    """Accept the connection, send nothing, never close.
+
+    Reproduces a half-open connection: without a socket timeout the client
+    blocks here forever.
+    """
+
+    # Stalls well past any timeout under test, but gives up as soon as the
+    # context manager exits so a client that already bailed doesn't make
+    # teardown wait out the full stall.
+    done = Event()
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            done.wait(timeout=30)
+
+        def log_message(self, format, *args):
+            pass
+
+    server = http.server.HTTPServer(("localhost", 0), _Handler)
+    addr, port = server.server_address
+    url = f"http://{addr}:{port}/firmware.bin"
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield url
+    finally:
+        done.set()
         server.shutdown()
 
 
@@ -111,6 +144,29 @@ def test_fetch_happy_path_downloads_and_verifies(temp_firmware, monkeypatch):
 
 
 # --- Corrupted payload detection -------------------------------------------------
+
+
+def test_fetch_gives_up_on_a_stalled_server(temp_firmware, monkeypatch):
+    """A server that accepts but never responds must time out, not hang.
+
+    Bounds the wait via the module's own timeout constant so the test is
+    quick; without a timeout on urlopen this blocks until the harness kills
+    it, with no output to explain why.
+    """
+    monkeypatch.setattr(firmware, "_DOWNLOAD_TIMEOUT_S", 2)
+
+    with ephemeral_stalling_http_server() as url:
+        variants = [_variant("unix-standard-debug", url=url, sha256="0" * 64, settrace=True)]
+        monkeypatch.setattr(firmware, "load_manifest", lambda *a, **k: variants)
+
+        started = time.monotonic()
+        rc, out, err = _run_fetch(["unix-standard-debug"])
+        elapsed = time.monotonic() - started
+
+    assert rc != 0, out
+    assert elapsed < 20, f"fetch should give up promptly, took {elapsed:.1f}s"
+    assert "Traceback" not in err, err
+    assert "unix-standard-debug" in (out + err)
 
 
 def test_fetch_detects_corrupted_download(temp_firmware, monkeypatch):

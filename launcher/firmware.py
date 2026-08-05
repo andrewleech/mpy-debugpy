@@ -42,6 +42,11 @@ MANIFEST_PATH = FIRMWARE_DIR / "firmware.toml"
 # instead of a working link. fetch() refuses to treat these as fetchable.
 PLACEHOLDER_URL_PREFIXES = ("TODO://",)
 
+# Per-socket-operation timeout for artifact downloads. Without one a half-open
+# connection stalls the fetch indefinitely, with no output and nothing to
+# interrupt in CI.
+_DOWNLOAD_TIMEOUT_S = 60
+
 # The exact capability vocabulary the runtime probe reports (STORY-1.2:
 # debugpy.get_capabilities(), echoed in the launcher's MPDBG-READY handshake).
 # `select --need` only accepts keys from this set - a manifest or CLI caller
@@ -187,7 +192,10 @@ def _download_and_verify(v: dict[str, Any], artifact_path: Path, url: str) -> No
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = artifact_path.with_name(artifact_path.name + ".part")
     try:
-        with urllib.request.urlopen(url) as resp, open(tmp_path, "wb") as out:
+        with (
+            urllib.request.urlopen(url, timeout=_DOWNLOAD_TIMEOUT_S) as resp,
+            open(tmp_path, "wb") as out,
+        ):
             out.write(resp.read())
 
         actual = sha256_of(tmp_path)
