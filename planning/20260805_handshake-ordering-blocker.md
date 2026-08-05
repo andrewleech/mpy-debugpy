@@ -64,6 +64,44 @@ Consequences to handle when implementing:
   explicit documented default; silently advertising `DEFAULT_PORT` is a
   wrong-endpoint bug once callers actually trust the handshake.
 
+## Resolution (2026-08-05, commit 5a9f546)
+
+Implemented as described. `listen()` returns after `bind()`; a private
+`_accept_and_initialize()` holds the accept and `initialize` handling, and
+`wait_for_client()` calls it, so that function now creates the session rather
+than requiring one. `port=0` raises when `getsockname()` cannot report the
+assigned port — confirmed necessary rather than theoretical: the unix port has
+no `getsockname()` at all, so the old code substituted `DEFAULT_PORT` there
+every time, meaning `--port 0` has always advertised an endpoint the socket
+was not bound to.
+
+Two consequences surfaced only by running it:
+
+- The launcher imported the target module between `listen()` and
+  `wait_for_client()`. With the split, a bad module returned and closed the
+  socket before any client could attach. The import moved after
+  `wait_for_client()`, which is better regardless: the module's top-level code
+  now runs under the debugger with the client's breakpoints already set.
+- The harness's `micropython_debuggee` fixture drains stdout at startup to
+  check the banner. `MPDBG-READY` now lands inside that window, so
+  `read_mpdbg_ready` found an empty pipe. The fixture hands its drained text
+  on. This is the same root cause as the note above — the harness only worked
+  because the line used to arrive after attach.
+
+Enforcing tests (both verified to fail against the old ordering, and to fail
+rather than hang — the first attempt blocked on `readline()` and would have
+stalled CI instead of reporting): the endpoint is readable with nothing
+attached and a client can then connect to it, and `port=0` refuses cleanly.
+
+Recomposition note: the `add-debugpy-support` -> `mpy-debugpy-foundations`
+merge conflicted in 4 files / 16 hunks, despite the same inputs having merged
+cleanly earlier the same day — rerere is enabled but had no recorded
+resolution for micropython-lib, so those resolutions were not reproducible.
+Resolved by taking the previous composed tip (`00d364e7fb`) for the
+conflicted files, which are untouched by this change, then proving the whole
+composition delta was byte-identical to the single foundations commit. rerere
+has now recorded the resolutions.
+
 ## Effect on STORY-5.1
 
 s5.1's acceptance criterion "prints the parsed endpoint + capability dict

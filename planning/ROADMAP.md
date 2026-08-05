@@ -20,6 +20,18 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **Q8 IMPLEMENTED (2026-08-05, commit 5a9f546).** `listen()` returns the
+  bound endpoint; accept and `initialize` moved into `wait_for_client()`
+  (micropython-lib `00d364e7fb` -> `12ddfbfc96c3`, on the foundations branch
+  so it survives recomposition). Two things only running it revealed: the
+  launcher imported the target between listen and wait, so a bad module closed
+  the socket before a client could attach (import moved after
+  `wait_for_client`, which also means top-level target code now runs with
+  breakpoints set); and the harness fixture's startup stdout drain swallowed
+  the now-earlier `MPDBG-READY` line — the same "harness only worked because
+  of the old ordering" root cause as the blocker itself. `--port 0` turned out
+  to have been silently broken on unix all along, which has no `getsockname()`
+  at all. Suite 126 passed / 1 xfailed. STORY-5.1 is unblocked.
 - **STORY-4.1 DONE (2026-08-05).** Both halves are composed: `#18436`
   verify_hash, then the installer itself (`760f6597db44`, commit `d14de9d`).
   The installer's 41 tests run against the composed tree — the first run that
