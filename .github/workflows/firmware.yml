@@ -49,6 +49,13 @@ jobs:
       git_hash: ${{ steps.version.outputs.git_hash }}
       micropython_repo: ${{ steps.version.outputs.repo_url }}
       source_date_epoch: ${{ steps.version.outputs.source_date_epoch }}
+      # Tag pinned to a digest: ports_esp32.yml floats `v5.3` as its "oldest
+      # supported" IDF, but a mutable tag would let the toolchain drift under
+      # this workflow with no diff in this repo to show it. Declared once here
+      # because the esp32 job both builds in this image and records it as
+      # provenance - a bump that updated only one of those would misreport
+      # which toolchain produced the artifact.
+      idf_image: "espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7"
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -510,10 +517,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     container:
-      # Tag pinned to a digest: ports_esp32.yml floats `v5.3` as its "oldest
-      # supported" IDF, but a mutable tag would let the toolchain drift under
-      # this workflow with no diff in this repo to show it.
-      image: espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7
+      image: ${{ needs.setup.outputs.idf_image }}
     # A `container:` job's default shell is `sh`, not `bash` - `set -o
     # pipefail` (as `Hash artifact` uses) is a dash/POSIX-sh syntax error.
     defaults:
@@ -552,7 +556,7 @@ jobs:
             echo "### esp32 toolchain"
             echo "- IDF_VER: ${idf_ver}"
             echo "- xtensa-esp32-elf-gcc: ${gcc_version}"
-            echo "- container image: espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7"
+            echo "- container image: ${{ needs.setup.outputs.idf_image }}"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           {
             echo "idf_ver=${idf_ver}"
@@ -611,7 +615,7 @@ jobs:
             --toolchain \
               "idf_ver=${{ steps.toolchain.outputs.idf_ver }}" \
               "gcc=${{ steps.toolchain.outputs.gcc }}" \
-              "container_image=espressif/idf:v5.3@sha256:89df2532b2f5df278a8cca6a06358f6e615628aabeb0f7e639e27646a23208d7" \
+              "container_image=${{ needs.setup.outputs.idf_image }}" \
               "ci_run_id=${{ github.run_id }}" \
               "ci_run_attempt=${{ github.run_attempt }}" \
             --output fragments/esp32-generic-debug.json
