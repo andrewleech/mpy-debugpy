@@ -20,6 +20,15 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-5.2 DONE (2026-08-05, commit 505ac27).** `mpremote debug <name>`
+  resolves kind/device/firmware/program from the nearest `mpdebug.toml` (pin
+  `38a903b8de20`, suite 197 passed / 1 xfailed). Review killed a shape-based
+  heuristic that decided whether the positional was a target name or a connect
+  string: it did not recognise a bare `COM4`, so on Windows every bare COM
+  invocation became "unknown target" once a config existed. Names now either
+  match a target or go to the transport, with the error naming configured
+  targets. The hand-mirrored capability vocabulary is now guarded by a test
+  pinning the live probe keys against `KNOWN_CAPABILITIES`.
 - **Q8 IMPLEMENTED (2026-08-05, commit 5a9f546).** `listen()` returns the
   bound endpoint; accept and `initialize` moved into `wait_for_client()`
   (micropython-lib `00d364e7fb` -> `12ddfbfc96c3`, on the foundations branch
@@ -821,6 +830,8 @@ mpremote house style; delivered as an mbm-registered branch.
   - component: mpremote · effort: M · risk: med · model: sonnet
 
 - **STORY-5.2 — Named target model (`mpdebug.toml`) + target resolution**
+  - **DONE 2026-08-05** — see Status and `s5.2_target-model.md` Execution
+    progress.
   - type: implementation
   - description: Project config with named targets (`kind = unix|serial|network`, connect
     string via `/dev/serial/by-id/...` for serial, firmware/capability requirement). The
@@ -1130,10 +1141,14 @@ parallel.
    STORY-4.2 was only reachable if 2.1 had said NO, and it said yes (D2), so
    EPIC-4's unconditional part is finished.
 7. **STORY-4.2** (if 2.1=NO; needs 4.1), **STORY-5.2** (needs 5.1+3.3) — parallel.
-   STORY-4.2 is not reachable (2.1=YES, D2), so **← STORY-5.2 is the frontier
-   (2026-08-05)**: named target model in `mpdebug.toml` plus target resolution,
-   which replaces s5.1's placeholder handling of `target`.
+   STORY-4.2 is not reachable (2.1=YES, D2) and **STORY-5.2 is DONE
+   (2026-08-05)**, so this step is closed.
 8. **STORY-4.3** (needs 4.2/4.1), **STORY-5.4** (needs 5.1+2.2) — parallel.
+   **← current frontier (2026-08-05).** STORY-4.3 depends on 4.2, which is
+   unreachable (2.1=YES), so read its dependency as 4.1 — check whether
+   attach-time staleness of user source still has scope once mount is the
+   delivery mechanism. STORY-5.4 (generalised handshake plumbing across
+   control planes) is the one Q8 was a prerequisite for.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
 10. **STORY-5.5** (needs 5.3,5.4), **STORY-6.3** (needs 5.1) — parallel.
 11. **STORY-6.1** (needs 2.2,5.4), **STORY-6.2** (needs 5.4,EPIC-4) — parallel.
