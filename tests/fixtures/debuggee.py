@@ -54,7 +54,13 @@ def free_tcp_port(request):
     max_port = 8000
     base_port = min_port + random.randint(0, max_port - min_port)
 
-    for port in range(base_port, max_port):
+    # Wrap around rather than scanning only upward from a random start: a
+    # start near max_port would otherwise try a handful of ports and give up
+    # while most of the range was free, which is how a full suite run failed
+    # with "could not find a free port" against a mostly-idle machine.
+    span = max_port - min_port
+    for offset in range(span):
+        port = min_port + (base_port - min_port + offset) % span
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
                 s.bind(("localhost", port))
@@ -62,7 +68,7 @@ def free_tcp_port(request):
             except OSError:
                 continue
 
-    pytest.fail("Could not find a free TCP port in the range 5678-5999")
+    pytest.fail(f"Could not find a free TCP port in the range {min_port}-{max_port}")
 
 
 @pytest.fixture()

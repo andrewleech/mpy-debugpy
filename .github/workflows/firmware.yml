@@ -197,19 +197,18 @@ jobs:
         env:
           MPY_DEBUG_FIRMWARE: ${{ github.workspace }}/micropython/ports/unix/build-standard/micropython
         run: |
-          # Known event-interleaving flakes (5s DAP-response timeout races);
+          # Empty since the DAP deadlock behind these failures was fixed
+          # (micropython-lib process_pending_messages re-entrancy). The retry
+          # machinery stays: it costs nothing while the list is empty, and an
+          # entry here should be evidence of a defect being hunted, not a way
+          # to keep a red gate green. The list previously grew to six ids
+          # covering what turned out to be one product bug.
           # any failure outside this set is real. A local measurement saw
           # this set trip on 2 of 4 runs, so retry up to 3 times (4 attempts
           # total) rather than once, and only while every failed id stays a
           # member - a co-occurring flake must not defeat the check the way
           # single-line string equality did.
           known_flakes=(
-            "tests/test_dbg_04_breakpoints.py::test_debug_breakpoints"
-            "tests/test_dbg_06_evaluate.py::test_evaluate_repl_shadowed_local_warns_and_leaves_local_unchanged"
-            "tests/test_dbg_06_evaluate.py::test_evaluate_repl_statement_mutates_running_global"
-            "tests/test_epic1_foundations.py::test_epic1_readonly_locals_hint"
-            "tests/test_dbg_06_evaluate.py::test_evaluate_default_context_rejects_statements"
-            "tests/test_s5_3_unix_flow.py::test_unix_debug_subprocess_reaped_on_no_output"
           )
           # Node ids are compared with the parametrisation suffix stripped
           # ("${id%%[*}"): parametrised ids embed machine-local absolute
