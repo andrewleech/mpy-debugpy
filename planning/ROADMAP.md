@@ -27,6 +27,17 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   offering to split the rest. Upstreaming authorisation is standing: the WIP
   PRs may be updated, and `~/ampremote` is a public staging ground for in-PR
   branches.
+- **Debug work collapsed to one branch (2026-08-06, commit 3e692f7).** It had
+  become five stacked branches, one per story, which is not what mbm composes:
+  each branch's diff against master carried its ancestors', so none was
+  independently reviewable or mergeable and an upstream move would have meant
+  five ordered rebases. Q1 had already decided one branch and two consumers;
+  the stack was drift, not a decision. `mpremote_debug` now holds the whole
+  command as six commits off master, `mpremote_debugpy_install` stays separate
+  because it genuinely is independent, and the recomposed tree is
+  byte-identical (pin `e1cfcc83f3c0` -> `51fec813ddcb`). **Rule for the rest of
+  this project: a branch registered in `mbm.toml` is a prospective PR and must
+  sit on upstream master, never on another feature branch.**
 - **STORY-8.1 attempted, blocked on ampremote's own branch conflicts
   (2026-08-06).** The `mbm.toml` ordering work is done and verified (rename
   restored to last, the six debug branches inserted before it), but
