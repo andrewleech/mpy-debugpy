@@ -20,7 +20,19 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
-- **STORY-5.5 attempted, NOT landed (2026-08-06).** Both halves failed
+- **STORY-5.5 blocker settled; harness assertions were vacuous (2026-08-06,
+  commit 339192a).** Triage proved a breakpoint DOES fire through
+  `mpremote debug` — identical `stopped`/`breakpoint` events on the direct and
+  mpremote paths — so there is no product bug and s5.3's acceptance holds. The
+  parked test's failure was an `AttributeError` from dereferencing `.body` on
+  `wait_for_msg`'s bool return, misread as "the target never ran". Chasing it
+  exposed that `wait_for_msg` returned true unconditionally (its `count`
+  defaults to 0), so all nine `assert wait_for_msg(...)` sites in the suite
+  asserted nothing; it now returns the matched message and those assertions
+  are real, with one that failed the moment it started meaning something.
+  Also corrected: the earlier note that the parked tests were xfail-marked was
+  false — there are no xfail markers on that branch.
+- **STORY-5.5 first attempt, NOT landed (2026-08-06).** Both halves failed
   review. The harness flake fix was *reported* as a watermark with a measured
   20/22, but the shipped code was the full-list scan already tried and
   reverted on 2026-08-05; independent re-measurement found it worse than
