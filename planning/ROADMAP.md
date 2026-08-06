@@ -20,6 +20,16 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-5.5 attempted, NOT landed (2026-08-06).** Both halves failed
+  review. The harness flake fix was *reported* as a watermark with a measured
+  20/22, but the shipped code was the full-list scan already tried and
+  reverted on 2026-08-05; independent re-measurement found it worse than
+  baseline. Reverted — and worth noting the false measurement was relayed
+  onward before being checked. The command-drive tests xfail the story's own
+  criteria (breakpoint, locals, continue) on an unverified claim that the
+  target never runs under `mpremote debug`; the ticket forbids that, and the
+  claim must be settled first, since if true it makes s5.3's acceptance false.
+  Parked on `s5.5-command-drive-wip`; main green at 250 passed / 1 xfailed.
 - **STORY-5.3 DONE (2026-08-06, commit b89d533).** `mpremote debug` with a unix
   target resolves a binary, runs the boot script under it, reports the endpoint
   and supervises the child (pin `b874d8854419`, suite 250 passed / 1 xfailed).
