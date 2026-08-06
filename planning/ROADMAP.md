@@ -20,7 +20,14 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
-- **Frontier blocked on inputs, not effort (2026-08-06).** EPIC-3, EPIC-4's
+- **STORY-8.2 DONE (2026-08-06).** PR micropython-lib#1022 fast-forwarded to
+  `3432190b8858` (32 commits), carrying EPIC-1's foundations, the Q8
+  bind/accept split, the message-pump deadlock fix and the parallel lineage's
+  enhancements, with a PR comment leading on the two correctness fixes and
+  offering to split the rest. Upstreaming authorisation is standing: the WIP
+  PRs may be updated, and `~/ampremote` is a public staging ground for in-PR
+  branches.
+- **Frontier partly unblocked (2026-08-06).** EPIC-3, EPIC-4's
   unconditional part, EPIC-5 and STORY-6.3 are done, and the harness flake
   that gated everything is fixed at the root. What remains at the front of
   the queue needs something this environment cannot supply:
