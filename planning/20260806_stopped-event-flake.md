@@ -1,4 +1,4 @@
-# The `stopped` event flake: what is known, and what to test next
+# The `stopped` event flake: RESOLVED (root cause below)
 
 Date: 2026-08-06
 Top-repo HEAD: 715a669
@@ -76,3 +76,36 @@ Do not change how `wait_for_msg` matches again. Three measurements have ruled
 it out, and each attempt has cost a round. Do not widen the CI allowlist
 further as a substitute for diagnosis — it is already covering ids it was not
 written for, which is what prompted escalating this.
+
+
+## Resolved (2026-08-06, commit 3414f0a)
+
+**It was a product deadlock, not a harness defect.** `process_pending_messages()`
+set a 1 ms socket timeout and restored blocking mode in its `finally`. The
+trace function calls it on entry to every new frame, so handling a message
+re-enters it, and the inner call's `finally` put the socket back into
+blocking mode underneath the outer pump. That pump's next `recv()` then
+waited for a message the client will not send until it has seen an event the
+pump itself is what produces — the two sides deadlock.
+
+The answer to the question this note was written around: the device logged
+NEITHER detect nor send, because it never reached the target at all. It
+parked in `wait_for_client()`, so settrace was never armed and no `stopped`
+event was ever constructed. Every earlier round worked the receiving side,
+which was innocent throughout.
+
+Fixed by tracking the nesting (MicroPython sockets have no `gettimeout()` to
+save and restore) and returning immediately from a re-entrant call — the
+outer loop is already draining.
+
+Measured: worst-affected file 4 clean in 6 -> 6 in 6; full suite 0 clean in 3
+-> 3 in 4.
+
+Two things worth keeping:
+
+- The same defect was degrading throughput even when it did not deadlock:
+  ~100 ms per traced statement, spent in blocking reads.
+- Instrumentation on this path is Heisenberg-sensitive. A diagnostic call per
+  pump iteration made every test in the file fail, because each extra frame
+  is itself traced and drives another nested pump. Any future probe must stay
+  off the traced path.
