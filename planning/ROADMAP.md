@@ -44,8 +44,15 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   `mbm rebase --local` hits a genuine 8-file conflict at
   `mpremote_debugpy_install` between ampremote's existing stack and the debug
   branches' base — `console.py`, `transport*.py` and several shell tests, most
-  of which the debug work does not touch. Resolving it means deciding which
-  side of the user's own in-flight branches is intended, so it stopped there.
+  of which the debug work does not touch. Three hypotheses were then tested:
+  the stack (no — collapsing to two branches reproduces it identically), base
+  skew (no — ampremote's master was 356 commits stale, and fetching to zero
+  skew changes nothing), and ampremote's stack being broken on current master
+  (no — the control with no debug entries integrates cleanly). So the
+  installer branch does introduce it, yet it touches only three files and none
+  of the five conflicted test/console paths, which a three-way merge cannot
+  do. That points at mbm's merge mechanics rather than a content clash, and
+  mbm is the user's tool.
   ampremote was restored completely (submodule `5b459e2d57cc`, branch unmoved,
   `mbm.toml` reverted, tree clean; pre-attempt tip tagged
   `ampremote-pre-debug-20260806` on the fork). Also recorded: Q1's "one
