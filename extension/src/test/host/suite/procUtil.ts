@@ -101,3 +101,42 @@ export async function withErrorMessageSpy<T>(fn: (errors: string[]) => Promise<T
     (vscode.window as { showErrorMessage: typeof vscode.window.showErrorMessage }).showErrorMessage = original;
   }
 }
+
+/** Same pattern as `withErrorMessageSpy`, for `showInformationMessage`. */
+export async function withInformationMessageSpy<T>(fn: (messages: string[]) => Promise<T>): Promise<T> {
+  const messages: string[] = [];
+  const original = vscode.window.showInformationMessage;
+  (vscode.window as { showInformationMessage: typeof vscode.window.showInformationMessage }).showInformationMessage =
+    ((message: string) => {
+      messages.push(message);
+      return Promise.resolve(undefined);
+    }) as unknown as typeof vscode.window.showInformationMessage;
+  try {
+    return await fn(messages);
+  } finally {
+    (
+      vscode.window as { showInformationMessage: typeof vscode.window.showInformationMessage }
+    ).showInformationMessage = original;
+  }
+}
+
+/**
+ * Replaces `vscode.window.showQuickPick` for the duration of `fn` with one
+ * that resolves the items it's shown (skipping VS Code's own picker UI
+ * entirely) to whichever item's `label` matches `pickLabel`, or `undefined`
+ * if none does - the same "user cancelled" result a real QuickPick gives.
+ */
+export async function withQuickPickStub<T>(pickLabel: string, fn: () => Promise<T>): Promise<T> {
+  const original = vscode.window.showQuickPick;
+  (vscode.window as { showQuickPick: typeof vscode.window.showQuickPick }).showQuickPick = (async (
+    itemsOrPromise: readonly vscode.QuickPickItem[] | Thenable<readonly vscode.QuickPickItem[]>
+  ) => {
+    const items = await itemsOrPromise;
+    return items.find((i) => i.label === pickLabel);
+  }) as unknown as typeof vscode.window.showQuickPick;
+  try {
+    return await fn();
+  } finally {
+    (vscode.window as { showQuickPick: typeof vscode.window.showQuickPick }).showQuickPick = original;
+  }
+}

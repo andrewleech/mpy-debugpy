@@ -20,6 +20,21 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-7.2 DONE (2026-08-07). EPIC-7 is complete.** A status-bar picker
+  over `mpdebug.toml`, selection persisted in `workspaceState`, capability text
+  taken only from the probe — unprobed before a handshake, a target's cached
+  probe dropped as a new session starts, and a probe shown under a different
+  selection labelled with the target it actually came from. The discovery walk
+  duplicates `mpdebug_config.find_config` in TypeScript because the command
+  exposes no target list; a cross-check test runs the real Python and the
+  TypeScript over the same fixture trees so the duplication cannot drift
+  silently. Two acceptance criteria were untested as first written and are now
+  mutation-confirmed: explicit `target` beating the picker, and persistence
+  reaching the memento. Known limitation, recorded not fixed: the picker
+  discovers from `workspaceFolders[0]` while the resolver spawns in
+  `config.cwd` — identical for single-root projects, divergent in a multi-root
+  one, and reconciling them needs a UI decision about which launch config
+  applies.
 - **STORY-7.4 DONE (2026-08-07).** A real Extension Development Host (VS Code
   1.132.0, `ms-python.debugpy` installed into it) drives this repo's own
   `.vscode/launch.json` and asserts a stop at `src/target.py:78` by
@@ -1165,6 +1180,8 @@ collapse to one; extension depends on ms-python.
   - component: extension · effort: L · risk: high · model: sonnet
 
 - **STORY-7.2 — Target picker + status bar**
+  - **DONE 2026-08-07** — see Status and `s7.2_target-picker.md` DONE section,
+    including the multi-root discovery limitation left open.
   - type: implementation
   - description: Status-bar picker over `mpdebug.toml` targets; capability from the probe
     surfaced (e.g. "locals: placeholders", "local edit: unsupported").
@@ -1357,8 +1374,9 @@ parallel.
     **← the frontier is step 15's STORY-7.4 and STORY-7.2**, both reachable
     without hardware.
 15. **STORY-7.2**, **STORY-7.3**, **STORY-7.4** (all need 7.1) — parallel.
-    **7.3 and 7.4 DONE 2026-08-07. ← the frontier is STORY-7.2**, the last
-    item reachable without hardware.
+    **All DONE 2026-08-07, so EPIC-7 is complete.** Every remaining story needs
+    a board on a bench: EPIC-6's transports and 6.4, STORY-4.3/4.4/4.5 behind
+    them, STORY-8.3 and STORY-8.4.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
 
 Notes:

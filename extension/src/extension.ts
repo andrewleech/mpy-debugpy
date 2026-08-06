@@ -16,6 +16,8 @@ import * as vscode from "vscode";
 import { buildAttachConfig, summarizeCapabilities } from "./config";
 import { ChildProcessLike, MpremoteDebugOptions, SpawnFn, runDebugCommand } from "./command";
 import { Handshake } from "./handshake";
+import { TargetPicker } from "./targetPicker";
+import { discoverTargets } from "./targets";
 
 const DEBUGPY_EXTENSION_ID = "ms-python.debugpy";
 
@@ -82,7 +84,10 @@ function matchesLaunch(session: vscode.DebugSession, launchId: string, port: num
 }
 
 class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvider {
-  constructor(private readonly channel: vscode.OutputChannel) {}
+  constructor(
+    private readonly channel: vscode.OutputChannel,
+    private readonly targetPicker: TargetPicker
+  ) {}
 
   provideDebugConfigurations(
     _folder: vscode.WorkspaceFolder | undefined
@@ -126,8 +131,12 @@ class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvi
     }
 
     const cwd = config.cwd ?? folder.uri.fsPath;
+    // An explicit `target` attribute always wins; the picker's persisted
+    // selection is only the fallback for a launch config that omits it.
+    const target = config.target ?? this.targetPicker.selectedTarget;
+    this.targetPicker.reportSessionStart(target);
     const options: MpremoteDebugOptions = {
-      target: config.target,
+      target,
       program: config.program,
       port: config.port,
       timeout: config.timeout,
@@ -185,6 +194,7 @@ class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvi
     for (const note of summarizeCapabilities(handshake.caps)) {
       this.channel.appendLine(note);
     }
+    this.targetPicker.reportHandshake(target, handshake.caps);
 
     // On unix the child imports the program from the cwd it was spawned in,
     // so local and remote are the same absolute directory. That identity
@@ -192,7 +202,16 @@ class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvi
     // filesystem doesn't mirror a host path) and there is no sync/mount
     // record yet (STORY-4.3) to generate the real one, so pathMappings is
     // left out there and debugpy's own defaults apply.
-    const isUnixFlow = config.target === "unix";
+    //
+    // `target` is a name, not a transport - a `[target.<name>]` in
+    // mpdebug.toml can call a "serial" target "unix", or vice versa - so
+    // its `kind` (when the name resolves to a configured target) decides
+    // this, mirroring `mpdebug_config.resolve_target`. A name that isn't a
+    // configured target falls back to the literal "unix" connect string,
+    // exactly as the command itself does.
+    const discovered = discoverTargets(cwd);
+    const resolvedKind = discovered.ok ? discovered.targets.find((t) => t.name === target)?.kind : undefined;
+    const isUnixFlow = resolvedKind !== undefined ? resolvedKind === "unix" : target === "unix";
     const attachConfig = buildAttachConfig({
       handshake,
       name: config.name,
@@ -241,12 +260,25 @@ class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvi
   }
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+/**
+ * `activate()`'s return value, VS Code's `Extension.exports` - read by the
+ * host test suite. `workspaceState` is exposed alongside `targetPicker` so
+ * tests can assert on the memento VS Code itself persists
+ * (`SELECTED_TARGET_STATE_KEY`) rather than only on the picker's own getter.
+ */
+export interface ExtensionApi {
+  targetPicker: TargetPicker;
+  workspaceState: vscode.Memento;
+}
+
+export function activate(context: vscode.ExtensionContext): ExtensionApi {
   const channel = vscode.window.createOutputChannel("MicroPython Debug");
-  const provider = new MicroPythonConfigurationProvider(channel);
+  const targetPicker = new TargetPicker(context, channel);
+  const provider = new MicroPythonConfigurationProvider(channel, targetPicker);
 
   context.subscriptions.push(
     channel,
+    targetPicker,
     vscode.debug.registerDebugConfigurationProvider("micropython", provider),
     vscode.debug.registerDebugConfigurationProvider(
       "micropython",
@@ -261,6 +293,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
   );
+
+  return { targetPicker, workspaceState: context.workspaceState };
 }
 
 export function deactivate(): void {

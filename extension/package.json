@@ -13,13 +13,21 @@
   ],
   "activationEvents": [
     "onDebugResolve:micropython",
-    "onDebugDynamicConfigurations:micropython"
+    "onDebugDynamicConfigurations:micropython",
+    "workspaceContains:mpdebug.toml"
   ],
   "main": "./out/extension.js",
   "extensionDependencies": [
     "ms-python.debugpy"
   ],
   "contributes": {
+    "commands": [
+      {
+        "command": "mpy-debugpy.selectTarget",
+        "title": "Select Debug Target",
+        "category": "MicroPython"
+      }
+    ],
     "debuggers": [
       {
         "type": "micropython",
@@ -112,6 +120,9 @@
     "test": "node --test 'out/test/*.test.js'",
     "pretest:host": "npm run compile",
     "test:host": "node ./out/test/host/runHostTests.js"
+  },
+  "dependencies": {
+    "smol-toml": "^1.7.1"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

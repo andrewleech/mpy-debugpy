@@ -19,6 +19,11 @@ __pycache__/
 # Local secrets (device WiFi credentials)
 src/_secrets.py
 
+# Per-developer mpremote debug targets (STORY-7.2); this repo's own default
+# path has none. A host test writes one transiently and removes it, so this
+# also guards against a leftover from a killed test run.
+/mpdebug.toml
+
 # Editor/OS
 .DS_Store
 
