@@ -22,6 +22,7 @@ the current phase/epic → its tickets under `tickets/`.
 | `20260715_phase0-canonical-branches-mbm.md` | progress record: phase-0 execution (STORY-8.6 canonical locals branch + STORY-8.5 mbm composition), the defects it surfaced, the divergence manifest, mbm operational rules |
 | `20260715_roadmap-review.md` | checkpoint review: landed results verified against tree/fork/GitHub, harness-flake mechanism, `add-debugpy-support` reset correction, Q7 opened, upcoming-ticket drift notes for phase-entry revalidation |
 | `20260805_handshake-ordering-blocker.md` | design note: `MPDBG-READY` is emitted only after a DAP client attaches, so the device endpoint is unlearnable before attach — opens Q8, blocks s5.1's endpoint criterion, fix shape = split bind from accept |
+| `20260806_stopped-event-flake.md` | investigation brief: the `stopped` event never arrives under load — what is ruled out (matching strategy, timeouts) with measurements, the emitted-vs-received question nobody has asked yet, and what not to retry |
 | `tickets/s<epic>.<story>_<slug>.md` | one self-contained execution brief per substantive work item, all phases, written upfront at peak knowledge |
 
 ## Conventions
