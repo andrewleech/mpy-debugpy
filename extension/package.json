@@ -109,11 +109,16 @@
     "compile": "tsc -p .",
     "watch": "tsc -p . --watch",
     "pretest": "npm run compile",
-    "test": "node --test 'out/test/**/*.test.js'"
+    "test": "node --test 'out/test/*.test.js'",
+    "pretest:host": "npm run compile",
+    "test:host": "node ./out/test/host/runHostTests.js"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "mocha": "^11.8.0",
     "typescript": "^5.4.0"
   }
 }

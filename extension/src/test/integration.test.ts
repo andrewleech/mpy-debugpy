@@ -11,11 +11,12 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 
 import { ChildProcessLike, SpawnFn, runDebugCommand } from "../command";
+import { readLaunchConfig } from "./launchConfig";
 
 const REPO = path.resolve(__dirname, "..", "..", "..");
 const MPREMOTE_DIR = path.join(REPO, "micropython", "tools", "mpremote");
@@ -78,14 +79,14 @@ test(
   ".vscode/launch.json's config reaches a handshake as written",
   { skip: available ? false : `no unix firmware at ${FIRMWARE}` },
   async () => {
-    const raw = readFileSync(path.join(REPO, ".vscode", "launch.json"), "utf8");
-    // JSONC: the file is commented, and only whole-line // comments are used.
-    const config = JSON.parse(
-      raw
-        .split("\n")
-        .filter((line) => !line.trimStart().startsWith("//"))
-        .join("\n")
-    ).configurations[0];
+    const config = readLaunchConfig(REPO) as {
+      mpremotePath: string;
+      mpremoteArgs: string[];
+      target: string;
+      program: string;
+      cwd: string;
+      env: Record<string, string>;
+    };
 
     const expand = (value: string) => value.split("${workspaceFolder}").join(REPO);
     const env = Object.fromEntries(

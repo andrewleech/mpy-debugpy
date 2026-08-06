@@ -21,3 +21,5 @@ src/_secrets.py
 
 # Editor/OS
 .DS_Store
+
+.vscode-test/

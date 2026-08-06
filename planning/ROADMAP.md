@@ -20,6 +20,23 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-7.4 DONE (2026-08-07).** A real Extension Development Host (VS Code
+  1.132.0, `ms-python.debugpy` installed into it) drives this repo's own
+  `.vscode/launch.json` and asserts a stop at `src/target.py:78` by
+  `stackTrace`, that the Dynamic-trigger provider is genuinely reached by VS
+  Code's picker, and that no mpremote child outlives its session. It settles
+  s7.1's two open questions: the `mpyDebugLaunchId` marker DOES survive
+  ms-python.debugpy's resolver, so the port fallback is insurance rather than
+  the working path, and the Dynamic registration does activate. **What it
+  cannot prove, and this is recorded rather than glossed:** that the
+  extension's own kill is what reaps the child. On unix the reap is
+  over-determined — the on-target server exits on any disconnect — so deleting
+  `terminateChild` leaves the suite green. The acceptance criterion holds; the
+  attribution does not, and needs STORY-6.4's hardware (the `--dap-log` proxy
+  path, where the command outlives the device session, is where that kill is
+  load-bearing). Two of the first version's tests passed with the behaviour
+  they tested deleted; both were caught by mutating the source and are now
+  assertions with teeth.
 - **STORY-7.1 DONE (2026-08-07), and STORY-7.3 with it.** `extension/`
   registers debug type `micropython`; the resolver spawns `mpremote debug`,
   reads the handshake and starts a debugpy attach with no host/port typed
@@ -1170,6 +1187,8 @@ collapse to one; extension depends on ms-python.
   - component: wrapper · effort: S · risk: low · model: sonnet
 
 - **STORY-7.4 — Extension smoke test**
+  - **DONE 2026-08-07** — see Status and `s7.4_extension-smoke-test.md` DONE
+    section, including what the suite deliberately does not claim.
   - type: test
   - description: Automated extension host test: resolver produces a valid attach config
     and starts a session against a unix target.
@@ -1338,6 +1357,8 @@ parallel.
     **← the frontier is step 15's STORY-7.4 and STORY-7.2**, both reachable
     without hardware.
 15. **STORY-7.2**, **STORY-7.3**, **STORY-7.4** (all need 7.1) — parallel.
+    **7.3 and 7.4 DONE 2026-08-07. ← the frontier is STORY-7.2**, the last
+    item reachable without hardware.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
 
 Notes:

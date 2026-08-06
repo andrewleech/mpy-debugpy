@@ -5,7 +5,8 @@ name: firmware
 # to a GitHub Release keyed on the micropython commit. Branch pushes only
 # exercise the four build jobs (and their unix acceptance-test gate); the
 # release job is gated to workflow_dispatch on main so branch iteration never
-# publishes.
+# publishes. `extension-host` (STORY-7.4) builds its own unix firmware and
+# runs the VS Code extension-host suite against it headless.
 
 on:
   workflow_dispatch:
@@ -14,6 +15,10 @@ on:
         description: "Allow overwriting an existing Release at this tag (re-dispatch at the same micropython pin)"
         type: boolean
         default: false
+  # No pull_request trigger anywhere in this workflow (a repo-wide choice
+  # predating STORY-7.4, not specific to the extension-host job): every job
+  # here, including extension-host, validates on push to main rather than
+  # gating a PR before merge.
   push:
     branches: [main]
     paths:
@@ -24,6 +29,7 @@ on:
       - ".github/scripts/**"
       - "launcher/**"
       - "tests/**"
+      - "extension/**"
 
 permissions:
   contents: read
@@ -277,6 +283,54 @@ jobs:
           path: fragments/unix-standard-debug.json
           if-no-files-found: error
           overwrite: true
+
+  extension-host:
+    name: extension host suite (STORY-7.4)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          submodules: true
+
+      # A separate build from the `unix` job's, not a shared artifact: the
+      # extension host also needs the `micropython`/`micropython-lib` source
+      # trees themselves (mpremote's submodule copy, the debugpy package),
+      # so a full submodule checkout is unavoidable here regardless.
+      - name: Build mpy-cross
+        run: make -C micropython/mpy-cross
+
+      - name: Build unix debug firmware
+        run: make firmware-unix
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+
+      - name: Install extension dependencies
+        working-directory: extension
+        run: npm ci
+
+      # Only the immutable download and the installed test extension, never
+      # `.vscode-test/user-data` - that's a live VS Code profile (persisted
+      # breakpoints, workspace storage), and restoring it across runs would
+      # carry one run's leftover state into the next. Keyed on
+      # runHostTests.ts, not package-lock.json: that's where VSCODE_VERSION
+      # is pinned, so bumping it busts the cache instead of silently reusing
+      # a stale build.
+      - name: Cache the VS Code test download
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            extension/.vscode-test/vscode-linux-x64-*
+            extension/.vscode-test/extensions
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('extension/src/test/host/runHostTests.ts') }}
+
+      - name: Run extension-host suite
+        working-directory: extension
+        run: xvfb-run -a npm run test:host
 
   rp2:
     name: rp2 (RPI_PICO_W)
