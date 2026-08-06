@@ -27,6 +27,18 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   offering to split the rest. Upstreaming authorisation is standing: the WIP
   PRs may be updated, and `~/ampremote` is a public staging ground for in-PR
   branches.
+- **STORY-8.1 attempted, blocked on ampremote's own branch conflicts
+  (2026-08-06).** The `mbm.toml` ordering work is done and verified (rename
+  restored to last, the six debug branches inserted before it), but
+  `mbm rebase --local` hits a genuine 8-file conflict at
+  `mpremote_debugpy_install` between ampremote's existing stack and the debug
+  branches' base — `console.py`, `transport*.py` and several shell tests, most
+  of which the debug work does not touch. Resolving it means deciding which
+  side of the user's own in-flight branches is intended, so it stopped there.
+  ampremote was restored completely (submodule `5b459e2d57cc`, branch unmoved,
+  `mbm.toml` reverted, tree clean; pre-attempt tip tagged
+  `ampremote-pre-debug-20260806` on the fork). Also recorded: Q1's "one
+  branch" is in practice one lineage of six stacked branches.
 - **Frontier partly unblocked (2026-08-06).** EPIC-3, EPIC-4's
   unconditional part, EPIC-5 and STORY-6.3 are done, and the harness flake
   that gated everything is fixed at the root. What remains at the front of
