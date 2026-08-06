@@ -20,6 +20,13 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-5.5 DONE (2026-08-06, commit d144e56).** `mpremote debug` is driven
+  end-to-end through the DAP harness - breakpoint, step, locals with the
+  readOnly hint, continue - against the endpoint the command reports, with the
+  adversarial cases asserting no orphan survives. Suite 256 passed / 1 skipped
+  / 1 xfailed; verified by mutation. **EPIC-5 is complete.** The
+  order-insensitive matching question is settled as "don't": three independent
+  measurements make it worse, because a stale match satisfies the wait early.
 - **STORY-5.5 blocker settled; harness assertions were vacuous (2026-08-06,
   commit 339192a).** Triage proved a breakpoint DOES fire through
   `mpremote debug` — identical `stopped`/`breakpoint` events on the direct and
@@ -916,6 +923,8 @@ mpremote house style; delivered as an mbm-registered branch.
   - component: mpremote · effort: M · risk: med · model: sonnet
 
 - **STORY-5.5 — Command tests (unix + QEMU)**
+  - **DONE 2026-08-06** — see Status and `s5.5_command-tests.md` Execution
+    progress (QEMU leg skips where the binary is absent).
   - type: test
   - description: Drive `do_debug` for unix and a QEMU PTY target through the `fake_vscode`
     client: attach, breakpoint, step, inspect, continue. Assert no hardcoded endpoints.
@@ -1205,6 +1214,9 @@ parallel.
    **← the frontier is step 10's STORY-5.5** (harness rework: the interleaving
    race, and the end-to-end breakpoint drive s5.3 could not prove).
 10. **STORY-5.5** (needs 5.3,5.4), **STORY-6.3** (needs 5.1) — parallel.
+    **STORY-5.5 DONE 2026-08-06, so EPIC-5 is complete.**
+    **← the frontier is STORY-6.3** (`--dap-log`), the only step-10 item left;
+    EPIC-6's transports (6.1/6.2) follow at step 11.
 11. **STORY-6.1** (needs 2.2,5.4), **STORY-6.2** (needs 5.4,EPIC-4) — parallel.
 12. **STORY-6.4** (needs 6.1,6.2).
 13. **STORY-8.1** (needs EPIC-5), **STORY-8.2** (needs EPIC-1) — parallel; can start once
@@ -1239,6 +1251,7 @@ Notes:
 | EPIC-4/5 assume mpremote primitives (verify_hash, QEMU PTY, reconnect, rfc2217) that exist only in ampremote's tree, not this repo's submodule | DECIDED as D6: register the needed ampremote branches into this repo's `mpy-debugpy` integration via mbm (folded into STORY-8.5 scope) until the PRs land upstream; tickets s4.1/s4.2/s4.4/s5.x carry the dependency explicitly |
 | Serial DAP framing on single-UART boards unproven | network transport stays mainline (D3); the framing prototype is a gated follow-up spike (Q3), not a dependency |
 | Busy-poll pause loop starves WiFi/housekeeping while paused on device | measure during STORY-6.4 hardware-in-loop tests; document the impact and tune the poll interval if measurable |
+| `assert wait_for_msg(...)` asserted nothing for the life of the suite - the helper returned `len(rcv_messages) >= count` with `count` defaulting to 0, i.e. true even on timeout, across nine call sites (found 2026-08-06) | fixed in `339192a`: it returns the matched message or None. Watch for the same shape elsewhere - a helper whose success value is computed from a default parameter rather than from what it found |
 | Host-harness DAP event/response interleaving race: asynchronous `stopped` events land between a response and the test's next read, so tests that index `rcv_messages` positionally flake (measured ~1 in 2 full runs on 2026-08-04; mechanism in `20260715_roadmap-review.md`; not confined to the four ids the CI allowlist names — `test_epic1_breakpoint_stops_target` flaked on 2026-08-04) | deterministic fix scheduled with STORY-5.5. **The fix previously recorded here — "have `wait_for_msg` return the matched message instead of `rcv_messages[-1]`" — was tried on 2026-08-05 and is WRONG; do not retry it as written.** Scanning the list for a match makes the wait return instantly on a *stale* match left by an earlier request in the same test, so it stops waiting for the response it was called for: measured 3 clean / 6 against 4 clean / 6 for the unchanged harness, and it reddened three tests that had never flaked. Reverted. A correct fix has to distinguish messages that arrive *after* the call from ones already in the list (an index or sequence watermark taken at entry, with `run_single` driven against that), which is a harness rework, not a call-site change. Until then the CI unix gate retries up to 4 attempts on all-allowlisted failures, and a locally flaky failure gets one re-run before investigating |
 | `launcher/firmware.py` `KNOWN_CAPABILITIES` is a hand-maintained mirror of `debugpy.get_capabilities()` — a new/renamed probe key silently desynchronises selection and the capcheck guard | keep in lockstep by hand for now; add a host test asserting the two key sets match when STORY-5.3 wires the guard into the session flow (or at STORY-8.2) |
 | The host harness supplies the debug port itself, so no test ever required the endpoint to be *discoverable* from the device — a design position stayed decorative through a green suite (found 2026-08-05, Q8) | when Q8's fix lands, add coverage that reads the endpoint from `MPDBG-READY` before connecting; more generally, prefer tests that consume a value the way production will over tests that assert it merely parses |
