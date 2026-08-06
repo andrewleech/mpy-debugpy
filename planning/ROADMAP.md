@@ -27,6 +27,18 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   offering to split the rest. Upstreaming authorisation is standing: the WIP
   PRs may be updated, and `~/ampremote` is a public staging ground for in-PR
   branches.
+- **Sequencing finding: STORY-7.1 is closer than the roadmap implies
+  (2026-08-06).** The extension is listed as needing STORY-4.3, which is
+  listed as needing 4.2 — unreachable, since 2.1 said yes. Read as 4.1, 4.3's
+  own ticket already records that D2 makes staleness structurally impossible
+  in mount mode, leaving it as "assert the mount is active, and generate
+  absolute pathMappings". But the debug flow mounts and syncs nothing today,
+  and the only working transport is unix, where local and device paths are
+  the same file and pathMappings is the identity. So 4.3's real content is
+  gated behind the device transports, i.e. behind hardware — while the part
+  7.1 actually needs (spawn the command, read the handshake, map source) is
+  satisfiable now for unix. Worth resequencing 7.1 ahead of 4.3 rather than
+  waiting on a bench, but that is a planning decision, not a revalidation.
 - **Debug work collapsed to one branch (2026-08-06, commit 3e692f7).** It had
   become five stacked branches, one per story, which is not what mbm composes:
   each branch's diff against master carried its ancestors', so none was
