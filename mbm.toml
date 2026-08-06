@@ -49,29 +49,9 @@ pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debugpy_insta
 title = "tools/mpremote: Add cached, cross-compiled debugpy package installer"
 
 [[submodules.branches]]
-name = "mpremote_debug_command"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_command"
-title = "tools/mpremote: Add debug command skeleton"
-
-[[submodules.branches]]
-name = "mpremote_debug_targets"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_targets"
-title = "tools/mpremote: Add mpdebug.toml named-target resolution"
-
-[[submodules.branches]]
-name = "mpremote_debug_handshake"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_handshake"
-title = "tools/mpremote: Share one MPDBG-READY parser across control planes"
-
-[[submodules.branches]]
-name = "mpremote_debug_unix"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_unix"
-title = "tools/mpremote: Implement the unix flow of debug"
-
-[[submodules.branches]]
-name = "mpremote_debug_daplog"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_daplog"
-title = "tools/mpremote: Add --dap-log via an interposed logging proxy"
+name = "mpremote_debug"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug"
+title = "tools/mpremote: Add the debug command (targets, handshake, unix flow, --dap-log)"
 
 [[submodules]]
 path = "micropython-lib"
