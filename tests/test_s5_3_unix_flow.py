@@ -487,7 +487,13 @@ def test_unix_flow_client_can_connect_to_reported_endpoint(free_tcp_port):
     server = PerfServer("test-client", host, port)
     try:
         server.start()
-        assert wait_for_msg(server, response="initialize", timeout=10), (
+        # Scan rather than require it to be the most recent: the server sends
+        # an `initialized` event straight after the response, so the response
+        # is no longer last by the time this runs.
+        wait_for_msg(server, response="initialize", timeout=10)
+        assert any(
+            m.type == "response" and m.command == "initialize" for m in server.rcv_messages
+        ), (
             "no initialize response received"
         )
         init_response = [

@@ -34,7 +34,19 @@ class PerfServer(ThreadedServer):
 
 
 def wait_for_msg(server, *, count=0, event="", response="", timeout=5):
-    """Wait for a specific message, or number of messages, to be received."""
+    """Wait for a specific message, or number of messages, to be received.
+
+    Returns the matching message for an `event`/`response` wait (None if it
+    never arrives), so callers can use what the wait matched rather than
+    re-reading `rcv_messages[-1]` and racing an event that landed after it.
+    Count mode still returns a bool.
+
+    Matching itself is unchanged: this still waits for the awaited message to
+    be the most recent one, so a test triggering the same event or response
+    twice must `clear_messages()` in between. Making the match order-insensitive
+    is the open harness question in the risk register - two attempts measured
+    no better than this, so it is not folded in here.
+    """
     t1 = time.time()
     server.run_single()
     while not server.rcv_messages and time.time() - t1 < timeout:
@@ -56,6 +68,16 @@ def wait_for_msg(server, *, count=0, event="", response="", timeout=5):
         ):
             time.sleep(0.1)
             server.run_single()
+    if event or response:
+        if not server.rcv_messages:
+            return None
+        last = server.rcv_messages[-1]
+        matched = (
+            last.type == "event" and last.event == event
+            if event
+            else last.type == "response" and last.command == response
+        )
+        return last if matched else None
     return len(server.rcv_messages) >= count
 
 

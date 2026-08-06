@@ -49,7 +49,6 @@ def test_debug_continue(attach_server, source_file: str, bp_lines: List, micropy
     responses = [msg for msg in server.rcv_messages if msg.type == "response" and msg.command == "continue"]  # type: ignore
     assert len(responses) == 1, f"Expected 1 continue response, got {len(responses)}"
 
-    assert bp_hit is True, "Expected breakpoint to be hit"
-    hit_msg = server.rcv_messages[-1]
-    assert hit_msg.type == "event" and hit_msg.event == "stopped", "Expected stopped event"
+    assert bp_hit is not None, "Expected breakpoint to be hit"
+    hit_msg = bp_hit
     assert hit_msg.body["reason"] == "breakpoint", f"Expected breakpoint hit, got {hit_msg.body['reason']}"  # type: ignore
