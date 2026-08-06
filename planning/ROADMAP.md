@@ -20,6 +20,22 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-7.1 DONE (2026-08-07), and STORY-7.3 with it.** `extension/`
+  registers debug type `micropython`; the resolver spawns `mpremote debug`,
+  reads the handshake and starts a debugpy attach with no host/port typed
+  anywhere. `.vscode/launch.json` is one config with no `promptString` inputs.
+  45 node tests run from `make test`, including an integration test that reads
+  the checked-in launch config and drives the real command with it — so the
+  wire contract between command and extension is tested, not assumed. What
+  remains unproven is VS Code's own variable substitution and
+  `startDebugging`, which is s7.4's job. pathMappings are emitted only for the
+  unix flow; a device target gets none rather than a fabricated identity map,
+  pending STORY-4.3. Two decisions: a malformed `MPDBG-READY`-prefixed line is
+  a diagnostic, not a fatal error (the unix flow echoes the debuggee's own
+  stdout, so the stream carries lines from a source that never agreed to the
+  contract), and `mpremoteArgs` lets `mpremotePath` be an interpreter, without
+  which the checked-in config could not run — no released mpremote has the
+  `debug` command.
 - **STORY-8.1 DONE (2026-08-06).** The debug branches are registered in
   ampremote's `mbm.toml` and composed: ampremote `35d1533b47`, top-repo
   `e359b24`, pushed. The 8-file conflict was base skew after all — mbm rebases
@@ -1141,6 +1157,10 @@ collapse to one; extension depends on ms-python.
   - component: extension · effort: M · risk: med · model: sonnet
 
 - **STORY-7.3 — Collapse launch.json/tasks.json**
+  - **DONE 2026-08-07** with STORY-7.1. `.vscode/launch.json` is one
+    `micropython` config; the `promptString` host/port inputs are gone, and
+    this repo never carried the `MP_DEBUG_VARIANT`/`problemMatcher` hacks (they
+    were the old wrapper's).
   - type: implementation
   - description: Reduce the nine attach configs to one, delete the `MP_DEBUG_VARIANT` env
     and the fake `problemMatcher`/`beginsPattern: "."` background-task hacks.
@@ -1314,8 +1334,9 @@ parallel.
 13. **STORY-8.1** (needs EPIC-5), **STORY-8.2** (needs EPIC-1) — parallel; can start once
     their epics are green. **BOTH DONE 2026-08-06.**
 14. **STORY-7.1** (needs EPIC-5; resequenced ahead of 4.3 on 2026-08-06).
-    **← the frontier**, and the last substantial step reachable without
-    hardware.
+    **DONE 2026-08-07**, carrying STORY-7.3 with it.
+    **← the frontier is step 15's STORY-7.4 and STORY-7.2**, both reachable
+    without hardware.
 15. **STORY-7.2**, **STORY-7.3**, **STORY-7.4** (all need 7.1) — parallel.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
 

@@ -1,0 +1,119 @@
+{
+  "name": "mpy-debugpy",
+  "displayName": "MicroPython Debug",
+  "description": "One-keypress MicroPython debugging: runs `mpremote debug` and attaches VS Code's Python debugger to the on-target debugpy server.",
+  "version": "0.1.0",
+  "publisher": "andrewleech",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onDebugResolve:micropython",
+    "onDebugDynamicConfigurations:micropython"
+  ],
+  "main": "./out/extension.js",
+  "extensionDependencies": [
+    "ms-python.debugpy"
+  ],
+  "contributes": {
+    "debuggers": [
+      {
+        "type": "micropython",
+        "label": "MicroPython",
+        "languages": [
+          "python"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "target": {
+                "type": "string",
+                "description": "Name from mpdebug.toml, 'unix', or an mpremote connect string; omitted to use the config's sole target."
+              },
+              "program": {
+                "type": "string",
+                "description": "module[:method] to run under the debugger; default is the target's own 'program', or 'target:main'."
+              },
+              "port": {
+                "type": "number",
+                "description": "TCP port for the on-target debug server; default is the device's own default."
+              },
+              "timeout": {
+                "type": "number",
+                "description": "Seconds to wait for the device to report its debug-server endpoint.",
+                "default": 60
+              },
+              "dapLog": {
+                "type": "boolean",
+                "description": "Log DAP traffic to a JSONL file via a local proxy.",
+                "default": false
+              },
+              "dapLogFile": {
+                "type": "string",
+                "description": "Path for --dap-log's JSONL output; requires dapLog."
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory to spawn `mpremote debug` in; also the local/remote pathMappings root for a unix target.",
+                "default": "${workspaceFolder}"
+              },
+              "mpremotePath": {
+                "type": "string",
+                "description": "Path to the mpremote executable; default resolves it from PATH."
+              },
+              "mpremoteArgs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Arguments before 'debug', so mpremotePath can be an interpreter - e.g. [\"-m\", \"mpremote\"] with mpremotePath \"python3\" to run a source checkout."
+              },
+              "env": {
+                "type": "object",
+                "description": "Extra environment variables for the spawned `mpremote debug` process (merged over the inherited environment).",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "micropython",
+            "request": "launch",
+            "name": "MicroPython: Debug",
+            "cwd": "${workspaceFolder}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "MicroPython: Debug",
+            "description": "Debug a MicroPython script: spawns `mpremote debug` and attaches VS Code's Python debugger.",
+            "body": {
+              "type": "micropython",
+              "request": "launch",
+              "name": "MicroPython: Debug",
+              "cwd": "^\"\\${workspaceFolder}\""
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "pretest": "npm run compile",
+    "test": "node --test 'out/test/**/*.test.js'"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -98,8 +98,14 @@ positional placeholders), `set_local` (local-variable editing), `f_back`.
 
 ### 4. Attach from VS Code
 
-Use the connection from the handshake line (host/port) with a Python
-`attach` configuration. A sample `.vscode/launch.json` is included.
+Install the [`extension/`](extension/) `MicroPython Debug` extension (and its
+dependency, `ms-python.debugpy`), then press F5 — `.vscode/launch.json`'s
+`micropython` config spawns `mpremote debug`, reads its handshake, and
+starts the attach session with no host/port typed anywhere.
+
+Without the extension, attach by hand: run `mpremote debug` yourself, take
+the host/port off its `MPDBG-READY` line, and paste them into a `debugpy`
+`attach` configuration.
 
 ## Status
 

@@ -1,26 +1,30 @@
 {
-    // Attach to a MicroPython debugpy session.
+    // F5: launches `mpremote debug unix` and attaches VS Code's Python
+    // debugger to the on-target debugpy server. No host/port to type - the
+    // MicroPython extension (extension/) reads them off the command's
+    // MPDBG-READY handshake line.
     //
-    // Start the target first (e.g. `make demo`, or run
-    // launcher/mpy_launch_debugpy.py on the device). Read the host/port from
-    // the target's MPDBG-READY handshake line and use them below. The debug
-    // support runs on the target; this just attaches VS Code's Python debugger
-    // to it.
+    // The `debug` command is not in a released mpremote, so this drives the
+    // submodule's copy through `python3 -m mpremote`. `env` supplies what
+    // `mpremote debug unix` needs and this repo has no mpdebug.toml for: the
+    // debug-enabled firmware (built by `make firmware-unix`) and where the
+    // debugpy module lives - the same two the Makefile's `demo` target sets.
     "version": "0.2.0",
-    "inputs": [
-        { "id": "host", "type": "promptString", "description": "Target host (from MPDBG-READY)", "default": "localhost" },
-        { "id": "port", "type": "promptString", "description": "Target port (from MPDBG-READY)", "default": "5678" }
-    ],
     "configurations": [
         {
-            "name": "MicroPython: Attach",
-            "type": "debugpy",
-            "request": "attach",
-            "connect": { "host": "${input:host}", "port": "${input:port}" },
-            "pathMappings": [
-                { "localRoot": "${workspaceFolder}/src", "remoteRoot": "." }
-            ],
-            "justMyCode": false
+            "type": "micropython",
+            "request": "launch",
+            "name": "MicroPython: Debug",
+            "target": "unix",
+            "program": "target:main",
+            "cwd": "${workspaceFolder}",
+            "mpremotePath": "python3",
+            "mpremoteArgs": ["-m", "mpremote"],
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/micropython/tools/mpremote",
+                "MPY_DEBUG_FIRMWARE": "${workspaceFolder}/micropython/ports/unix/build-standard/micropython",
+                "MICROPYPATH": "${workspaceFolder}/src:${workspaceFolder}/micropython-lib/python-ecosys/debugpy"
+            }
         }
     ]
 }
