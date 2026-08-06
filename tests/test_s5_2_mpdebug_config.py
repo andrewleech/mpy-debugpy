@@ -14,8 +14,10 @@ from pathlib import Path
 
 import pytest
 
+import mpremote_debug
+
 _TOP_DIR = Path(__file__).resolve().parents[1]
-_SUBMODULE_DIR = _TOP_DIR / "micropython" / "tools" / "mpremote"
+_SUBMODULE_DIR = mpremote_debug.SUBMODULE_DIR
 
 if str(_SUBMODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_SUBMODULE_DIR))

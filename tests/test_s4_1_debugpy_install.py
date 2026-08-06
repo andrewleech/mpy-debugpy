@@ -17,13 +17,15 @@ from pathlib import Path
 
 import pytest
 
+import mpremote_debug
+
 # Mirrors mpremote.transport.listdir_result's (name, st_mode) fields, which is
 # all _sweep_device_dir reads.
 _FakeDirEntry = namedtuple("_FakeDirEntry", ["name", "st_mode"])
 
 # Import the module under test from the micropython submodule.
 # Add the micropython tools path to sys.path to import debugpy_install.
-_MPREMOTE_PATH = Path(__file__).parent.parent / "micropython" / "tools" / "mpremote"
+_MPREMOTE_PATH = mpremote_debug.SUBMODULE_DIR
 if str(_MPREMOTE_PATH) not in sys.path:
     sys.path.insert(0, str(_MPREMOTE_PATH))
 

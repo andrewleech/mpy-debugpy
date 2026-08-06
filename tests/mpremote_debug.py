@@ -16,7 +16,16 @@ from pathlib import Path
 import pytest
 
 TOP_DIR = Path(__file__).resolve().parents[1]
-SUBMODULE_DIR = TOP_DIR / "micropython" / "tools" / "mpremote"
+
+# `MPY_DEBUG_MPREMOTE_DIR` points the suite at a different mpremote source
+# tree, so the same behavioural tests can validate a composition that carries
+# the debug branches alongside other work (the ampremote integration).
+SUBMODULE_DIR = Path(
+    os.environ.get(
+        "MPY_DEBUG_MPREMOTE_DIR",
+        TOP_DIR / "micropython" / "tools" / "mpremote",
+    )
+).resolve()
 
 if str(SUBMODULE_DIR) not in sys.path:
     sys.path.insert(0, str(SUBMODULE_DIR))
@@ -27,6 +36,24 @@ MICROPYTHON = Path(
         TOP_DIR / "micropython/ports/unix/build-standard/micropython",
     )
 )
+
+
+def _resume_prefix():
+    """`["resume"]`, or `[]` where this mpremote has no such command.
+
+    Serial targets need the connection left running across the `debug`
+    command. Resume is the default in micropython PR #17485, which deletes
+    the command outright, so a tree composed with it rejects the word.
+    """
+    main_py = SUBMODULE_DIR / "mpremote" / "main.py"
+    try:
+        has_resume = '"resume": (' in main_py.read_text()
+    except OSError:
+        has_resume = True
+    return ["resume"] if has_resume else []
+
+
+RESUME = _resume_prefix()
 
 
 def _firmware_has_settrace():

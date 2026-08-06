@@ -20,6 +20,19 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-8.1 DONE (2026-08-06).** The debug branches are registered in
+  ampremote's `mbm.toml` and composed: ampremote `35d1533b47`, top-repo
+  `e359b24`, pushed. The 8-file conflict was base skew after all — mbm rebases
+  onto `upstream/master`, and that remote-tracking ref in
+  `~/ampremote/micropython` was 356 commits stale; the earlier control checked
+  `origin/master`, a different ref in that submodule. Fetching reduced it to
+  four ordinary content conflicts in branches that had never been rebased onto
+  current master, the only real one being #18436 × #18785 in `fs_writefile`.
+  **New trap recorded: mbm's skip-on-resume also fires on rebase conflicts**,
+  reporting "All branches integrated" with three of ten missing from the tip;
+  always verify containment, never the summary. Verified behaviourally, not
+  just structurally — `MPY_DEBUG_MPREMOTE_DIR` points this repo's DAP suite at
+  any mpremote tree, and all 278 tests pass against the ampremote composition.
 - **STORY-8.2 DONE (2026-08-06).** PR micropython-lib#1022 fast-forwarded to
   `3432190b8858` (32 commits), carrying EPIC-1's foundations, the Q8
   bind/accept split, the message-pump deadlock fix and the parallel lineage's
@@ -27,6 +40,11 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   offering to split the rest. Upstreaming authorisation is standing: the WIP
   PRs may be updated, and `~/ampremote` is a public staging ground for in-PR
   branches.
+- **STORY-7.1 resequenced ahead of STORY-4.3; hardware work moves hosts
+  (2026-08-06, user decision).** EPIC-6's transports and STORY-6.4 wait for
+  the work to be moved to a host with boards attached, which the user will do
+  manually; everything reachable without hardware comes first. STORY-7.1 is
+  the frontier. Original finding follows.
 - **Sequencing finding: STORY-7.1 is closer than the roadmap implies
   (2026-08-06).** The extension is listed as needing STORY-4.3, which is
   listed as needing 4.2 — unreachable, since 2.1 said yes. Read as 4.1, 4.3's
@@ -1106,7 +1124,11 @@ collapse to one; extension depends on ms-python.
     - [ ] F5 on a target launches an attach session with no hand config.
     - [ ] generated pathMappings are absolute (multi-root safe).
     - [ ] fails clearly if ms-python is not installed.
-  - dependencies: EPIC-5 (command usable), STORY-4.3 (pathMappings)
+  - dependencies: EPIC-5 (command usable). **Resequenced ahead of STORY-4.3
+    (2026-08-06, user decision).** 4.3's remaining substance is device-transport
+    work and so is hardware-gated; on unix, local and device paths are the same
+    file and pathMappings is the identity, which is enough to build and test the
+    resolver. Revisit the absolute-pathMappings criterion when 4.3 lands.
   - component: extension · effort: L · risk: high · model: sonnet
 
 - **STORY-7.2 — Target picker + status bar**
@@ -1286,10 +1308,14 @@ parallel.
     **← the frontier is STORY-6.3** (`--dap-log`), the only step-10 item left;
     EPIC-6's transports (6.1/6.2) follow at step 11.
 11. **STORY-6.1** (needs 2.2,5.4), **STORY-6.2** (needs 5.4,EPIC-4) — parallel.
-12. **STORY-6.4** (needs 6.1,6.2).
+    Both need a board on a bench; deferred until the work moves to a host with
+    hardware attached.
+12. **STORY-6.4** (needs 6.1,6.2). Hardware.
 13. **STORY-8.1** (needs EPIC-5), **STORY-8.2** (needs EPIC-1) — parallel; can start once
-    their epics are green.
-14. **STORY-7.1** (needs EPIC-5,4.3).
+    their epics are green. **BOTH DONE 2026-08-06.**
+14. **STORY-7.1** (needs EPIC-5; resequenced ahead of 4.3 on 2026-08-06).
+    **← the frontier**, and the last substantial step reachable without
+    hardware.
 15. **STORY-7.2**, **STORY-7.3**, **STORY-7.4** (all need 7.1) — parallel.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
 

@@ -65,6 +65,7 @@ def _seen_response(server, command):
     return any(m.type == "response" and m.command == command for m in server.rcv_messages)
 from mpremote_debug import (
     MICROPYTHON as _MICROPYTHON,
+    RESUME as _RESUME,
     SUBMODULE_DIR as _SUBMODULE_DIR,
     TOP_DIR as _TOP_DIR,
     child_pids as _child_pids,
@@ -534,7 +535,7 @@ def test_s5_5_mpremote_debug_serial_pty_leg(free_tcp_port):
         time.sleep(0.3)  # let the interpreter start its REPL before talking to it
 
         proc = _spawn_debug(
-            ["resume", "debug", "--port", str(free_tcp_port), slave_path, "target:main"], env=env
+            _RESUME + ["debug", "--port", str(free_tcp_port), slave_path, "target:main"], env=env
         )
         lines, matched = _read_until(proc, "debug server listening on", timeout=15)
         if matched is None:
@@ -634,7 +635,7 @@ def test_s5_5_mpremote_debug_qemu_pty_leg(free_tcp_port):
 
         env = os.environ.copy()
         proc = _spawn_debug(
-            ["resume", "debug", "--port", str(free_tcp_port), slave_path, "target:main"], env=env
+            _RESUME + ["debug", "--port", str(free_tcp_port), slave_path, "target:main"], env=env
         )
         lines, matched = _read_until(proc, "debug server listening on", timeout=15)
         if matched is None:

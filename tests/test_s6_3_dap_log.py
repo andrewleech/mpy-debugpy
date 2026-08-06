@@ -33,6 +33,7 @@ from helpers import PerfServer, set_breakpoints, wait_for_msg
 # Import test utilities from mpremote_debug
 from mpremote_debug import (
     MICROPYTHON as _MICROPYTHON,
+    RESUME as _RESUME,
     SUBMODULE_DIR as _SUBMODULE_DIR,
     TOP_DIR as _TOP_DIR,
     child_pids as _child_pids,
@@ -883,8 +884,7 @@ def test_s6_3_dap_log_over_pty_network_transport(free_tcp_port, tmp_path):
     server = None
     try:
         time.sleep(0.3)  # let the interpreter start its REPL before talking to it
-        args = [
-            "resume",
+        args = _RESUME + [
             "debug",
             "--port",
             str(free_tcp_port),

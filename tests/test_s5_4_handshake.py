@@ -11,9 +11,11 @@ from pathlib import Path
 
 import pytest
 
+import mpremote_debug
+
 # Add the mpremote package to sys.path to import the handshake parser.
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_mpremote_dir = str(_REPO_ROOT / "micropython" / "tools" / "mpremote")
+_mpremote_dir = str(mpremote_debug.SUBMODULE_DIR)
 if _mpremote_dir not in sys.path:
     sys.path.insert(0, _mpremote_dir)
 
