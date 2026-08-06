@@ -1,7 +1,5 @@
-import time
-from concurrent.futures import thread
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import List
 
 import pytest
 from helpers import PerfServer, set_breakpoints, wait_for_msg

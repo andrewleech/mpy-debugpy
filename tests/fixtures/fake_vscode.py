@@ -6,11 +6,8 @@ tests_dir = os.path.dirname(os.path.dirname(__file__))
 if tests_dir not in sys.path:
     sys.path.insert(0, tests_dir)
 
-import time
-from typing import Dict, List
 
 import pytest
-from anyio import Path
 from helpers import PerfServer
 
 

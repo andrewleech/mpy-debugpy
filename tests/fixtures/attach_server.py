@@ -6,7 +6,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import time
 from pathlib import Path
-from typing import List
 
 import pytest
 from helpers import PerfServer

@@ -117,7 +117,7 @@ def test_enhanced_vars_with_dap():
         "next_reference_id": pdb_adapter.var_cache.next_ref,
         "cache_size_limit": pdb_adapter.var_cache.max_size
     }
-    print(f"Variable Reference Cache Stats:")
+    print("Variable Reference Cache Stats:")
     for key, value in cache_stats.items():
         print(f"  • {key}: {value}")
     

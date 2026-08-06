@@ -1,6 +1,5 @@
 """MicroPython-compatible tests for enhanced variable retrieval."""
 import sys
-import os
 
 # Simple test framework for MicroPython
 class SimpleTest:
@@ -30,7 +29,7 @@ class SimpleTest:
         else:
             self.tests_failed += 1
             print(f"❌ FAIL: {message}")
-            print(f"   Expected: True")
+            print("   Expected: True")
             print(f"   Actual: {condition}")
     
     def assert_greater_equal(self, actual, expected, message=""):
@@ -59,7 +58,7 @@ class SimpleTest:
     def summary(self):
         """Print test summary."""
         print("\n" + "="*50)
-        print(f"Test Summary:")
+        print("Test Summary:")
         print(f"  Total tests: {self.tests_run}")
         print(f"  Passed: {self.tests_passed}")
         print(f"  Failed: {self.tests_failed}")

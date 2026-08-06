@@ -16,7 +16,19 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 110
 target-version = "py310"
+extend-exclude = [
+    # Upstream trees, carrying upstream's own style and lint rules.
+    "micropython",
+    "micropython-lib",
+    # Vendored benchmark, kept byte-identical to the original.
+    "src/pystone.py",
+]
 
 [tool.ruff.lint.per-file-ignores]
-# The DAP client/tests intentionally use debug-adjacent patterns
-"tests/*" = ["T100", "T201"]
+# T100/T201: the DAP client/tests intentionally use debug-adjacent patterns.
+# E402: tests put the mpremote/launcher directories on sys.path before
+# importing from them, so their imports cannot all sit at the top of the file.
+"tests/*" = ["T100", "T201", "E402"]
+# Device-side sample debuggees: unused locals and the lambda are the point -
+# they exist so a debug session has something to inspect.
+"src/*" = ["F841", "E731"]

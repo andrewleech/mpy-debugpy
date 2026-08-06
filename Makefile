@@ -15,7 +15,7 @@ UNIX_VARIANT   := standard
 # ports, define MICROPY_PY_SYS_SETTRACE=1 and MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1.
 DEBUG_CFLAGS   :=
 
-.PHONY: bootstrap integrate firmware-unix mpy-cross test demo firmware-list firmware-verify clean
+.PHONY: bootstrap integrate firmware-unix mpy-cross test lint demo firmware-list firmware-verify clean
 
 # One-shot setup: check out the recorded integration commits and the libraries
 # the unix port needs. Checkout-only; rebuilding the integration branches from
@@ -56,6 +56,11 @@ firmware-unix: mpy-cross
 # than whatever `--with` would pull at run time.
 test:
 	uv run --extra test python -m pytest tests/ -q
+
+# Lint only, no formatting: several tests break at a fixed line in the sample
+# debuggees under src/, so reformatting them would move the breakpoints.
+lint:
+	uv run ruff check .
 
 # Run the sample target under the debug launcher (unix). Attach VS Code to the
 # host/port from the MPDBG-READY line.

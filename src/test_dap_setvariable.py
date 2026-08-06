@@ -13,7 +13,7 @@ def test_dap_setvariable():
     global global_test_var
     global_test_var = "global_value"
     
-    print(f"Initial values:")
+    print("Initial values:")
     print(f"  string_var: {string_var}")
     print(f"  number_var: {number_var}")
     print(f"  list_var: {list_var}")
@@ -27,7 +27,7 @@ def test_dap_setvariable():
     # 4. Setting global_test_var to "modified_global"
     breakpoint_line = True  # <-- Set breakpoint here
     
-    print(f"Final values:")
+    print("Final values:")
     print(f"  string_var: {string_var}")
     print(f"  number_var: {number_var}")
     print(f"  list_var: {list_var}")

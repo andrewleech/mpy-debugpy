@@ -17,7 +17,6 @@ import json
 import os
 import pty
 import re
-import signal
 import shutil
 import socket
 import subprocess
@@ -36,7 +35,6 @@ from mpremote_debug import (
     RESUME as _RESUME,
     SUBMODULE_DIR as _SUBMODULE_DIR,
     TOP_DIR as _TOP_DIR,
-    child_pids as _child_pids,
     end_session as _end_session,
     new_launcher_pids as _new_launcher_pids,
     pids_alive as _pids_alive,
@@ -703,7 +701,9 @@ def test_s6_3_dap_log_with_flag_behavioural_test_still_works(pytestconfig, free_
             payload = json.loads(matched[json_start:])
             host = payload["host"]
             port = payload["port"]
-            caps = payload["caps"]
+            # Read but unused: the KeyError guard below is what asserts the
+            # handshake carries caps at all.
+            _caps = payload["caps"]
         except (ValueError, KeyError, IndexError) as e:
             proc.kill()
             proc.wait(timeout=5)

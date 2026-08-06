@@ -4,7 +4,6 @@ This tests the implementation without going through the full DAP protocol.
 """
 
 import sys
-import os
 
 # Add the debugpy module to the path
 sys.path.insert(0, "./micropython-lib/python-ecosys/debugpy")
@@ -28,7 +27,7 @@ def test_set_variable():
         test_local = "original_local"
         test_local_num = 100
 
-        print(f"Before modification:")
+        print("Before modification:")
         print(f"  Global: test_global = {test_global}")
         print(f"  Global: test_global_num = {test_global_num}")
         print(f"  Local: test_local = {test_local}")
@@ -84,9 +83,9 @@ def test_set_variable():
 
             # Verify that frame._set_local method exists
             if hasattr(frame, "_set_local"):
-                print(f"\n✓ frame._set_local method is available")
+                print("\n✓ frame._set_local method is available")
             else:
-                print(f"\n✗ frame._set_local method is NOT available")
+                print("\n✗ frame._set_local method is NOT available")
 
             return True
 

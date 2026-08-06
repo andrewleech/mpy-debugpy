@@ -15,7 +15,7 @@ def test_local_variables():
     local_var2 = 42
     local_var3 = [1, 2, 3]
     
-    print(f"Before modification:")
+    print("Before modification:")
     print(f"  local_var1 = {local_var1}")
     print(f"  local_var2 = {local_var2}")
     print(f"  local_var3 = {local_var3}")
@@ -42,7 +42,7 @@ def test_local_variables():
         except Exception as e:
             print(f"Manual modification failed: {e}")
     
-    print(f"\nAfter manual modification:")
+    print("\nAfter manual modification:")
     print(f"  local_var1 = {local_var1}")
     print(f"  local_var2 = {local_var2}")
     print(f"  local_var3 = {local_var3}")
@@ -54,7 +54,7 @@ def test_nested_function():
     
     def inner_function():
         inner_var = "inner_value"
-        print(f"\n[NESTED] Inner function variables:")
+        print("\n[NESTED] Inner function variables:")
         print(f"  inner_var = {inner_var}")
         print(f"  outer_var = {outer_var}")
         print(f"  global_var = {global_var}")
@@ -65,7 +65,7 @@ def test_nested_function():
         return inner_var
     
     result = inner_function()
-    print(f"\nOuter function after inner call:")
+    print("\nOuter function after inner call:")
     print(f"  outer_var = {outer_var}")
     print(f"  result = {result}")
 

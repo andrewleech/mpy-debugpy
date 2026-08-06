@@ -1,5 +1,4 @@
 import sys
-from collections import OrderedDict as OD
 
 try:
     import neopixel
@@ -16,7 +15,7 @@ def tracer(frame, event, arg):
         try:
             filename = frame.f_code.co_filename
             co_name = frame.f_code.co_name
-        except:
+        except AttributeError:
             filename = "<unknown>"
             co_name = "<unknown>"
         print(f"[{event:<10}] ({filename} {co_name} {frame.f_lineno} , {frame.f_lasti} ) ")
