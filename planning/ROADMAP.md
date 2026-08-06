@@ -20,6 +20,25 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **Frontier blocked on inputs, not effort (2026-08-06).** EPIC-3, EPIC-4's
+  unconditional part, EPIC-5 and STORY-6.3 are done, and the harness flake
+  that gated everything is fixed at the root. What remains at the front of
+  the queue needs something this environment cannot supply:
+  - **STORY-6.1 / 6.2 (device transports) are hardware-gated.** Four of
+    s6.1's five acceptance criteria name real boards (rpi_pico_w for the
+    multi-CDC path, ESP32_GENERIC for the negative probe); only the
+    bridge's PTY-loopback unit tests are hardware-free. Building the host
+    half while its acceptance cannot be exercised is the pattern that
+    produced s4.1's and s5.3's unverifiable claims, so it should wait for a
+    bench rather than ship half-proven. STORY-6.4 was already deferred here.
+  - **STORY-8.1 / 8.2 (upstreaming) need authorisation, not analysis.** 8.2's
+    acceptance is "PR(s) opened" against micropython-lib — publishing to a
+    third-party upstream — and 8.1 edits `~/ampremote`, a different
+    repository. Both are outward-facing in a way the standing "proceed
+    according to roadmap" instruction does not obviously cover.
+  So the next move is a decision (bench time, or approval to open upstream
+  PRs), not more autonomous execution.
+
 - **STORY-5.5 DONE (2026-08-06, commit d144e56).** `mpremote debug` is driven
   end-to-end through the DAP harness - breakpoint, step, locals with the
   readOnly hint, continue - against the endpoint the command reports, with the
