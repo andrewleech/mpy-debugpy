@@ -196,14 +196,6 @@ def test_program_spec_validated_before_connect():
     )
 
 
-def test_dap_log_rejected_before_connect():
-    """--dap-log is rejected with a clear error before any connection attempt."""
-    code, stdout, stderr = _mpremote_cmd(["debug", "--dap-log", "/dev/does-not-exist"])
-    assert code != 0, "should have exited with error"
-    assert "--dap-log is not implemented yet" in stderr, f"expected clear error; got: {stderr}"
-    assert "Traceback" not in stderr, "should not have uncaught exception traceback"
-
-
 def test_port_zero_rejected_before_connect():
     """--port 0 is rejected locally, before any connection attempt.
 
@@ -215,6 +207,16 @@ def test_port_zero_rejected_before_connect():
     code, stdout, stderr = _mpremote_cmd(["debug", "--port", "0", "/dev/does-not-exist", "mod:main"])
     assert code != 0, "should have exited with error"
     assert "--port 0" in stderr, f"expected clear error; got: {stderr}"
+    assert "Traceback" not in stderr, "should not have uncaught exception traceback"
+
+
+def test_dap_log_file_requires_dap_log_rejected_before_connect():
+    """--dap-log-file without --dap-log is rejected locally, before any connection attempt."""
+    code, stdout, stderr = _mpremote_cmd(
+        ["debug", "--dap-log-file", "/tmp/x", "/dev/does-not-exist", "mod:main"]
+    )
+    assert code != 0, "should have exited with error"
+    assert "--dap-log-file requires --dap-log" in stderr, f"expected clear error; got: {stderr}"
     assert "Traceback" not in stderr, "should not have uncaught exception traceback"
 
 
@@ -482,7 +484,14 @@ def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
     args = type(
         "Args",
         (),
-        {"target": "u0", "program": "mod:main", "port": None, "dap_log": False, "timeout": 60},
+        {
+            "target": "u0",
+            "program": "mod:main",
+            "port": None,
+            "dap_log": False,
+            "dap_log_file": None,
+            "timeout": 60,
+        },
     )()
 
     commands.do_debug(state, args)
@@ -506,7 +515,14 @@ def test_do_debug_hard_errors_on_unreachable_device(monkeypatch):
     args = type(
         "Args",
         (),
-        {"target": "u0", "program": "mod:main", "port": None, "dap_log": False, "timeout": 60},
+        {
+            "target": "u0",
+            "program": "mod:main",
+            "port": None,
+            "dap_log": False,
+            "dap_log_file": None,
+            "timeout": 60,
+        },
     )()
 
     with pytest.raises(commands.CommandError, match="no network address"):
@@ -523,7 +539,14 @@ def test_do_debug_missing_caps_key(monkeypatch):
     args = type(
         "Args",
         (),
-        {"target": "u0", "program": "mod:main", "port": None, "dap_log": False, "timeout": 60},
+        {
+            "target": "u0",
+            "program": "mod:main",
+            "port": None,
+            "dap_log": False,
+            "dap_log_file": None,
+            "timeout": 60,
+        },
     )()
 
     with pytest.raises(commands.CommandError, match="missing key"):
@@ -729,6 +752,7 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
                 "program": "mod:main",
                 "port": free_tcp_port,
                 "dap_log": False,
+                "dap_log_file": None,
                 "timeout": 15,
             },
         )()

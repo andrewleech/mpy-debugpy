@@ -68,6 +68,11 @@ name = "mpremote_debug_unix"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_unix"
 title = "tools/mpremote: Implement the unix flow of debug"
 
+[[submodules.branches]]
+name = "mpremote_debug_daplog"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_daplog"
+title = "tools/mpremote: Add --dap-log via an interposed logging proxy"
+
 [[submodules]]
 path = "micropython-lib"
 integration_branch = "mpy-debugpy"

@@ -208,6 +208,8 @@ jobs:
             "tests/test_dbg_06_evaluate.py::test_evaluate_repl_shadowed_local_warns_and_leaves_local_unchanged"
             "tests/test_dbg_06_evaluate.py::test_evaluate_repl_statement_mutates_running_global"
             "tests/test_epic1_foundations.py::test_epic1_readonly_locals_hint"
+            "tests/test_dbg_06_evaluate.py::test_evaluate_default_context_rejects_statements"
+            "tests/test_s5_3_unix_flow.py::test_unix_debug_subprocess_reaped_on_no_output"
           )
           # Node ids are compared with the parametrisation suffix stripped
           # ("${id%%[*}"): parametrised ids embed machine-local absolute

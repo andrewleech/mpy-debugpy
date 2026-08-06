@@ -532,7 +532,14 @@ def _args(target=None, program=None, port=None, dap_log=False, timeout=60):
     return type(
         "Args",
         (),
-        {"target": target, "program": program, "port": port, "dap_log": dap_log, "timeout": timeout},
+        {
+            "target": target,
+            "program": program,
+            "port": port,
+            "dap_log": dap_log,
+            "dap_log_file": None,
+            "timeout": timeout,
+        },
     )()
 
 
