@@ -403,6 +403,61 @@ def test_non_string_firmware_errors(tmp_path):
         mpdebug_config.resolve_target("pico", start_dir=tmp_path)
 
 
+def test_resolves_dap_device(tmp_path):
+    _write(
+        tmp_path,
+        """
+        [target.pico]
+        kind = "serial"
+        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
+        dap_device = "/dev/serial/by-id/usb-MicroPython_Board-if02"
+        """,
+    )
+    target = mpdebug_config.resolve_target("pico", start_dir=tmp_path)
+    assert target.dap_device == "/dev/serial/by-id/usb-MicroPython_Board-if02"
+
+
+def test_dap_device_defaults_to_none(tmp_path):
+    _write(
+        tmp_path,
+        """
+        [target.pico]
+        kind = "serial"
+        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
+        """,
+    )
+    target = mpdebug_config.resolve_target("pico", start_dir=tmp_path)
+    assert target.dap_device is None
+
+
+def test_empty_dap_device_errors(tmp_path):
+    _write(
+        tmp_path,
+        """
+        [target.pico]
+        kind = "serial"
+        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
+        dap_device = ""
+        """,
+    )
+    with pytest.raises(CommandError, match="empty 'dap_device'"):
+        mpdebug_config.resolve_target("pico", start_dir=tmp_path)
+
+
+def test_non_string_dap_device_errors(tmp_path):
+    _write(
+        tmp_path,
+        """
+        [target.pico]
+        kind = "serial"
+        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
+        dap_device = 1234
+        """,
+    )
+    with pytest.raises(CommandError, match="dap_device must be a string"):
+        mpdebug_config.resolve_target("pico", start_dir=tmp_path)
+
+
 def test_known_capabilities_matches_wrapper_repo_copies():
     """mpremote's capability tuple must not drift from the wrapper repo's hand-copies.
 

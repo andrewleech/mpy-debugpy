@@ -47,10 +47,14 @@ def test_epic1_mpdbg_ready_handshake(attach_server, micropython_debuggee):
     assert "host" in payload and "port" in payload and "caps" in payload
 
     caps = payload["caps"]
-    assert set(caps) == set(firmware.KNOWN_CAPABILITIES), (
-        f"caps keys {set(caps)} != {set(firmware.KNOWN_CAPABILITIES)}"
+    # `serial_dap` is probed and reported like any other capability but is
+    # deliberately excluded from `KNOWN_CAPABILITIES` (see mpdebug_config.py):
+    # it names a specific dap_device wiring, not a generic interpreter
+    # feature a target's `requires`/`--need` can ask for.
+    assert set(caps) - {"serial_dap"} == set(firmware.KNOWN_CAPABILITIES), (
+        f"caps keys {set(caps)} != {set(firmware.KNOWN_CAPABILITIES)} + {{'serial_dap'}}"
     )
-    for key in firmware.KNOWN_CAPABILITIES:
+    for key in (*firmware.KNOWN_CAPABILITIES, "serial_dap"):
         assert isinstance(caps[key], bool), f"caps['{key}'] should be a bool, got {caps[key]!r}"
 
 
