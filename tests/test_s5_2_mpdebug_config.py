@@ -605,6 +605,7 @@ def _args(target=None, program=None, port=None, dap_log=False, timeout=60, sourc
             "dap_log_file": None,
             "timeout": timeout,
             "source": source,
+            "loop": False,
         },
     )()
 

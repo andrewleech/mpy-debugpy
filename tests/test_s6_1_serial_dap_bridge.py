@@ -497,7 +497,7 @@ class TestDoDebugSerialDapBridge:
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
 
-        def _boot_script(module, method, port, dap_stream=None, mount_point=None):
+        def _boot_script(module, method, port, dap_stream=None, mount_point=None, loop=False):
             # A dap_device target must ask the device for its own DAP channel;
             # a device told to bind a port instead would report a TCP endpoint
             # the bridge below has no way to use.
@@ -527,6 +527,7 @@ class TestDoDebugSerialDapBridge:
                 "dap_log_file": None,
                 "timeout": 15,
                 "source": None,
+                "loop": False,
             },
         )()
 
@@ -725,7 +726,7 @@ class TestDoDebugSerialDapBridgeRealSession:
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
 
-        def _boot_script(mod, meth, port, dap_stream=None, mount_point=None):
+        def _boot_script(mod, meth, port, dap_stream=None, mount_point=None, loop=False):
             assert dap_stream == "board", dap_stream
             assert mount_point is None, "this session mounts nothing"
             return _stream_session_boot_script(device_master_fd, module, method)
@@ -763,6 +764,7 @@ class TestDoDebugSerialDapBridgeRealSession:
                 "dap_log_file": None,
                 "timeout": 15,
                 "source": None,
+                "loop": False,
             },
         )()
 

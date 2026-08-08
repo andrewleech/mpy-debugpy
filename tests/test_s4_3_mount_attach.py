@@ -61,7 +61,13 @@ from mpremote import commands, mpdebug_config  # noqa: E402
 from mpremote.commands import CommandError  # noqa: E402
 from mpremote.transport_serial import SerialTransport  # noqa: E402
 
-from helpers import PerfServer, set_breakpoints, wait_for_msg  # noqa: E402
+from helpers import (  # noqa: E402
+    PerfServer,
+    drain_lines,
+    set_breakpoints,
+    wait_for_msg,
+    wait_for_prefixed_line,
+)
 
 _MICROPYTHON = Path(
     os.environ.get(
@@ -182,6 +188,7 @@ def _args(**overrides):
         "dap_log_file": None,
         "timeout": 60,
         "source": None,
+        "loop": False,
     }
     defaults.update(overrides)
     return type("Args", (), defaults)()
@@ -1005,30 +1012,6 @@ def test_config_source_missing_directory_not_rejected_at_load_time(tmp_path):
 # ==============================================================================
 
 
-def _drain_lines(stream, sink):
-    """Background-thread target: append each decoded line from `stream` to `sink`.
-
-    `readline()` blocks until either a full line or EOF, so this needs its
-    own thread per stream - the alternative, polling both of a subprocess's
-    pipes non-blockingly from one thread, is exactly what this avoids having
-    to write twice for stdout and stderr.
-    """
-    for line in iter(stream.readline, ""):
-        sink.append(line)
-    stream.close()
-
-
-def _wait_for_prefixed_line(sink, prefix, timeout):
-    """Poll `sink` (grown by `_drain_lines` on another thread) for a line starting with `prefix`."""
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        for line in sink:
-            if line.startswith(prefix):
-                return line
-        time.sleep(0.05)
-    return None
-
-
 class _MountedPtySession:
     """A live `mpremote debug --source` session over a real pty, paused at a breakpoint.
 
@@ -1117,11 +1100,11 @@ class _MountedPtySession:
             (self.mpremote_proc.stdout, self.stdout_lines),
             (self.mpremote_proc.stderr, self.stderr_lines),
         ):
-            thread = threading.Thread(target=_drain_lines, args=(stream, sink), daemon=True)
+            thread = threading.Thread(target=drain_lines, args=(stream, sink), daemon=True)
             thread.start()
             self._threads.append(thread)
 
-        handshake_line = _wait_for_prefixed_line(self.stdout_lines, "MPDBG-READY ", timeout=20)
+        handshake_line = wait_for_prefixed_line(self.stdout_lines, "MPDBG-READY ", timeout=20)
         assert handshake_line is not None, (
             f"mpremote never reported its handshake; stdout: {self.stdout_lines!r} "
             f"stderr: {self.stderr_lines!r}"

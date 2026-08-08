@@ -293,6 +293,75 @@ def test_debug_boot_script_runs_under_real_interpreter(free_tcp_port):
     assert handshake_prefix in output, output
 
 
+_ARGV_ROUND_TRIP_PROBE = '''
+import json
+import sys
+
+import mpy_launch_debugpy
+
+results = []
+for case in json.loads(sys.argv[1]):
+    sys.argv[:] = ["mpy_launch_debugpy.py"] + case
+    results.append(list(mpy_launch_debugpy._parse_args()))
+print("RESULT " + json.dumps(results))
+'''
+
+
+@requires_settrace_firmware
+def test_debug_argv_round_trips_through_the_launchers_own_parser():
+    """What the host builds is what the device reads, for every combination of flags.
+
+    The contract is positional, so an argument that is not given but is
+    followed by one that is has to hold a place - and only the launcher's own
+    `_parse_args` can say whether the placeholder it gets means "not given".
+    Asserting the argv list alone would only pin the host's half of an
+    agreement between two files.
+
+    `_parse_args` imports debugpy, so it runs under the built firmware rather
+    than here: importing the launcher from CPython would fail on
+    `from micropython import const` well before argv mattered.
+    """
+    cases = [
+        # (kwargs for _debug_argv, expected (module, method, port, stream, loop))
+        ({}, ["mod", "main", None, None, False]),
+        ({"port": 5678}, ["mod", "main", 5678, None, False]),
+        ({"loop": True}, ["mod", "main", None, None, True]),
+        ({"port": 5678, "loop": True}, ["mod", "main", 5678, None, True]),
+        ({"dap_stream": "board"}, ["mod", "main", None, "board", False]),
+        ({"dap_stream": "board", "loop": True}, ["mod", "main", None, "board", True]),
+        (
+            {"port": 5678, "dap_stream": "/dev/ttyACM1", "loop": True},
+            ["mod", "main", 5678, "/dev/ttyACM1", True],
+        ),
+    ]
+    argvs = [
+        commands._debug_argv("mod", "main", **{"port": None, **kwargs}) for kwargs, _ in cases
+    ]
+
+    env = dict(os.environ)
+    env["MICROPYPATH"] = "{}:{}".format(_TOP_DIR / "launcher", _MICROPYPATH)
+    result = subprocess.run(
+        [str(_MICROPYTHON), "-c", _ARGV_ROUND_TRIP_PROBE, json.dumps(argvs)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, f"probe failed: {result.stdout}\n{result.stderr}"
+    line = next((ln for ln in result.stdout.splitlines() if ln.startswith("RESULT ")), None)
+    assert line is not None, f"probe printed no RESULT line: {result.stdout}"
+    parsed = json.loads(line[len("RESULT ") :])
+
+    # An omitted port reads as the device's own default, which only the device
+    # knows; everything else is compared as given.
+    default_port = next(p for (kwargs, _), p in zip(cases, [r[2] for r in parsed]) if not kwargs)
+    assert isinstance(default_port, int) and default_port > 0, default_port
+    for (kwargs, expected), argv, got in zip(cases, argvs, parsed):
+        if expected[2] is None:
+            expected = expected[:2] + [default_port] + expected[3:]
+        assert got == expected, f"{kwargs} -> {argv} parsed as {got}, expected {expected}"
+
+
 class _FakeTransport:
     """Minimal stand-in for SerialTransport's read_until/exec_raw_no_follow.
 
@@ -535,6 +604,7 @@ def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
             "dap_log_file": None,
             "timeout": 60,
             "source": None,
+            "loop": False,
         },
     )()
 
@@ -567,6 +637,7 @@ def test_do_debug_hard_errors_on_unreachable_device(monkeypatch):
             "dap_log_file": None,
             "timeout": 60,
             "source": None,
+            "loop": False,
         },
     )()
 
@@ -592,6 +663,7 @@ def test_do_debug_missing_caps_key(monkeypatch):
             "dap_log_file": None,
             "timeout": 60,
             "source": None,
+            "loop": False,
         },
     )()
 
@@ -801,6 +873,7 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
                 "dap_log_file": None,
                 "timeout": 15,
                 "source": None,
+                "loop": False,
             },
         )()
 
