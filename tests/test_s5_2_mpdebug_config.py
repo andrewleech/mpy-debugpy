@@ -561,10 +561,18 @@ class _FakeTransport:
         self.exec_calls = []
         self.device_name = device_name
 
-    def exec_raw_no_follow(self, command):
+    def exec_raw_no_follow(self, command, timeout_overall=None, timeout_overall_strict=False):
         self.exec_calls.append(command)
 
-    def read_until(self, min_num_bytes, ending, timeout=10, data_consumer=None, timeout_overall=None):
+    def read_until(
+        self,
+        min_num_bytes,
+        ending,
+        timeout=10,
+        data_consumer=None,
+        timeout_overall=None,
+        timeout_overall_strict=False,
+    ):
         if self._lines:
             return self._lines.pop(0)
         return b""
@@ -585,7 +593,7 @@ class _FakeState:
         return not self._did_action
 
 
-def _args(target=None, program=None, port=None, dap_log=False, timeout=60):
+def _args(target=None, program=None, port=None, dap_log=False, timeout=60, source=None):
     return type(
         "Args",
         (),
@@ -596,6 +604,7 @@ def _args(target=None, program=None, port=None, dap_log=False, timeout=60):
             "dap_log": dap_log,
             "dap_log_file": None,
             "timeout": timeout,
+            "source": source,
         },
     )()
 

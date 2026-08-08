@@ -313,10 +313,18 @@ class _FakeTransport:
         # requested target.
         self.device_name = device_name
 
-    def exec_raw_no_follow(self, command):
+    def exec_raw_no_follow(self, command, timeout_overall=None, timeout_overall_strict=False):
         self.exec_calls.append(command)
 
-    def read_until(self, min_num_bytes, ending, timeout=10, data_consumer=None, timeout_overall=None):
+    def read_until(
+        self,
+        min_num_bytes,
+        ending,
+        timeout=10,
+        data_consumer=None,
+        timeout_overall=None,
+        timeout_overall_strict=False,
+    ):
         idx = self._buf.find(ending)
         end = len(self._buf) if idx == -1 else idx + len(ending)
         chunk, self._buf = self._buf[:end], self._buf[end:]
@@ -526,6 +534,7 @@ def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
             "dap_log": False,
             "dap_log_file": None,
             "timeout": 60,
+            "source": None,
         },
     )()
 
@@ -557,6 +566,7 @@ def test_do_debug_hard_errors_on_unreachable_device(monkeypatch):
             "dap_log": False,
             "dap_log_file": None,
             "timeout": 60,
+            "source": None,
         },
     )()
 
@@ -581,6 +591,7 @@ def test_do_debug_missing_caps_key(monkeypatch):
             "dap_log": False,
             "dap_log_file": None,
             "timeout": 60,
+            "source": None,
         },
     )()
 
@@ -789,6 +800,7 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
                 "dap_log": False,
                 "dap_log_file": None,
                 "timeout": 15,
+                "source": None,
             },
         )()
 

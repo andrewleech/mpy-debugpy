@@ -497,11 +497,12 @@ class TestDoDebugSerialDapBridge:
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
 
-        def _boot_script(module, method, port, dap_stream=None):
+        def _boot_script(module, method, port, dap_stream=None, mount_point=None):
             # A dap_device target must ask the device for its own DAP channel;
             # a device told to bind a port instead would report a TCP endpoint
             # the bridge below has no way to use.
             assert dap_stream == "board", dap_stream
+            assert mount_point is None, "this session mounts nothing"
             return boot_script_src
 
         monkeypatch.setattr(commands, "_debug_boot_script", _boot_script)
@@ -509,9 +510,9 @@ class TestDoDebugSerialDapBridge:
         reported_holder = {}
         orig_report = commands._report_debug_result
 
-        def _capture_report(handshake):
+        def _capture_report(handshake, path_mappings=None):
             reported_holder["value"] = handshake
-            return orig_report(handshake)
+            return orig_report(handshake, path_mappings)
 
         monkeypatch.setattr(commands, "_report_debug_result", _capture_report)
 
@@ -525,6 +526,7 @@ class TestDoDebugSerialDapBridge:
                 "dap_log": False,
                 "dap_log_file": None,
                 "timeout": 15,
+                "source": None,
             },
         )()
 
@@ -723,8 +725,9 @@ class TestDoDebugSerialDapBridgeRealSession:
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
 
-        def _boot_script(mod, meth, port, dap_stream=None):
+        def _boot_script(mod, meth, port, dap_stream=None, mount_point=None):
             assert dap_stream == "board", dap_stream
+            assert mount_point is None, "this session mounts nothing"
             return _stream_session_boot_script(device_master_fd, module, method)
 
         monkeypatch.setattr(commands, "_debug_boot_script", _boot_script)
@@ -732,9 +735,9 @@ class TestDoDebugSerialDapBridgeRealSession:
         reported_holder = {}
         orig_report = commands._report_debug_result
 
-        def _capture_report(handshake):
+        def _capture_report(handshake, path_mappings=None):
             reported_holder["value"] = handshake
-            return orig_report(handshake)
+            return orig_report(handshake, path_mappings)
 
         monkeypatch.setattr(commands, "_report_debug_result", _capture_report)
 
@@ -759,6 +762,7 @@ class TestDoDebugSerialDapBridgeRealSession:
                 "dap_log": False,
                 "dap_log_file": None,
                 "timeout": 15,
+                "source": None,
             },
         )()
 
