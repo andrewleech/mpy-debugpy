@@ -7,6 +7,10 @@ board name, or an address - the by-id path comes from the environment and the
 debug endpoint comes from the device's own handshake, as it does in
 production.
 
+`MPY_DEBUG_HIL_DAP_DEVICE` is a second by-id path, the board's dedicated DAP
+interface; it gates the serial-DAP scenarios separately, since a board with
+one CDC interface can still run everything else here.
+
 Set `MPY_DEBUG_HIL_BOARD` to name the board in the results record; without it
 the record uses the board name the firmware reports for itself.
 
@@ -36,6 +40,7 @@ if str(_SUBMODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_SUBMODULE_DIR))
 
 DEVICE_ENV = "MPY_DEBUG_HIL_DEVICE"
+DAP_DEVICE_ENV = "MPY_DEBUG_HIL_DAP_DEVICE"
 BOARD_ENV = "MPY_DEBUG_HIL_BOARD"
 BAUDRATE = 115200
 
@@ -67,6 +72,24 @@ def hil_device():
         pytest.fail(f"{DEVICE_ENV} must be a /dev/serial/by-id/... path, got {device}")
     if not Path(device).exists():
         pytest.skip(f"{DEVICE_ENV}={device} is not present")
+    return device
+
+
+@pytest.fixture(scope="session")
+def hil_dap_device():
+    """The board's dedicated DAP interface, or a skip.
+
+    A separate opt-in from `hil_device`: whether a board exposes a second CDC
+    interface is a per-board fact, so the serial-DAP scenarios skip on a board
+    that has only one rather than failing the whole run.
+    """
+    device = os.environ.get(DAP_DEVICE_ENV)
+    if not device:
+        pytest.skip(f"set {DAP_DEVICE_ENV} to the board's second /dev/serial/by-id/... path")
+    if "/by-id/" not in device:
+        pytest.fail(f"{DAP_DEVICE_ENV} must be a /dev/serial/by-id/... path, got {device}")
+    if not Path(device).exists():
+        pytest.skip(f"{DAP_DEVICE_ENV}={device} is not present")
     return device
 
 
@@ -229,13 +252,64 @@ def hil_debug_session(hil_debug_runner):
     return hil_debug_runner()
 
 
+@pytest.fixture()
+def hil_serial_dap_session(hil_device, hil_dap_device, hil_facts, tmp_path):
+    """One `mpremote debug <named target>` run with DAP on the second CDC.
+
+    The two device paths reach the command through an `mpdebug.toml` because
+    that is the only way to configure a `dap_device`; it is written to a
+    fresh directory per test and the command is run from there, so the file
+    the run reads is built from the environment and nothing about the bench
+    is committed. `PYTHONPATH` carries the mpremote under test, which the
+    other runs get from their working directory instead.
+
+    Unlike the network runs, this one does not detach: mpremote *is* the DAP
+    endpoint here, so the process has to outlive the handshake and is only
+    reaped once the test's client session has ended.
+    """
+    (tmp_path / "mpdebug.toml").write_text(
+        "[target.hil]\n"
+        'kind = "serial"\n'
+        f'device = "{hil_device}"\n'
+        f'dap_device = "{hil_dap_device}"\n'
+        f'program = "{TARGET_MODULE}:main"\n'
+    )
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(_SUBMODULE_DIR), env.get("PYTHONPATH")]))
+
+    proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
+    try:
+        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=60)
+        if matched is None:
+            pytest.fail(f"never saw MPDBG-READY; output:\n{''.join(lines)}")
+        payload = json.loads(matched[matched.index("{") :])
+        payload["command_output"] = "".join(lines)
+        payload["process"] = proc
+        yield payload
+    finally:
+        # A finished client session ends the bridge and the command with it,
+        # so a live process here means the test left one open; either way the
+        # board's ports must be free before the next test spawns a run.
+        with contextlib.suppress(Exception):
+            proc.terminate()
+        try:
+            proc.wait(timeout=15)
+        except Exception:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
 # --- results record -------------------------------------------------------
 #
 # STORY-6.4 asks every run to leave a dated record behind. It is written from
 # the reports pytest already collects rather than from the tests themselves,
 # so a scenario cannot claim green by forgetting to record its own failure.
+# Anything a scenario measured comes along the same way, via the
+# `record_property` fixture, so a number in the record is always a number some
+# assertion in that run also had to be satisfied by.
 
 _RESULTS = {}
+_MEASUREMENTS = {}
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -244,6 +318,7 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
     if report.when == "call" and "hil" in item.keywords:
         _RESULTS[item.nodeid] = report.outcome
+        _MEASUREMENTS.update(report.user_properties)
 
 
 def pytest_sessionfinish(session):
@@ -264,11 +339,20 @@ def pytest_sessionfinish(session):
         f"- Debuggee on device: `{facts.get('debuggee', 'unknown')}`",
         f"- Probed capabilities: `{facts.get('capabilities', 'unknown')}`",
         "",
+        "`serial_dap` is `False` above because these capabilities come from a plain",
+        "REPL probe: the key reports which channel a session took, not what the",
+        "firmware can do. The serial-DAP scenarios below assert it is `True` in the",
+        "handshake of the stream session they start.",
+        "",
         "| scenario | result |",
         "| --- | --- |",
     ]
     for nodeid, outcome in sorted(_RESULTS.items()):
         lines.append("| `{}` | {} |".format(nodeid.split("::")[-1], outcome))
     lines.append("")
+    if _MEASUREMENTS:
+        lines += ["## Measurements", "", "| name | value |", "| --- | --- |"]
+        lines += ["| `{}` | {} |".format(k, v) for k, v in sorted(_MEASUREMENTS.items())]
+        lines.append("")
     path.write_text("\n".join(lines))
     print(f"\nHIL results written to {path}")

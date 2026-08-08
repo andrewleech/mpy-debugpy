@@ -8,9 +8,13 @@ Two tiers, both against the real unix firmware (no hardware, no mocks):
   of `debugpy` to pin down the exact contract `messaging.py` depends on:
   `settimeout` bounding `recv` (`OSError(11)` on expiry, block forever on
   `None`), `recv` returning `b""` on EOF rather than raising, and `send`
-  delivering a payload larger than one pipe write - the write end is shrunk
-  with `fcntl.F_SETPIPE_SZ` first so a single `write()` genuinely cannot
-  accept it all, forcing `send`'s internal retry loop to run.
+  reporting a short write instead of claiming the whole buffer - the write
+  end is shrunk with `fcntl.F_SETPIPE_SZ` first so a single `write()`
+  genuinely cannot accept it all. The same narrow pipe then carries a real
+  `JsonMessageChannel` frame while this side deliberately stops draining,
+  so the frame arrives intact only if every partial write is accounted
+  for - a sender that discards the count it reached resends a prefix, and
+  the frame's declared length then covers a body that will not parse.
 - `test_reaches_breakpoint_over_stream_transport` promotes the former
   `s6_1_stream_transport_proof.py` script into a collected test: a real
   `debugpy` session run over `listen_stream()` on a pty pair, with no socket
@@ -98,15 +102,48 @@ class LineReader:
         pytest.fail(f"device never reported the expected line within the deadline; output so far: {seen}")
 
 
+_CORRUPT = object()
+
+
+def _parse_frame(data):
+    """The first complete `Content-Length` frame in `data`.
+
+    None while the frame is still incomplete, and `_CORRUPT` once the
+    declared length has arrived but the body will not parse - the signature
+    of a sender that lost track of a partial write and resent a prefix.
+    """
+    sep = data.find(b"\r\n\r\n")
+    if sep < 0:
+        return None
+    length = None
+    for line in data[:sep].decode(errors="replace").split("\r\n"):
+        if line.lower().startswith("content-length:"):
+            length = int(line.split(":", 1)[1])
+    if length is None or len(data) < sep + 4 + length:
+        return None
+    try:
+        return json.loads(data[sep + 4 : sep + 4 + length])
+    except ValueError:
+        return _CORRUPT
+
+
+def _payload_then_frame(data, payload_len):
+    """True once the raw payload and the framed message after it have arrived."""
+    return len(data) >= payload_len and _parse_frame(data[payload_len:]) is not None
+
+
 @requires_unix_firmware
 def test_stream_transport_contract():
     """`StreamTransport`'s settimeout/EOF/send contract, isolated from DAP framing."""
     dev_read_fd, host_write_fd = os.pipe()  # host -> device
     host_read_fd, dev_write_fd = os.pipe()  # device -> host
 
-    # Shrink the device's outbound pipe so a 20000-byte send() cannot
-    # complete in one write() - proving send() loops rather than truncating.
+    # Make the device's outbound pipe behave like the CDC interface this
+    # transport exists for: small, so one write cannot take a whole frame,
+    # and non-blocking, so the write reports the short count instead of
+    # looping inside the kernel until the host drains.
     fcntl.fcntl(dev_write_fd, fcntl.F_SETPIPE_SZ, 4096)
+    fcntl.fcntl(dev_write_fd, fcntl.F_SETFL, fcntl.fcntl(dev_write_fd, fcntl.F_GETFL) | os.O_NONBLOCK)
 
     proc = subprocess.Popen(
         [str(_MICROPYTHON), str(_PROBE_SCRIPT), str(dev_read_fd), str(dev_write_fd)],
@@ -125,29 +162,61 @@ def test_stream_transport_contract():
         os.write(host_write_fd, b"HELLO")
         stdout.wait_for(lambda ln: ln.startswith("OK:recv-blocking"), deadline)
 
-        # The device's send() is now blocked writing into a pipe too small
-        # to take the whole payload in one go: this fd and `host_read_fd`
-        # must be drained in the same loop, not one after the other, or the
-        # device (waiting for buffer space) and this test (waiting for the
-        # "send-issued" line the device can't print until send() returns)
-        # deadlock each other.
+        # The device is now writing into a pipe too small to take either
+        # payload in one go: this fd and `host_read_fd` must be drained in
+        # the same loop, not one after the other, or the device (waiting for
+        # buffer space) and this test (waiting for a line the device cannot
+        # print until its write completes) deadlock each other.
         expected = bytes((i & 0xFF for i in range(20000)))
         received = b""
-        send_issued = False
-        while time.monotonic() < deadline and (not send_issued or len(received) < len(expected)):
-            r, _, _ = select.select([stdout.fd, host_read_fd], [], [], 0.2)
+        steps = []
+        # Draining stops for a moment once the raw payload is in, so the pipe
+        # is full for far longer than the 1 ms timeout the device sends its
+        # frame under. Without the stall the device can finish a whole frame
+        # inside one timeout on a fast host, and a transport that mishandles
+        # partial writes goes unnoticed; with it, the frame can only arrive
+        # intact if each partial write resumes from the right offset.
+        stall_until = None
+        while time.monotonic() < deadline and not _payload_then_frame(received, len(expected)):
+            r, _, _ = select.select([stdout.fd, host_read_fd], [], [], 0.05)
             if stdout.fd in r:
                 for line in stdout.poll_lines(0):
                     if line.startswith("FAIL:"):
                         pytest.fail(f"device reported failure: {line}")
-                    if line.startswith("OK:send-issued:20000"):
-                        send_issued = True
+                    steps.append(line)
             if host_read_fd in r:
+                if len(received) >= len(expected):
+                    if stall_until is None:
+                        stall_until = time.monotonic() + 0.2
+                    remaining = stall_until - time.monotonic()
+                    if remaining > 0:
+                        time.sleep(min(0.05, remaining))
+                        continue
                 received += os.read(host_read_fd, 65536)
-        assert send_issued, "device never reported OK:send-issued"
-        assert received == expected, (
-            f"send() did not deliver the payload intact: got {len(received)} of {len(expected)} bytes"
+
+        partial = next((s for s in steps if s.startswith("OK:send-partial:")), None)
+        assert partial is not None, f"device never reported a partial send; steps: {steps}"
+        first, total = (int(v) for v in partial.split(":")[2:4])
+        # The premise of the whole step: one write really could not take it
+        # all, so the short count is the interesting case and not an accident
+        # of a pipe that happened to be big enough.
+        assert 0 < first < len(expected), partial
+        assert total == len(expected), partial
+
+        assert received[: len(expected)] == expected, (
+            "send() did not deliver the payload intact: got "
+            f"{len(received)} bytes, first mismatch at "
+            f"{next((i for i, b in enumerate(received) if i < len(expected) and b != expected[i]), None)}"
         )
+
+        frame = _parse_frame(received[len(expected) :])
+        assert frame is not None, f"no complete DAP frame after the payload; steps: {steps}"
+        assert frame is not _CORRUPT, (
+            "the framed message arrived corrupt, so a partial write was not resumed "
+            "from the offset it reached"
+        )
+        assert frame["event"] == "output", frame
+        assert frame["body"]["output"] == "B" * 20000, len(frame["body"]["output"])
 
         os.close(host_write_fd)
         host_write_fd = -1

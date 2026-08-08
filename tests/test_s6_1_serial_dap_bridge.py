@@ -496,7 +496,15 @@ class TestDoDebugSerialDapBridge:
             dap_device=device_slave_path,
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
-        monkeypatch.setattr(commands, "_debug_boot_script", lambda module, method, port: boot_script_src)
+
+        def _boot_script(module, method, port, dap_stream=None):
+            # A dap_device target must ask the device for its own DAP channel;
+            # a device told to bind a port instead would report a TCP endpoint
+            # the bridge below has no way to use.
+            assert dap_stream == "board", dap_stream
+            return boot_script_src
+
+        monkeypatch.setattr(commands, "_debug_boot_script", _boot_script)
 
         reported_holder = {}
         orig_report = commands._report_debug_result
@@ -714,11 +722,12 @@ class TestDoDebugSerialDapBridgeRealSession:
             name="bench", kind="serial", device=control_slave_path, dap_device=device_slave_path
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
-        monkeypatch.setattr(
-            commands,
-            "_debug_boot_script",
-            lambda mod, meth, port: _stream_session_boot_script(device_master_fd, module, method),
-        )
+
+        def _boot_script(mod, meth, port, dap_stream=None):
+            assert dap_stream == "board", dap_stream
+            return _stream_session_boot_script(device_master_fd, module, method)
+
+        monkeypatch.setattr(commands, "_debug_boot_script", _boot_script)
 
         reported_holder = {}
         orig_report = commands._report_debug_result
