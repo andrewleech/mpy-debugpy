@@ -127,6 +127,34 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   sees them until they are folded onto the feature branches. Counting that debt
   properly while recording this found it understated: seven mpremote commits are
   unfolded, not the four the earlier note names. See the risk register row.
+- **The lint fixes that have an owning feature branch are now on it, and two
+  more red jobs turned up in the process (2026-08-09, user authorisation:
+  push lint fixes to the original branches, but only what the project's own
+  tooling dictates).** micropython `local_names_implementation` took the
+  settrace test formatting (`42fc0e685e`) and is now green on `ruff check`,
+  `ruff format --diff` and `tools/verifygitlog.py`; so is `pdb_support`
+  (#8767), which needed nothing. micropython-lib `add-debugpy-support`
+  (PR #1022) took three commits on top of `3432190b8858`: the one formatter
+  hunk (`1e43440`), the three `EXE001` shebangs (`7c6ce9f`), and four typos
+  (`88e796a`). Its `ruff format --diff` and `codespell` jobs are green.
+  **Two jobs nobody had looked at.** `codespell` (pinned 2.4.1) was failing on
+  four words in `debug_session.py`; the workflow exists only on upstream master,
+  so it is invisible from a checkout of the branch and only shows up in the PR's
+  check list. And the check that reports as **`build`** in that list is the
+  commit-formatting job from `commit_formatting.yml`, which runs
+  `tools/verifygitlog.py -v upstream/master..HEAD --no-merges`: 12 of the PR's
+  33 commits fail it, 46 errors in three groups - 11 body lines over 75
+  characters, 7 subject lines that do not match `^[^!]+: [A-Z]+.+ .+\.$`, and
+  6 commits whose sign-off is not the final line, because a `Claude-Session`
+  trailer sits after it. That last one is the trap for this project: on these
+  branches `Claude-Session` has to go *before* `Signed-off-by`.
+  **Two things are deliberately left red on #1022.** The remaining four
+  `ruff check` failures are all `T100`, which needs the `per-file-ignores`
+  entry in the shared `pyproject.toml` - a change to the repository's lint
+  policy rather than an application of its tooling, so it is outside the
+  authorisation and stays on the integration branch until asked for. Repairing
+  the commit-formatting job means rewriting 12 commit messages and force-pushing
+  the PR branch, which is a bigger and separately-decidable action.
 - **STORY-8.2 DONE (2026-08-06).** PR micropython-lib#1022 fast-forwarded to
   `3432190b8858` (32 commits), carrying EPIC-1's foundations, the Q8
   bind/accept split, the message-pump deadlock fix and the parallel lineage's
@@ -1396,9 +1424,26 @@ lineages (Josverl vs andrewleech) reconciled.
 
 - **STORY-8.3 — Promote `debug` command to upstream PR after hardware validation**
   - type: implementation
-  - description: Once EPIC-6 hardware tests pass, switch the fork PR base to
-    `micropython:master` for upstream review.
-  - acceptance criteria: [ ] base retargeted; [ ] PR references validation evidence.
+  - description: Once EPIC-6 hardware tests pass, open a PR for the `debug`
+    command against `micropython:master`. **Corrected 2026-08-09** — the
+    original wording ("switch the fork PR base to `micropython:master`")
+    assumes a PR exists to retarget. None does: `mpremote_debug` is a branch on
+    the fork (`d6a68f9477`, 8 commits, registered in `mbm.toml` with a `/tree/`
+    URL and no `pr_number`), with no PR from it in either repo. Nor is
+    retargeting how this fork stages work - it opens a fork-internal PR based
+    on `review/<topic>` and a *separate* upstream PR from the same head branch
+    (PR #47 `review/baochip-port <- dabao` alongside upstream #19392
+    `master <- dabao`), so the two never share an edited base.
+  - preconditions, both real and neither a base edit: `mpremote_debug` is 5
+    commits behind `upstream/master` and needs rebasing; and the seven
+    integration-branch commits that are not on any mpremote feature branch have
+    to be folded onto it first, or the PR ships a `debug` command that this
+    repo's tests have never run against. See the risk register row.
+  - acceptance criteria: [ ] unfolded mpremote commits folded onto
+    `mpremote_debug`; [ ] branch rebased onto current `upstream/master`;
+    [ ] PR opened against `micropython:master`; [ ] PR references validation
+    evidence; [ ] its CI check list is green by name (ruff, codespell, and the
+    commit-message job that reports as `build`).
   - dependencies: STORY-8.1, STORY-6.4
   - component: mpremote · effort: S · risk: med · model: sonnet
 
@@ -1533,8 +1578,11 @@ parallel.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
     **STORY-8.4 DONE 2026-08-09**, and closing it closed STORY-6.3's second
     criterion, which had been deferred to exactly this docs pass. **← the
-    frontier is what is left of this step: STORY-8.3, which retargets a public
-    PR base and is the user's decision.** Nothing else is autonomously
+    frontier is what is left of this step: STORY-8.3, which opens a public PR
+    and is the user's decision.** Its first two acceptance items - folding the
+    unfolded mpremote commits onto `mpremote_debug` and rebasing it onto
+    current master - touch nothing public and could be done ahead of that
+    decision. Nothing else is autonomously
     reachable: STORY-6.1's criterion 2 needs a board with no second CDC (the
     ESP32 on this bench is offline), STORY-4.4 is unreachable by design, and
     Q14's extension gap needs the shape decided before it can be built.
@@ -1580,7 +1628,8 @@ Notes:
 | The DAP `pause` request answers success and never stops the target (found 2026-08-09, STORY-4.5): `paused` is written by `_handle_pause`, `pause()` and `_handle_restart`, and read by no stop decision. A user pressing pause in VS Code gets a UI that believes it is stopped while the program runs on | fix with a session story, not in passing: stop at the next `line` event with reason `pause`, which is ~4 lines, plus the harness it has no coverage without - every current test drives a target that reaches a breakpoint on its own, so none can pause one. Same shape as the `wait_for_msg` row above: a field written in three places and read nowhere reads as implemented |
 | MicroPython emits one more `line` event for a loop body than the body has executions, the extra one before it has run at all (measured 2026-08-09, `20260809_settrace_line_event_fidelity.md`) — so a breakpoint in a loop body stops N+1 times and the first stop shows pre-loop values | belongs in the #8767 lineage as a VM/compiler line-attribution fix, not worked around on the debugger side. Until then no test may assert a stop count for a breakpoint inside a loop, or the artifact becomes the expectation; assert which lines were reached and what the values were |
 | A pty-mounted live session's readiness gate is a fixed 0.3 s sleep before mpremote is launched; one run in three of a new test failed with `timeout waiting for first EOF reception` during `mount_local` (2026-08-09) | not retried and not slept longer on spec: the deterministic alternative (probing the pty slave for a REPL from the test) risks the device seeing EOF on its own stdin when that fd closes. If it recurs, instrument what the device has printed by then rather than raising the sleep |
-| Submodule work lands on the integration branches, where no PR sees it and `make integrate` discards it, and the debt is larger than the "four unfolded mpremote commits" recorded elsewhere: measured 2026-08-09, **seven** non-merge commits touch `tools/mpremote` on `mpy-debugpy` and are on no mpremote feature branch (the four named plus `6a3e3f7d84`, `49502103e3`, `537d60c97c`), and the ruff fixes of that date join them. Every submodule commit acquires this silently - the working tree looks identical either way | do not maintain a hand-written list; it was already stale. The query is `git log --oneline --no-merges <integration> --not <feature-branches...> -- <path>`, and it should be run before declaring any submodule story done. Fold onto the feature branch as part of the story that made the change, the way STORY-8.6 did for the two firmware fixes |
+| Submodule work lands on the integration branches, where no PR sees it and `make integrate` discards it, and the debt is larger than the "four unfolded mpremote commits" recorded elsewhere: measured 2026-08-09, **seven** non-merge commits touch `tools/mpremote` on `mpy-debugpy` and are on no mpremote feature branch (the four named plus `6a3e3f7d84`, `49502103e3`, `537d60c97c`), and the ruff fixes of that date join them. Every submodule commit acquires this silently - the working tree looks identical either way | do not maintain a hand-written list; it was already stale. The query is `git cherry <feature-branch> <integration>` - patch-id based, so it sees through the rebased duplicates an integration branch carries. `git log --oneline --no-merges <integration> --not <feature-branches...> -- <path>`, recorded here first, over-reports for exactly that reason: it named `e143f3dbec` as unfolded when `git cherry` shows it already on `mpremote_debug` under a different SHA. Run it before declaring any submodule story done. Fold onto the feature branch as part of the story that made the change, the way STORY-8.6 did for the two firmware fixes. Partly discharged the same day: the lint fixes whose owning commit is already on a feature branch were folded there (`42fc0e685e` on `local_names_implementation`; `1e43440`/`7c6ce9f`/`88e796a` on `add-debugpy-support`). What could not follow is exactly the debt this row describes - the `commands.py` and `transport_serial.py` formatting and the `RSE102` fix belong to commits that are themselves unfolded, so they cannot reach a PR before their owners do |
+| A submodule's CI is not fully described by the workflows in its own tree: micropython-lib's `codespell` job exists only on upstream master, so a branch that predates it runs the check on every PR while showing no sign of it locally, and the job that reports as **`build`** in a PR's check list is the commit-message check from `commit_formatting.yml`. `make lint-submodules` reproduces only the two ruff commands and would have said "clean" for both (found 2026-08-09) | read the check list on the PR itself, by name and by log, before claiming a branch is CI-green; `gh api repos/<upstream>/commits/<sha>/check-runs` is the source of truth, not the branch's `.github/workflows/`. Extend `lint-submodules` when a new gating job is found rather than treating its absence from the branch as its absence from CI |
 
 ---
 

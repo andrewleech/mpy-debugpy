@@ -15,10 +15,19 @@ UNIX_VARIANT   := standard
 # ports, define MICROPY_PY_SYS_SETTRACE=1 and MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1.
 DEBUG_CFLAGS   :=
 
-.PHONY: bootstrap integrate firmware-unix mpy-cross test lint lint-submodules demo firmware-list firmware-verify clean
+.PHONY: bootstrap integrate firmware-unix mpy-cross test lint lint-submodules \
+        lint-submodule-commits demo firmware-list firmware-verify clean
 
-# Version pinned by both submodules' own ruff CI jobs; keep in step with them.
-SUBMODULE_RUFF := ruff@0.11.6
+# Versions pinned by both submodules' own CI jobs and .pre-commit-config.yaml;
+# keep in step with them.
+SUBMODULE_RUFF      := ruff@0.11.6
+SUBMODULE_CODESPELL := codespell@2.4.1
+
+# Commit range for lint-submodule-commits. The default is what CI uses, which
+# only makes sense on a feature branch:
+#   make lint-submodule-commits SUB=micropython-lib RANGE=upstream/master..add-debugpy-support
+SUB   := micropython
+RANGE := upstream/master..HEAD
 
 # One-shot setup: check out the recorded integration commits and the libraries
 # the unix port needs. Checkout-only; rebuilding the integration branches from
@@ -66,15 +75,28 @@ lint:
 	uv run ruff check .
 
 # `lint` excludes both submodules (pyproject.toml), so it says nothing about a
-# change made inside one. Each submodule has its own ruff config and its own CI
-# job, and this reproduces those jobs exactly - same pinned version, same two
-# commands, run from the submodule so its config applies. Run it after editing
-# a submodule; a red job there blocks the upstream PR.
+# change made inside one. Each submodule has its own config and its own CI jobs,
+# and this reproduces the tree-content ones exactly - same pinned versions, same
+# commands, run from the submodule so its config applies. Run it after editing a
+# submodule; a red job there blocks the upstream PR.
+#
+# A submodule's CI is not fully described by the workflows in its own tree: an
+# older feature branch can predate a job that still runs against it. Confirm
+# against the PR's own check list (`gh api repos/<upstream>/commits/<sha>/check-runs`)
+# rather than treating this target as the definition of green.
 lint-submodules:
 	for sub in micropython micropython-lib; do \
 	  echo "== $$sub =="; \
-	  (cd $$sub && uvx $(SUBMODULE_RUFF) check . && uvx $(SUBMODULE_RUFF) format --diff .) || exit 1; \
+	  (cd $$sub && uvx $(SUBMODULE_RUFF) check . && uvx $(SUBMODULE_RUFF) format --diff . \
+	    && uvx --with tomli $(SUBMODULE_CODESPELL)) || exit 1; \
 	done
+
+# The commit-message job, which reports as `build` in a PR's check list. Kept
+# out of lint-submodules because it needs a range: an integration branch fails
+# it by construction (it carries other people's commits and mbm-rebased
+# duplicates), so only a feature branch range is meaningful.
+lint-submodule-commits:
+	cd $(SUB) && ./tools/verifygitlog.py -v $(RANGE) --no-merges
 
 # Run the sample target under the debug launcher (unix). Attach VS Code to the
 # host/port from the MPDBG-READY line.
