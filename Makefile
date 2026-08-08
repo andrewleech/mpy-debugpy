@@ -15,7 +15,10 @@ UNIX_VARIANT   := standard
 # ports, define MICROPY_PY_SYS_SETTRACE=1 and MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1.
 DEBUG_CFLAGS   :=
 
-.PHONY: bootstrap integrate firmware-unix mpy-cross test lint demo firmware-list firmware-verify clean
+.PHONY: bootstrap integrate firmware-unix mpy-cross test lint lint-submodules demo firmware-list firmware-verify clean
+
+# Version pinned by both submodules' own ruff CI jobs; keep in step with them.
+SUBMODULE_RUFF := ruff@0.11.6
 
 # One-shot setup: check out the recorded integration commits and the libraries
 # the unix port needs. Checkout-only; rebuilding the integration branches from
@@ -61,6 +64,17 @@ test:
 # debuggees under src/, so reformatting them would move the breakpoints.
 lint:
 	uv run ruff check .
+
+# `lint` excludes both submodules (pyproject.toml), so it says nothing about a
+# change made inside one. Each submodule has its own ruff config and its own CI
+# job, and this reproduces those jobs exactly - same pinned version, same two
+# commands, run from the submodule so its config applies. Run it after editing
+# a submodule; a red job there blocks the upstream PR.
+lint-submodules:
+	for sub in micropython micropython-lib; do \
+	  echo "== $$sub =="; \
+	  (cd $$sub && uvx $(SUBMODULE_RUFF) check . && uvx $(SUBMODULE_RUFF) format --diff .) || exit 1; \
+	done
 
 # Run the sample target under the debug launcher (unix). Attach VS Code to the
 # host/port from the MPDBG-READY line.

@@ -93,6 +93,36 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   always verify containment, never the summary. Verified behaviourally, not
   just structurally — `MPY_DEBUG_MPREMOTE_DIR` points this repo's DAP suite at
   any mpremote tree, and all 278 tests pass against the ampremote composition.
+- **Every upstream PR this project feeds has a red lint job, in both
+  submodules; now fixed on the integration branches (2026-08-09).** `make lint`
+  excludes both submodules (`pyproject.toml`), so nothing here has ever run the
+  checks that gate the PRs. Each submodule pins `ruff==0.11.6` and runs both
+  `ruff check .` and `ruff format --diff .` on every push and pull request.
+  Measured at PR #1022's actual tip (`3432190b8858`): 7 check failures and one
+  unformatted file. On micropython's integration branch: check clean, but five
+  unformatted files, all of them ones this project's lineage introduced
+  (`tests/misc/sys_settrace_locals*.py` from `local_names_implementation`,
+  `commands.py` from the `--loop` story, `transport_serial.py` from the mount
+  read bound plus two hunks belonging to the mpremote `pyboard.py` detach
+  commit). None of it is downstream of this session's work, though rewriting
+  `test_vscode.py` added one more `T100`.
+  Fixed by cause rather than by blanket suppression: `T100` (flake8-debugger)
+  is a false positive by construction inside a debugger package, so it is
+  ignored for `python-ecosys/debugpy/**` through the `per-file-ignores`
+  mechanism that repo already uses; the `EXE001` shebangs came off
+  `test_vscode.py` and `demo.py`, which run under `micropython` and not
+  `python3`, while `dap_monitor.py` (genuinely CPython) became executable;
+  `RSE102` and both formatters were let to fix themselves. Reformatting
+  `sys_settrace_locals.py` is safe against its `.exp` file only because no
+  hunk changes a line count - checked, and the four settrace tests re-run
+  green.
+  **Two standing consequences.** A submodule edit is not verified by
+  `make lint`; `make lint-submodules` now reproduces both CI jobs exactly and
+  should be run before claiming a submodule change is clean. And these fixes
+  sit on integration branches, so `make integrate` discards them and no PR
+  sees them until they are folded onto the feature branches. Counting that debt
+  properly while recording this found it understated: seven mpremote commits are
+  unfolded, not the four the earlier note names. See the risk register row.
 - **STORY-8.2 DONE (2026-08-06).** PR micropython-lib#1022 fast-forwarded to
   `3432190b8858` (32 commits), carrying EPIC-1's foundations, the Q8
   bind/accept split, the message-pump deadlock fix and the parallel lineage's
@@ -1540,6 +1570,7 @@ Notes:
 | The DAP `pause` request answers success and never stops the target (found 2026-08-09, STORY-4.5): `paused` is written by `_handle_pause`, `pause()` and `_handle_restart`, and read by no stop decision. A user pressing pause in VS Code gets a UI that believes it is stopped while the program runs on | fix with a session story, not in passing: stop at the next `line` event with reason `pause`, which is ~4 lines, plus the harness it has no coverage without - every current test drives a target that reaches a breakpoint on its own, so none can pause one. Same shape as the `wait_for_msg` row above: a field written in three places and read nowhere reads as implemented |
 | MicroPython emits one more `line` event for a loop body than the body has executions, the extra one before it has run at all (measured 2026-08-09, `20260809_settrace_line_event_fidelity.md`) — so a breakpoint in a loop body stops N+1 times and the first stop shows pre-loop values | belongs in the #8767 lineage as a VM/compiler line-attribution fix, not worked around on the debugger side. Until then no test may assert a stop count for a breakpoint inside a loop, or the artifact becomes the expectation; assert which lines were reached and what the values were |
 | A pty-mounted live session's readiness gate is a fixed 0.3 s sleep before mpremote is launched; one run in three of a new test failed with `timeout waiting for first EOF reception` during `mount_local` (2026-08-09) | not retried and not slept longer on spec: the deterministic alternative (probing the pty slave for a REPL from the test) risks the device seeing EOF on its own stdin when that fd closes. If it recurs, instrument what the device has printed by then rather than raising the sleep |
+| Submodule work lands on the integration branches, where no PR sees it and `make integrate` discards it, and the debt is larger than the "four unfolded mpremote commits" recorded elsewhere: measured 2026-08-09, **seven** non-merge commits touch `tools/mpremote` on `mpy-debugpy` and are on no mpremote feature branch (the four named plus `6a3e3f7d84`, `49502103e3`, `537d60c97c`), and the ruff fixes of that date join them. Every submodule commit acquires this silently - the working tree looks identical either way | do not maintain a hand-written list; it was already stale. The query is `git log --oneline --no-merges <integration> --not <feature-branches...> -- <path>`, and it should be run before declaring any submodule story done. Fold onto the feature branch as part of the story that made the change, the way STORY-8.6 did for the two firmware fixes |
 
 ---
 
