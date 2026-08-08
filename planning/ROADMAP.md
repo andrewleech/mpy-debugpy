@@ -1412,8 +1412,15 @@ parallel.
     EPIC-6's transports (6.1/6.2) follow at step 11.
 11. **STORY-6.1** (needs 2.2,5.4), **STORY-6.2** (needs 5.4,EPIC-4) — parallel.
     Both need a board on a bench; deferred until the work moves to a host with
-    hardware attached.
-12. **STORY-6.4** (needs 6.1,6.2). Hardware.
+    hardware attached. **STORY-6.2 DONE 2026-08-08. STORY-6.1's positive path
+    is proven on the same board; it stays open on criterion 2, which needs a
+    board with no second CDC, and criterion 4's ampremote half.**
+12. **STORY-6.4** (needs 6.1,6.2). Hardware. **Both flows done 2026-08-08 on
+    PYBD_SF6, 14 scenarios; open for the rest of the board set.**
+    **← the frontier is STORY-4.3 and STORY-4.5**, which were behind EPIC-6 and
+    are now reachable while the board is on the bench. STORY-8.4 needs no
+    hardware and can run at any point; STORY-8.3 retargets a public PR base and
+    is a user decision, not an autonomous step.
 13. **STORY-8.1** (needs EPIC-5), **STORY-8.2** (needs EPIC-1) — parallel; can start once
     their epics are green. **BOTH DONE 2026-08-06.**
 14. **STORY-7.1** (needs EPIC-5; resequenced ahead of 4.3 on 2026-08-06).
