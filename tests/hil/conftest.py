@@ -14,6 +14,12 @@ one CDC interface can still run everything else here.
 Set `MPY_DEBUG_HIL_BOARD` to name the board in the results record; without it
 the record uses the board name the firmware reports for itself.
 
+The board needs `board_boot.py` in this directory installed as its `boot.py`
+(plus a `_secrets.py`) before any of this runs: the WiFi scenarios need an
+interface already up, and the serial-DAP ones need the second CDC already
+enumerated. Neither can be arranged from here, since both are decided before
+the first `mpremote` connection.
+
 Only one process may hold the board's serial port, and `mpremote debug` needs
 it, so nothing here keeps a transport open across a debug run: `hil_serial` is
 a context manager, not a live connection.
@@ -147,11 +153,23 @@ def hil_facts(hil_device, hil_serial):
         transport.fs_writefile(debuggee, TARGET_SRC.read_bytes())
 
         transport.exec("import os, sys, debugpy")
+        # The USB mode is a boot-time choice, not a firmware property, and it
+        # is what decides whether a second CDC interface exists to run DAP
+        # over. Recording it makes a run reproducible from the record alone;
+        # ports without `pyb` simply have nothing to say here.
+        transport.exec(
+            "try:\n import pyb\n _usb_mode = pyb.usb_mode()\nexcept Exception:\n _usb_mode = None\n"
+        )
         return {
             "device": hil_device,
             "board": os.environ.get(BOARD_ENV) or transport.eval("sys.implementation._build"),
             "machine": transport.eval("os.uname().machine"),
-            "firmware": transport.eval("os.uname().release"),
+            # The full version string, not `release`: it carries the source
+            # commit, which is the only thing that ties a run to a build. The
+            # board need not be running a manifest artifact, so nothing else
+            # here identifies what produced these results.
+            "firmware": transport.eval("os.uname().version"),
+            "usb_mode": transport.eval("_usb_mode"),
             "capabilities": transport.eval("debugpy.get_capabilities()"),
             "debuggee": debuggee,
         }
@@ -336,6 +354,7 @@ def pytest_sessionfinish(session):
         f"- Device: `{facts.get('device', 'unknown')}`",
         f"- Machine: {facts.get('machine', 'unknown')}",
         f"- Firmware: {facts.get('firmware', 'unknown')}",
+        f"- USB mode: {facts.get('usb_mode') or 'n/a'}",
         f"- Debuggee on device: `{facts.get('debuggee', 'unknown')}`",
         f"- Probed capabilities: `{facts.get('capabilities', 'unknown')}`",
         "",

@@ -20,6 +20,7 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **The published PYBD firmware cannot run the serial-DAP scenarios, and the manifest does not say so (found 2026-08-08).** `firmware/firmware.toml`'s `stm32-pybd-sf6-debug` is built from `f9d7c96b96`, which is not an ancestor of the current integration tip and predates `MICROPY_HW_USB_CDC_NUM (2)` in `boards/PYBD_SF6/mpconfigboard.h` - so it enumerates one CDC interface and STORY-6.1's path is unreachable on it. The hardware results were produced by a local build of the pinned source (`v1.29.0-preview.702.g2c816215dc`), which the HIL record now names in full rather than by release. Nothing is misverified: `launcher/firmware.py` checks the hash of what the manifest describes, and it describes an older build honestly. What is missing is any way for the manifest to express the second CDC, since the interface count is a firmware property while `serial_dap` deliberately is not. Republishing is STORY-3.2's CI job; the manifest key is a design question that has to be settled with it. New: Q12.
 - **STORY-6.1 criterion 1 met on hardware and STORY-6.4's serial half done (2026-08-08): DAP over the board's own second CDC, plus a fifth defect.** `mpremote debug hil` against a `dap_device` target reaches a breakpoint on a PYBD_SF6 with no address of any kind in the config or on the command line: the device reports `serial:0`, mpremote bridges its second CDC to a loopback port, and the client cannot tell it from the network path. Three separate things had to be true, each found the hard way: the device picks the channel (`dap_stream="board"`), because the host names a tty node and only the device can map that to a runtime object; `pyb.USB_VCP(1)` constructing proves nothing, since it answers from the build-time `MICROPY_HW_USB_CDC_NUM` and only `pyb.usb_mode()` says what boot enumerated; and failing to get the requested stream must raise, since a TCP fallback leaves the device reporting an endpoint the waiting bridge has no client for. Criterion 1 is PYBD_SF6's answer and not the pico_w's; criterion 2 still needs a board with no second CDC. The throughput risk row is now measured: 16 KB in 0.20 s, 81.7 kB/s. Getting there found D5 below. Fourteen HIL scenarios green (`20260808_hil_PYBD_SF6.md`).
 - **A fifth hardware-found defect (2026-08-08): every DAP message over 1024 bytes desynchronised the serial link.** `USB_VCP.write` takes at most `MICROPY_HW_USB_CDC_TX_DATA_SIZE` per call and reports the short count, and `public_api.py` drops the channel timeout to 1 ms once `initialize` is answered. `StreamTransport.send` had a whole-buffer contract: it looped internally and raised when the timeout expired mid-frame, discarding the count of what had already gone out, so `_send_all` retried from offset 0 and resent the prefix. Not a visible error, just a stream the peer can never parse again; bisected by payload size (512 bytes fine, 1024 never answered) and confirmed at the raw layer. `send` now has the socket contract - write once, return the count, EAGAIN only when nothing went out - which is what `_send_all` was already written for. Pinned by `tests/test_s6_1_stream_transport.py` over a pipe shrunk with `F_SETPIPE_SZ` and set non-blocking, with the host deliberately stalling mid-frame; both the short-write assertion and the frame body fail on the old transport.
 - **STORY-6.2 DONE and STORY-6.4's network half done (2026-08-08): eleven scenarios green over WiFi on a PYBD_SF6.** `tests/hil/` drives the production command (`mpremote debug <by-id path> target:main`) against the board and speaks DAP to whatever endpoint the handshake reports - no address, board name or device path is hardcoded in the suite, only recorded by the results record as provenance - and it skips unless `MPY_DEBUG_HIL_DEVICE` is set, so `make test` stays host-only. It installs debugpy and the debuggee itself, so a run proves the code in this checkout, and it writes its own results record from pytest's reports rather than from the tests, so a scenario cannot claim green by forgetting to record a failure. Covered: reachable endpoint, handshake caps against a live probe, breakpoint/stack/scopes/locals, a 16 KB response arriving whole, per-iteration loop breakpoints, run-to-completion, a 60 s pause, two consecutive runs, and both step kinds. Three of the four scenarios that failed first time were the harness asserting the wrong thing, and each wrong premise turned out to be a documented behaviour worth pinning (`20260808_epic6_bench.md`); the fourth was a real defect, D4 below. The pause-loop risk-register row is now measured, not open. Still unmet: the serial half of STORY-6.4, and the ESP32/pico_w criteria - no board.
@@ -593,10 +594,21 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-Q11 is open. Q1–Q8 are closed; see DECIDED entries below.
+Q11 and Q12 are open. Q1–Q8 are closed; see DECIDED entries below.
 
 **OPEN:**
 
+- **Q12 (2026-08-08) - how does the firmware manifest express "this build has a
+  second CDC interface"?** It cannot be `serial_dap`: that key deliberately
+  reports which channel a session took, not what a board can do, so it is False
+  on a REPL probe of a board that runs DAP over its second interface perfectly
+  well. But the interface count *is* a firmware property (`MICROPY_HW_USB_CDC_NUM`
+  in the board config), a user picking a variant for STORY-6.1 needs it, and
+  STORY-3.3's rule says the manifest must never claim what a probe would
+  contradict - so whatever key is added needs a probe that can check it, and
+  `pyb.usb_mode()` reports the boot-time choice rather than the build's maximum.
+  Surfaced by the published `stm32-pybd-sf6-debug` artifact predating the flag
+  entirely. Settle with STORY-3.2's republish, since the two land together.
 - **Q11 (2026-08-08) — where is `ensure_debugpy_installed` called from?** The
   STORY-4.1 installer has no production call site: `do_debug` never invokes it,
   so `mpremote debug <device>` assumes debugpy is already on the board. It is
