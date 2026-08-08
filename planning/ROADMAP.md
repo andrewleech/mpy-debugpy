@@ -102,9 +102,13 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   unformatted file. On micropython's integration branch: check clean, but five
   unformatted files, all of them ones this project's lineage introduced
   (`tests/misc/sys_settrace_locals*.py` from `local_names_implementation`,
-  `commands.py` from the `--loop` story, `transport_serial.py` from the mount
-  read bound plus two hunks belonging to the mpremote `pyboard.py` detach
-  commit). None of it is downstream of this session's work, though rewriting
+  `commands.py` from the `--loop` story, and all three `transport_serial.py`
+  hunks from the mount read bound - `git log -L` first attributed two of them
+  to the upstream `pyboard.py` detach commit, but that is what `-L` reports for
+  a line whose content has since moved: upstream master's copy of that file is
+  format-clean, and the two signatures only exceed the line length once
+  `timeout_overall`/`timeout_overall_strict` are added to them).
+  None of it is downstream of this session's work, though rewriting
   `test_vscode.py` added one more `T100`.
   Fixed by cause rather than by blanket suppression: `T100` (flake8-debugger)
   is a false positive by construction inside a debugger package, so it is
