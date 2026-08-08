@@ -20,6 +20,7 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **EPIC-4 phase entry (2026-08-08): the mount the whole device mainline rests on was broken, and no story owned putting it in the debug flow.** `20260808_epic4_phase_entry.md`. `mount_local` swaps a `SerialIntercept` in for the transport's serial object; `read_until` saves and restores the serial-level read timeout, and the substitute carried no such attribute, so every read after a mount raised `AttributeError` - on hardware and on a pty alike. The unconditional read was this project's own `b8d443b4b5` on `mpremote_debug`, a branch destined for upstream, so the regression was ours. Two consequences: STORY-4.5 was never hardware-gated (the pty mount failure recorded against it was this defect, and the full loop is now testable on the host), and an aborted mount wedges a board past software recovery, because Ctrl-C is consumed as filesystem-RPC payload and the REPL never returns - the PYBD needed a power cycle. Separately, `mount_local` has exactly one caller, `do_mount`: `do_debug` mounts nothing, so both remaining EPIC-4 stories presupposed a mount that no story built. STORY-4.3 absorbs establishing it, which is what the roadmap's own D2 collapse text calls "a live-mount attach path". Eviction and re-import confirmed on the PYBD_SF6: `del sys.modules[name]` re-reads the mounted file, no upload, no reset.
 - **The published PYBD firmware cannot run the serial-DAP scenarios, and the manifest does not say so (found 2026-08-08).** `firmware/firmware.toml`'s `stm32-pybd-sf6-debug` is built from `f9d7c96b96`, which is not an ancestor of the current integration tip and predates `MICROPY_HW_USB_CDC_NUM (2)` in `boards/PYBD_SF6/mpconfigboard.h` - so it enumerates one CDC interface and STORY-6.1's path is unreachable on it. The hardware results were produced by a local build of the pinned source (`v1.29.0-preview.702.g2c816215dc`), which the HIL record now names in full rather than by release. Nothing is misverified: `launcher/firmware.py` checks the hash of what the manifest describes, and it describes an older build honestly. What is missing is any way for the manifest to express the second CDC, since the interface count is a firmware property while `serial_dap` deliberately is not. Republishing is STORY-3.2's CI job; the manifest key is a design question that has to be settled with it. New: Q12.
 - **STORY-6.1 criterion 1 met on hardware and STORY-6.4's serial half done (2026-08-08): DAP over the board's own second CDC, plus a fifth defect.** `mpremote debug hil` against a `dap_device` target reaches a breakpoint on a PYBD_SF6 with no address of any kind in the config or on the command line: the device reports `serial:0`, mpremote bridges its second CDC to a loopback port, and the client cannot tell it from the network path. Three separate things had to be true, each found the hard way: the device picks the channel (`dap_stream="board"`), because the host names a tty node and only the device can map that to a runtime object; `pyb.USB_VCP(1)` constructing proves nothing, since it answers from the build-time `MICROPY_HW_USB_CDC_NUM` and only `pyb.usb_mode()` says what boot enumerated; and failing to get the requested stream must raise, since a TCP fallback leaves the device reporting an endpoint the waiting bridge has no client for. Criterion 1 is PYBD_SF6's answer and not the pico_w's; criterion 2 still needs a board with no second CDC. The throughput risk row is now measured: 16 KB in 0.20 s, 81.7 kB/s. Getting there found D5 below. Fourteen HIL scenarios green (`20260808_hil_PYBD_SF6.md`).
 - **A fifth hardware-found defect (2026-08-08): every DAP message over 1024 bytes desynchronised the serial link.** `USB_VCP.write` takes at most `MICROPY_HW_USB_CDC_TX_DATA_SIZE` per call and reports the short count, and `public_api.py` drops the channel timeout to 1 ms once `initialize` is answered. `StreamTransport.send` had a whole-buffer contract: it looped internally and raised when the timeout expired mid-frame, discarding the count of what had already gone out, so `_send_all` retried from offset 0 and resent the prefix. Not a visible error, just a stream the peer can never parse again; bisected by payload size (512 bytes fine, 1024 never answered) and confirmed at the raw layer. `send` now has the socket contract - write once, return the count, EAGAIN only when nothing went out - which is what `_send_all` was already written for. Pinned by `tests/test_s6_1_stream_transport.py` over a pipe shrunk with `F_SETPIPE_SZ` and set non-blocking, with the host deliberately stalling mid-frame; both the short-write assertion and the frame body fail on the old transport.
@@ -594,10 +595,21 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-Q11 and Q12 are open. Q1–Q8 are closed; see DECIDED entries below.
+Q11, Q12 and Q13 are open. Q1–Q8 are closed; see DECIDED entries below.
 
 **OPEN:**
 
+- **Q13 (2026-08-08) - does a device target mount its source by default, and how
+  does one say "the source is already on the board"?** STORY-4.3 makes the mount
+  the delivery mechanism, but the sessions that exist today debug a module the
+  board already holds (`/flash/target.py` in every HIL scenario), and mounting
+  over that changes what runs. Reading "no source root configured" as
+  device-resident keeps those working, at the cost of the mainline flow needing
+  a config key before it does the thing D2 says is the default. The alternative
+  is mounting the config's directory unless told otherwise, which changes
+  behaviour for every existing `mpdebug.toml`. Whichever way it goes, the HIL
+  suite has to state which mode each scenario is exercising rather than inherit
+  a default. Settle when STORY-4.3 lands.
 - **Q12 (2026-08-08) - how does the firmware manifest express "this build has a
   second CDC interface"?** It cannot be `serial_dap`: that key deliberately
   reports which channel a session took, not what a board can do, so it is False
@@ -980,15 +992,24 @@ record, not hand-written. **If STORY-2.1 is YES:** this epic collapses to STORY-
   - dependencies: STORY-4.1, STORY-2.1 (=NO)
   - component: mpremote + wrapper · effort: L · risk: med · model: sonnet
 
-- **STORY-4.3 — Attach-time staleness guard**
+- **STORY-4.3 - Mount-backed attach path, staleness guard, generated pathMappings**
+  - **Rescoped 2026-08-08** at phase entry: `do_debug` mounts nothing, so this story now
+    owns establishing the mount as well as guarding it - the "live-mount attach path" D2's
+    collapse text names. The hash-diff guard is retired with STORY-4.2: under a live mount
+    there is no device copy to compare against, only a mount that did or did not establish.
+    See `20260808_epic4_phase_entry.md`.
   - type: implementation
-  - description: Before a session starts, compare device file hashes to local; on mismatch,
-    hard-warn (or block per config) rather than debugging stale code. Generate the DAP
-    `pathMappings` as absolute paths from the sync record (fixes multi-root ambiguity).
+  - description: Mount the target's source root before the boot script runs, so the device
+    imports the host's files; refuse to attach if the mount did not establish or does not
+    cover the target module; generate the DAP `pathMappings` as absolute paths from the
+    mount record (fixes multi-root ambiguity), reachable by both the attach request and
+    the extension's launch config.
   - acceptance criteria:
-    - [ ] a deliberately stale device file produces a clear warning before attach.
+    - [ ] a device target debugs a file that exists only on the host, reaching a
+      breakpoint on a line that was never uploaded.
     - [ ] pathMappings are generated, absolute, and correct for a multi-root workspace.
-  - dependencies: STORY-4.2 (or STORY-4.1 if mount provides live source)
+    - [ ] the mount is torn down on every exit path, including exception and Ctrl-C.
+  - dependencies: STORY-4.1
   - component: mpremote + wrapper · effort: M · risk: med · model: sonnet
 
 - **STORY-4.4 — Sync tests**
@@ -1012,7 +1033,7 @@ record, not hand-written. **If STORY-2.1 is YES:** this epic collapses to STORY-
     - [ ] editing a mounted source file and restarting the session runs the new code
       with no upload step.
     - [ ] eviction covers the target module and its project-local imports.
-  - dependencies: STORY-2.1 (done), STORY-4.1
+  - dependencies: STORY-2.1 (done), STORY-4.1, STORY-4.3 (establishes the mount)
   - component: mpremote + debugpy · effort: M · risk: med · model: sonnet
 
 ---
@@ -1394,14 +1415,13 @@ parallel.
 7. **STORY-4.2** (if 2.1=NO; needs 4.1), **STORY-5.2** (needs 5.1+3.3) — parallel.
    STORY-4.2 is not reachable (2.1=YES, D2) and **STORY-5.2 is DONE
    (2026-08-05)**, so this step is closed.
-8. **STORY-4.3** (needs 4.2/4.1), **STORY-5.4** (needs 5.1+2.2) — parallel.
-   **STORY-5.4 DONE 2026-08-06.** STORY-4.3 depends on 4.2, which is
-   unreachable (2.1=YES), so read its dependency as 4.1 — check whether
-   attach-time staleness of user source still has scope once mount is the
-   delivery mechanism.
-   **← the frontier is step 9's STORY-5.3** (unix flow), now that its
-   dependencies 5.1/5.2/3.1/EPIC-1 are all done and 5.4 gives it the shared
-   parser to consume.
+8. **STORY-4.3** (needs 4.1), **STORY-5.4** (needs 5.1+2.2) - parallel.
+   **STORY-5.4 DONE 2026-08-06.** STORY-4.3's 4.2 dependency is unreachable
+   (2.1=YES), so it reads as 4.1. **Rescoped 2026-08-08:** the question of
+   whether staleness still has scope under mount is answered - it does not,
+   but nothing mounts either, so the story now owns establishing the mount.
+   **← this is the frontier as of 2026-08-08**, with STORY-4.5 immediately
+   behind it.
 9. **STORY-5.3** (needs 5.1,5.2,3.1,EPIC-1), **STORY-4.4** (needs 4.2,4.3) — parallel.
    **STORY-5.3 DONE 2026-08-06**; STORY-4.4 needs 4.2/4.3, unreachable (2.1=YES).
    **← the frontier is step 10's STORY-5.5** (harness rework: the interleaving
@@ -1417,10 +1437,11 @@ parallel.
     board with no second CDC, and criterion 4's ampremote half.**
 12. **STORY-6.4** (needs 6.1,6.2). Hardware. **Both flows done 2026-08-08 on
     PYBD_SF6, 14 scenarios; open for the rest of the board set.**
-    **← the frontier is STORY-4.3 and STORY-4.5**, which were behind EPIC-6 and
-    are now reachable while the board is on the bench. STORY-8.4 needs no
-    hardware and can run at any point; STORY-8.3 retargets a public PR base and
-    is a user decision, not an autonomous step.
+    **← the frontier moves back to step 8's STORY-4.3, then STORY-4.5.** Both
+    were read as behind EPIC-6; neither is, now that `mpremote mount` works over
+    a pty again (2026-08-08), so both develop on the host with the board
+    confirming. STORY-8.4 needs no hardware and can run at any point; STORY-8.3
+    retargets a public PR base and is a user decision, not an autonomous step.
 13. **STORY-8.1** (needs EPIC-5), **STORY-8.2** (needs EPIC-1) — parallel; can start once
     their epics are green. **BOTH DONE 2026-08-06.**
 14. **STORY-7.1** (needs EPIC-5; resequenced ahead of 4.3 on 2026-08-06).
@@ -1428,9 +1449,10 @@ parallel.
     **← the frontier is step 15's STORY-7.4 and STORY-7.2**, both reachable
     without hardware.
 15. **STORY-7.2**, **STORY-7.3**, **STORY-7.4** (all need 7.1) — parallel.
-    **All DONE 2026-08-07, so EPIC-7 is complete.** Every remaining story needs
-    a board on a bench: EPIC-6's transports and 6.4, STORY-4.3/4.4/4.5 behind
-    them, STORY-8.3 and STORY-8.4.
+    **All DONE 2026-08-07, so EPIC-7 is complete.** Every remaining story was
+    read as needing a board on a bench: EPIC-6's transports and 6.4,
+    STORY-4.3/4.4/4.5 behind them, STORY-8.3 and STORY-8.4. Corrected
+    2026-08-08: 4.3 and 4.5 are not board-gated, and 4.4 is unreachable.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
 
 Notes:
