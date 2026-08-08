@@ -20,6 +20,7 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **EPIC-6 phase entry on real hardware (2026-08-08) — two defects found and fixed; the v1 board set is only one-third present.** `20260808_epic6_bench.md`. Of Q2's three physical boards the bench has `PYBD_SF6` only; `rpi_pico_w` and `ESP32_GENERIC` are registered but offline, and only the PYBD may be flashed, so STORY-6.4's ESP32 and pico_w criteria stay open and unmet - notably ESP32_GENERIC's single-UART, network-only shape, which nothing else here reproduces. What the one board did prove: the manifest → fetch → hash-verify → flash → version → probed-caps chain completes, with `stm32-pybd-sf6-debug`'s claims surviving `capcheck` against the live probe. Getting there took fixing (1) the STORY-4.1 installer's hardcoded `/lib` root, which is ENODEV on a board that mounts its filesystem at `/flash` - now resolved from the target's `sys.path` as `mip` does; and (2) a `save_names` false negative, because `probe_capabilities` read its own frame and so measured whichever compiler produced debugpy rather than the firmware - an `.mpy` install carries no local names (LOCALNAMES_PERSIST is deliberately off), so STORY-3.3's rule rejected a correct manifest. Both were invisible to the unix port and the fake transports, which share the one filesystem shape and compile debugpy from source. New: Q11.
 - **STORY-6.2 is mostly already delivered (2026-08-08); the story stays OPEN for hardware.** Revalidation found no separate network flow to write: `do_debug` branches only on `is_unix`, so `kind = "serial"` and `kind = "network"` take the same connect/raw-REPL/handshake path, and what the kind changes is only which host-resolution rule applies. Criteria 4 and 5 were already covered by s5.4, including against a raw-REPL source with echo. Criterion 3 is covered at the boundary but is unreachable end-to-end here by construction - a pty peer is handed `known_host="127.0.0.1"` because it is a local process, so it can never produce the "no routable address" case; that needs a `socket://`/`rfc2217://` transport (ampremote) or a board. Criterion 2 was the one hardware-free gap and is now closed by `tests/test_s6_2_network_flow.py`, mutation-confirmed. All three open questions decided at phase entry, including one already answered by Q8: `--port 0` is rejected up front, so the handshake port can no longer differ from the bound port. Criterion 1 needs a board.
 - **STORY-6.1 hardware-free portion done (2026-08-07); the story stays OPEN.** `StreamTransport` (device, polled and thread-free) and the localhost<->serial bridge (host, built by generalising `dap_log`'s existing proxy rather than adding a second pump) both work over a pty pair against the unix firmware, and criteria 3, 4-upstream and 5 pass. Criteria 1 and 2 need a board and are untouched. Three caveats recorded in the ticket rather than glossed: the production path cannot activate (probe and detector both return "no" in lockstep, so the two halves meet only in the test); throughput on a real board is unmeasured and is now a risk-register entry; and criterion 4's ampremote half was removed rather than guessed at, since `do_reconnect`'s real signature matched neither candidate. Review caught two tests that asserted nothing and one criterion reported as delivered while the device still wedged.
 - **STORY-7.2 DONE (2026-08-07). EPIC-7 is complete.** A status-bar picker
@@ -588,7 +589,19 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-All questions Q1–Q8 are closed; see DECIDED entries below.
+Q11 is open. Q1–Q8 are closed; see DECIDED entries below.
+
+**OPEN:**
+
+- **Q11 (2026-08-08) — where is `ensure_debugpy_installed` called from?** The
+  STORY-4.1 installer has no production call site: `do_debug` never invokes it,
+  so `mpremote debug <device>` assumes debugpy is already on the board. It is
+  complete and now hardware-proven (`20260808_epic6_bench.md`) but unreachable
+  from the CLI. Candidates: implicit on every device session; a `--install`
+  flag; a separate `mpremote debugpy-install` command. Whatever wires it up must
+  soft-reset between install and session - a `debugpy` already in `sys.modules`
+  survives the install and shadows the new files. Blocks nothing already
+  delivered; gates STORY-6.4's "flash a wiped board and debug it" scenario.
 
 **DECIDED (2026-08-05):**
 
