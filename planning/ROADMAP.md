@@ -20,6 +20,7 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-6.2 is mostly already delivered (2026-08-08); the story stays OPEN for hardware.** Revalidation found no separate network flow to write: `do_debug` branches only on `is_unix`, so `kind = "serial"` and `kind = "network"` take the same connect/raw-REPL/handshake path, and what the kind changes is only which host-resolution rule applies. Criteria 4 and 5 were already covered by s5.4, including against a raw-REPL source with echo. Criterion 3 is covered at the boundary but is unreachable end-to-end here by construction - a pty peer is handed `known_host="127.0.0.1"` because it is a local process, so it can never produce the "no routable address" case; that needs a `socket://`/`rfc2217://` transport (ampremote) or a board. Criterion 2 was the one hardware-free gap and is now closed by `tests/test_s6_2_network_flow.py`, mutation-confirmed. All three open questions decided at phase entry, including one already answered by Q8: `--port 0` is rejected up front, so the handshake port can no longer differ from the bound port. Criterion 1 needs a board.
 - **STORY-6.1 hardware-free portion done (2026-08-07); the story stays OPEN.** `StreamTransport` (device, polled and thread-free) and the localhost<->serial bridge (host, built by generalising `dap_log`'s existing proxy rather than adding a second pump) both work over a pty pair against the unix firmware, and criteria 3, 4-upstream and 5 pass. Criteria 1 and 2 need a board and are untouched. Three caveats recorded in the ticket rather than glossed: the production path cannot activate (probe and detector both return "no" in lockstep, so the two halves meet only in the test); throughput on a real board is unmeasured and is now a risk-register entry; and criterion 4's ampremote half was removed rather than guessed at, since `do_reconnect`'s real signature matched neither candidate. Review caught two tests that asserted nothing and one criterion reported as delivered while the device still wedged.
 - **STORY-7.2 DONE (2026-08-07). EPIC-7 is complete.** A status-bar picker
   over `mpdebug.toml`, selection persisted in `workspaceState`, capability text
@@ -1095,6 +1096,8 @@ end-to-end; a device on WiFi reports its own address; serial devices need no IP.
   - component: mpremote + debugpy · effort: L · risk: high · model: sonnet
 
 - **STORY-6.2 — Network device transport**
+  - **Mostly delivered by s5.3/s5.4; OPEN for hardware (2026-08-08)** — see the
+    ticket's revalidation for what each criterion is covered by.
   - type: implementation
   - description: For `kind=network`: device joins WiFi, boot script reports its DHCP
     address in the handshake over the serial/raw-REPL control plane (or via mDNS), tooling
