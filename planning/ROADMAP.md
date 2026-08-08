@@ -595,21 +595,10 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-Q11, Q12 and Q13 are open. Q1–Q8 are closed; see DECIDED entries below.
+Q11 and Q12 are open. Q1–Q8 and Q13 are closed; see DECIDED entries below.
 
 **OPEN:**
 
-- **Q13 (2026-08-08) - does a device target mount its source by default, and how
-  does one say "the source is already on the board"?** STORY-4.3 makes the mount
-  the delivery mechanism, but the sessions that exist today debug a module the
-  board already holds (`/flash/target.py` in every HIL scenario), and mounting
-  over that changes what runs. Reading "no source root configured" as
-  device-resident keeps those working, at the cost of the mainline flow needing
-  a config key before it does the thing D2 says is the default. The alternative
-  is mounting the config's directory unless told otherwise, which changes
-  behaviour for every existing `mpdebug.toml`. Whichever way it goes, the HIL
-  suite has to state which mode each scenario is exercising rather than inherit
-  a default. Settle when STORY-4.3 lands.
 - **Q12 (2026-08-08) - how does the firmware manifest express "this build has a
   second CDC interface"?** It cannot be `serial_dap`: that key deliberately
   reports which channel a session took, not what a board can do, so it is False
@@ -630,6 +619,25 @@ Q11, Q12 and Q13 are open. Q1–Q8 are closed; see DECIDED entries below.
   soft-reset between install and session - a `debugpy` already in `sys.modules`
   survives the install and shadows the new files. Blocks nothing already
   delivered; gates STORY-6.4's "flash a wiped board and debug it" scenario.
+
+**DECIDED (2026-08-08):**
+
+- **Q13 → a device target mounts only when it names a source root.** A `source`
+  key in `[target.<name>]` names the host directory to mount; absent means
+  device-resident, which is what every HIL scenario needs (`/flash/target.py`)
+  and what keeps existing configs behaving as they do. Relative values resolve
+  against the directory holding `mpdebug.toml`, and `Target.source` is always
+  absolute and realpath-resolved. `mpremote debug --source PATH` covers a
+  literal connect string with no config file, and overrides the key.
+  Rejected: mounting the config's directory unless told otherwise, which
+  silently changes what runs for every existing `mpdebug.toml` and has no
+  defensible default root for a config that does not sit at the project root.
+  D2's "mount is the mainline" is about which loop the docs and the extension
+  steer users to, not a licence to infer a source root nobody wrote down. The
+  key is also what makes `pathMappings` derivable, so a session that mounts is
+  exactly a session that can generate them. Consequence for the HIL suite: each
+  scenario states which mode it exercises rather than inheriting a default.
+  Reasoning in `20260808_epic4_phase_entry.md`; implemented by STORY-4.3.
 
 **DECIDED (2026-08-05):**
 

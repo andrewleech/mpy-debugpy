@@ -133,6 +133,28 @@ serial/network targets, naming this story as what will supply the real one
 consumers now: the DAP attach request the command sends, and the launch config
 the extension builds. Whatever STORY-4.3 produces has to be reachable from both.
 
+## Q13 settled: a target mounts only when it names a source root
+
+A new `source` key in `[target.<name>]` names the host directory to mount.
+Absent means device-resident, which is what every HIL scenario needs
+(`/flash/target.py`) and what keeps existing configs behaving as they do.
+A relative value resolves against the directory holding `mpdebug.toml`; the
+value carried on `Target` is always absolute and realpath-resolved. A
+`--source PATH` option covers the case with no config file at all, and
+overrides the key when both are given.
+
+The alternative - mount the config's directory unless told otherwise - was
+rejected on two counts: it silently changes what runs for every existing
+`mpdebug.toml`, and a config that does not sit at the project root has no
+defensible default root to pick. D2's "mount is the mainline" is a statement
+about which iteration loop the documentation and the extension steer users to,
+not an argument for inferring a source root nobody wrote down.
+
+The cost is that the mainline flow needs one config key before it does the
+thing D2 calls the default. That is the intended trade: the key is also what
+makes `pathMappings` derivable at all, so a session that mounts is exactly a
+session that can generate them.
+
 ## Unfolded mpremote commits
 
 Four commits now sit on the `mpy-debugpy` integration branch without being
