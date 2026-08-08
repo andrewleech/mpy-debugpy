@@ -39,7 +39,7 @@ if str(_SUBMODULE_DIR) not in sys.path:
 
 from mpremote import commands  # noqa: E402
 from mpremote.main import State  # noqa: E402
-from mpremote.transport_serial import SerialTransport  # noqa: E402
+from mpremote.transport_serial import SerialIntercept, SerialTransport  # noqa: E402
 
 _MICROPYTHON = Path(
     os.environ.get(
@@ -402,6 +402,41 @@ def test_read_until_enforces_timeout_on_pty():
 
     assert data == b""
     assert elapsed < 3, f"read_until should not block past its timeout, took {elapsed:.2f}s"
+
+
+def test_read_until_works_through_a_mount_intercept():
+    """`read_until` still reads once a mount has wrapped the serial object.
+
+    `mount_local` substitutes a `SerialIntercept` for the transport's serial
+    object so filesystem RPC is answered from any read. `read_until` saves and
+    restores the serial-level read timeout around its own poll, so the
+    substitute has to carry that attribute through to the real port or every
+    read after a mount fails - which takes `mpremote mount` with it, and the
+    mounted-source debug flow built on it.
+    """
+    master_fd, slave_fd = pty.openpty()
+    slave_path = os.ttyname(slave_fd)
+    transport = SerialTransport(slave_path, baudrate=115200)
+    try:
+        # Exactly what `mount_local` does to the transport, minus the device
+        # side of the mount: the intercept is the only thing between
+        # `read_until` and the port from here on.
+        port = transport.serial
+        transport.serial = SerialIntercept(port, cmd=None)
+
+        os.write(master_fd, b"hello\n")
+        data = transport.read_until(1, b"\n", timeout=2, timeout_overall=2)
+        # `__init__` set this on the port, and `read_until` swapped in its own
+        # value for the duration of the poll; both have to be visible through
+        # the intercept for the save/restore to mean anything.
+        passthrough = transport.serial.timeout
+        port_timeout = port.timeout
+    finally:
+        transport.close()
+        os.close(master_fd)
+
+    assert data == b"hello\n"
+    assert passthrough == port_timeout == 5.0
 
 
 @requires_unix_firmware
