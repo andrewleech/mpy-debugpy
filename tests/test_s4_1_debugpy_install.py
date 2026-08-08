@@ -75,7 +75,7 @@ class FakeTransport:
     as the real transport's `open(path, 'wb')` with no parent directory.
     """
 
-    def __init__(self, mpy_version=6):
+    def __init__(self, mpy_version=6, sys_path=("", ".frozen", "/lib")):
         self.files = {}  # path -> bytes
         self.directories = {"/"}  # existing directories
         self.write_calls = []  # (path, data, verify_hash)
@@ -84,6 +84,7 @@ class FakeTransport:
         self.exec_calls = []  # code strings passed to exec()
         self.simulate_hash_mismatch_paths = set()  # paths where hash verify should fail
         self.mpy_version = mpy_version  # sys.implementation._mpy & 0xFF on this "device"
+        self.sys_path = list(sys_path)  # sys.path on this "device"
 
     def _parent(self, path):
         return path.rsplit("/", 1)[0] or "/"
@@ -175,10 +176,13 @@ class FakeTransport:
     def eval(self, expr):
         """Simulate evaluating an expression on the device.
 
-        Only the mpy-version probe the installer issues is supported.
+        Only the two probes the installer issues are supported: the mpy
+        version and sys.path.
         """
         if "_mpy" in expr:
             return self.mpy_version
+        if expr == "sys.path":
+            return list(self.sys_path)
         raise NotImplementedError(f"FakeTransport.eval does not support: {expr!r}")
 
 
@@ -820,6 +824,108 @@ class TestMpyVersionProbe:
         assert key_v6 != key_v5
 
 
+class RealFirmwareTransport:
+    """A transport backed by a real directory tree, for installs that are then
+    imported by the real unix-port MicroPython."""
+
+    def __init__(self, device_root):
+        self._device_root = device_root
+        # Real target probe: whatever the real unix-port micropython reports
+        # for its own .mpy version, matching what _REAL_MPY_CROSS (built from
+        # the same tree) emits.
+        proc = subprocess.run(
+            [
+                str(_REAL_UNIX_MICROPYTHON),
+                "-c",
+                "import sys; print(getattr(sys.implementation, '_mpy', 0) & 0xFF)",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self._mpy_version = int(proc.stdout.strip())
+
+    def _full_path(self, path):
+        return os.path.join(self._device_root, path.lstrip("/"))
+
+    def fs_readfile(self, path):
+        full_path = self._full_path(path)
+        if not os.path.exists(full_path):
+            raise OSError(f"File not found: {path}")
+        with open(full_path, "rb") as f:
+            return f.read()
+
+    def fs_writefile(self, path, data, chunk_size=256, progress_callback=None, verify_hash=False):
+        full_path = self._full_path(path)
+        # No auto-mkdir: like the real transport's open(path, 'wb'), a missing
+        # parent directory is a hard failure, so callers must
+        # fs_ensure_path_exists first.
+        with open(full_path, "wb") as f:
+            f.write(data)
+        if verify_hash:
+            with open(full_path, "rb") as f:
+                if hashlib.sha256(f.read()).digest() != hashlib.sha256(data).digest():
+                    raise TransportError(f"file transfer verification failed for '{path}'")
+
+    def fs_mkdir(self, path):
+        os.mkdir(self._full_path(path))
+
+    def fs_ensure_path_exists(self, path):
+        split = path.split("/")
+        if not split[0]:
+            split.pop(0)
+            split[0] = "/" + split[0]
+        prefix = ""
+        for i in range(len(split) - 1):
+            prefix += split[i]
+            if not self.fs_exists(prefix):
+                self.fs_mkdir(prefix)
+            prefix += "/"
+
+    def fs_exists(self, path):
+        return os.path.exists(self._full_path(path))
+
+    def fs_rmfile(self, path):
+        os.remove(self._full_path(path))
+
+    def fs_listdir(self, path=""):
+        full_path = self._full_path(path or "/")
+        if not os.path.isdir(full_path):
+            raise OSError(f"Directory not found: {path}")
+        return [
+            _FakeDirEntry(name, 0x4000 if os.path.isdir(os.path.join(full_path, name)) else 0)
+            for name in os.listdir(full_path)
+        ]
+
+    def fs_hashfile(self, path, algo, chunk_size=256):
+        full_path = self._full_path(path)
+        if not os.path.exists(full_path):
+            raise OSError(f"File not found: {path}")
+        with open(full_path, "rb") as f:
+            return getattr(hashlib, algo)(f.read()).digest()
+
+    def exec(self, code, data_consumer=None):
+        pass
+
+    def eval(self, expr):
+        if "_mpy" in expr:
+            return self._mpy_version
+        if expr == "sys.path":
+            return ["", ".frozen", "/lib"]
+        raise NotImplementedError(f"RealFirmwareTransport.eval unsupported: {expr!r}")
+
+
+def _run_micropython(lib_dir, script):
+    return subprocess.run(
+        [str(_REAL_UNIX_MICROPYTHON), "-c", script],
+        env={**os.environ, "MICROPYPATH": lib_dir},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
 @pytest.mark.skipif(
     not (_REAL_MPY_CROSS.is_file() and _REAL_UNIX_MICROPYTHON.is_file() and _REAL_DEBUGPY_PACKAGE.is_dir()),
     reason="real mpy-cross / unix-port micropython / debugpy package not built or checked out",
@@ -831,95 +937,7 @@ class TestIntegration_RealUnixFirmware:
 
     def test_real_firmware_import_debugpy(self, temp_cache_dir):
         with tempfile.TemporaryDirectory(prefix="device_root_") as device_root:
-
-            class RealFirmwareTransport:
-                def __init__(self):
-                    # Real target probe: whatever the real unix-port
-                    # micropython reports for its own .mpy version, matching
-                    # what _REAL_MPY_CROSS (built from the same tree) emits.
-                    proc = subprocess.run(
-                        [
-                            str(_REAL_UNIX_MICROPYTHON),
-                            "-c",
-                            "import sys; print(getattr(sys.implementation, '_mpy', 0) & 0xFF)",
-                        ],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    )
-                    self._mpy_version = int(proc.stdout.strip())
-
-                def _full_path(self, path):
-                    return os.path.join(device_root, path.lstrip("/"))
-
-                def fs_readfile(self, path):
-                    full_path = self._full_path(path)
-                    if not os.path.exists(full_path):
-                        raise OSError(f"File not found: {path}")
-                    with open(full_path, "rb") as f:
-                        return f.read()
-
-                def fs_writefile(self, path, data, chunk_size=256, progress_callback=None, verify_hash=False):
-                    full_path = self._full_path(path)
-                    # No auto-mkdir: like the real transport's
-                    # open(path, 'wb'), a missing parent directory is a hard
-                    # failure, so callers must fs_ensure_path_exists first.
-                    with open(full_path, "wb") as f:
-                        f.write(data)
-                    if verify_hash:
-                        with open(full_path, "rb") as f:
-                            if hashlib.sha256(f.read()).digest() != hashlib.sha256(data).digest():
-                                raise TransportError(f"file transfer verification failed for '{path}'")
-
-                def fs_mkdir(self, path):
-                    os.mkdir(self._full_path(path))
-
-                def fs_ensure_path_exists(self, path):
-                    split = path.split("/")
-                    if not split[0]:
-                        split.pop(0)
-                        split[0] = "/" + split[0]
-                    prefix = ""
-                    for i in range(len(split) - 1):
-                        prefix += split[i]
-                        if not self.fs_exists(prefix):
-                            self.fs_mkdir(prefix)
-                        prefix += "/"
-
-                def fs_exists(self, path):
-                    return os.path.exists(self._full_path(path))
-
-                def fs_rmfile(self, path):
-                    os.remove(self._full_path(path))
-
-                def fs_listdir(self, path=""):
-                    full_path = self._full_path(path or "/")
-                    if not os.path.isdir(full_path):
-                        raise OSError(f"Directory not found: {path}")
-                    return [
-                        _FakeDirEntry(
-                            name,
-                            0x4000 if os.path.isdir(os.path.join(full_path, name)) else 0,
-                        )
-                        for name in os.listdir(full_path)
-                    ]
-
-                def fs_hashfile(self, path, algo, chunk_size=256):
-                    full_path = self._full_path(path)
-                    if not os.path.exists(full_path):
-                        raise OSError(f"File not found: {path}")
-                    with open(full_path, "rb") as f:
-                        return getattr(hashlib, algo)(f.read()).digest()
-
-                def exec(self, code, data_consumer=None):
-                    pass
-
-                def eval(self, expr):
-                    if "_mpy" in expr:
-                        return self._mpy_version
-                    raise NotImplementedError(f"RealFirmwareTransport.eval unsupported: {expr!r}")
-
-            transport = RealFirmwareTransport()
+            transport = RealFirmwareTransport(device_root)
 
             result = ensure_debugpy_installed(
                 transport,
@@ -942,26 +960,52 @@ class TestIntegration_RealUnixFirmware:
             ]
             assert len(mpy_files) == len(_source_files(str(_REAL_DEBUGPY_PACKAGE)))
 
-            lib_dir = os.path.join(device_root, "lib")
-            proc = subprocess.run(
-                [
-                    str(_REAL_UNIX_MICROPYTHON),
-                    "-c",
-                    # A bare `import debugpy` succeeds even with no
-                    # __init__.mpy present (MicroPython falls back to
-                    # importing the directory as a namespace package), so
-                    # the check has to touch an attribute that only exists
-                    # once __init__.mpy has actually run.
-                    "import debugpy; assert debugpy.DEFAULT_PORT and debugpy.listen; print('IMPORT_OK')",
-                ],
-                env={**os.environ, "MICROPYPATH": lib_dir},
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
+            proc = _run_micropython(
+                os.path.join(device_root, "lib"),
+                # A bare `import debugpy` succeeds even with no __init__.mpy
+                # present (MicroPython falls back to importing the directory
+                # as a namespace package), so the check has to touch an
+                # attribute that only exists once __init__.mpy has actually
+                # run.
+                "import debugpy; assert debugpy.DEFAULT_PORT and debugpy.listen; print('IMPORT_OK')",
             )
             assert proc.returncode == 0, proc.stderr
             assert "IMPORT_OK" in proc.stdout
+
+    def test_capability_probe_survives_cross_compilation(self, temp_cache_dir):
+        """An .mpy install must not turn `save_names` into a false negative.
+
+        Local names live in the code object that declares them, so a probe
+        reading its own frame measures whichever compiler produced debugpy.
+        mpy-cross does not persist names (LOCALNAMES_PERSIST is off), so a
+        self-frame probe reports False on any cross-compiled install however
+        the firmware was built - and STORY-3.3's capability rule then rejects
+        a manifest that was telling the truth. This unix build has LOCALNAMES
+        on, so the probe must say so from an .mpy install too.
+        """
+        with tempfile.TemporaryDirectory(prefix="device_root_") as device_root:
+            ensure_debugpy_installed(
+                RealFirmwareTransport(device_root),
+                str(_REAL_DEBUGPY_PACKAGE),
+                mpy_cross=str(_REAL_MPY_CROSS),
+                cache_dir=temp_cache_dir,
+            )
+            lib_dir = os.path.join(device_root, "lib")
+
+            source = _run_micropython(
+                lib_dir,
+                "import sys; sys.path.remove('{}')\n".format(lib_dir)
+                + "sys.path.insert(0, '{}')\n".format(_REAL_DEBUGPY_PACKAGE.parent)
+                + "import debugpy; print(debugpy.get_capabilities())",
+            )
+            assert source.returncode == 0, source.stderr
+            installed = _run_micropython(lib_dir, "import debugpy; print(debugpy.get_capabilities())")
+            assert installed.returncode == 0, installed.stderr
+
+            # Reading the source tree is the control: whatever it reports for
+            # this firmware, the .mpy install has to report the same.
+            assert "'save_names': True" in source.stdout, source.stdout
+            assert "'save_names': True" in installed.stdout, installed.stdout
 
 
 class TestSourceDiscovery:
@@ -1191,6 +1235,90 @@ class TestFastPathIntegrity:
         assert not _read_marker(transport, "/lib/.debugpy-install.json"), (
             "a sweep that could not do its job must not leave a valid marker"
         )
+
+
+class TestDeviceLibDirResolution:
+    """The install target comes from the device's sys.path, not a fixed "/lib".
+
+    Pyboard-style boards mount their filesystem at /flash, so "/lib" is
+    neither creatable (mkdir raises ENODEV) nor importable there.
+    """
+
+    def test_flash_mounted_board_installs_under_flash_lib(
+        self, temp_package_dir, temp_cache_dir, mock_mpy_cross
+    ):
+        transport = FakeTransport(sys_path=["", ".frozen", "/flash", "/flash/lib"])
+        transport.directories.add("/flash")
+
+        assert (
+            ensure_debugpy_installed(
+                transport, temp_package_dir, mpy_cross=mock_mpy_cross, cache_dir=temp_cache_dir
+            )
+            is True
+        )
+
+        written = [c[0] for c in transport.write_calls]
+        assert "/flash/lib/.debugpy-install.json" in written
+        assert all(p.startswith("/flash/lib/") for p in written), written
+        assert len([p for p in written if p.startswith("/flash/lib/debugpy/")]) == _EXPECTED_MPYS
+
+    def test_root_mounted_board_installs_under_lib(self, temp_package_dir, temp_cache_dir, mock_mpy_cross):
+        transport = FakeTransport(sys_path=["", ".frozen", "/lib"])
+
+        assert (
+            ensure_debugpy_installed(
+                transport, temp_package_dir, mpy_cross=mock_mpy_cross, cache_dir=temp_cache_dir
+            )
+            is True
+        )
+
+        assert "/lib/.debugpy-install.json" in [c[0] for c in transport.write_calls]
+
+    def test_read_only_rom_lib_is_not_an_install_target(
+        self, temp_package_dir, temp_cache_dir, mock_mpy_cross
+    ):
+        """A /rom entry is frozen and unwritable, so it must be passed over
+        even when it is the first lib directory on sys.path."""
+        transport = FakeTransport(sys_path=["", "/rom/lib", "/flash/lib"])
+        transport.directories.add("/flash")
+
+        ensure_debugpy_installed(
+            transport, temp_package_dir, mpy_cross=mock_mpy_cross, cache_dir=temp_cache_dir
+        )
+
+        assert all(c[0].startswith("/flash/lib/") for c in transport.write_calls)
+
+    def test_no_lib_dir_on_sys_path_raises(self, temp_package_dir, temp_cache_dir, mock_mpy_cross):
+        """Guessing a path on a target with no lib directory would fail later
+        and less clearly, so the install stops here and names the override."""
+        transport = FakeTransport(sys_path=["", ".frozen"])
+
+        with pytest.raises(CommandError, match="no lib directory in the target's sys.path"):
+            ensure_debugpy_installed(
+                transport, temp_package_dir, mpy_cross=mock_mpy_cross, cache_dir=temp_cache_dir
+            )
+
+        assert transport.write_calls == []
+
+    def test_explicit_paths_skip_the_probe(self, temp_package_dir, temp_cache_dir, mock_mpy_cross):
+        """A caller that names both paths must not be overridden by, or made
+        to depend on, whatever the device reports."""
+        transport = FakeTransport(sys_path=["", ".frozen"])  # probe would raise
+        transport.directories.add("/remote")
+
+        assert (
+            ensure_debugpy_installed(
+                transport,
+                temp_package_dir,
+                mpy_cross=mock_mpy_cross,
+                cache_dir=temp_cache_dir,
+                device_dir="/remote/debugpy",
+                marker_path="/remote/.debugpy-install.json",
+            )
+            is True
+        )
+
+        assert "/remote/.debugpy-install.json" in [c[0] for c in transport.write_calls]
 
 
 class TestDeviceDirGuard:

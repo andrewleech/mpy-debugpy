@@ -7,6 +7,7 @@ set up (no node, or `npm install` never run) rather than failing, since the
 Python side of this repo must stay usable without a node install.
 """
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -38,6 +39,21 @@ def test_s7_1_extension_suite_passes():
         timeout=600,
     )
     assert result.returncode == 0, f"npm test failed:\n{result.stdout}\n{result.stderr}"
-    # A suite that silently ran nothing would otherwise pass this assertion.
-    assert "# fail 0" in result.stdout, result.stdout
-    assert "# pass 0" not in result.stdout, result.stdout
+    # A suite that silently ran nothing exits 0 too, so the counts are checked,
+    # not just the exit status.
+    assert _count(result.stdout, "fail") == 0, result.stdout
+    assert _count(result.stdout, "pass") > 0, result.stdout
+
+
+def _count(stdout: str, label: str) -> int:
+    """Read a `node --test` summary count, whichever reporter produced it.
+
+    The counts line is `# pass 80` under the TAP reporter and `ℹ pass 80`
+    under the spec reporter, and which one is the default varies by node
+    version. Matching the number rather than a formatted line keeps this
+    assertion tied to the suite's result instead of to the node release the
+    machine happens to have.
+    """
+    match = re.search(rf"^[#ℹ]\s*{label}\s+(\d+)\s*$", stdout, re.MULTILINE)
+    assert match is not None, f"no '{label}' count in node --test output:\n{stdout}"
+    return int(match.group(1))
