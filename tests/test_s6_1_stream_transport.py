@@ -40,7 +40,9 @@ _MICROPYPATH = "{}:{}:{}".format(
     _TOP_DIR / "src", _TOP_DIR / "micropython-lib/python-ecosys/debugpy", _TOP_DIR / "micropython-lib"
 )
 _PROBE_SCRIPT = _TOP_DIR / "tests" / "fixtures" / "stream_transport_probe.py"
-_STREAM_DEBUGGEE = _TOP_DIR / "tests" / "fixtures" / "stream_debuggee.py"
+# The shipped boot script, not a stand-in: given a `dap_device` it runs the
+# DAP channel over that stream, which is the product path under test here.
+_BOOT_SCRIPT = _TOP_DIR / "launcher" / "mpy_launch_debugpy.py"
 _TARGET_PY = str(_TOP_DIR / "src" / "target.py")
 _BREAKPOINT_LINE = 80  # src/target.py, main(): the `for` loop calling inspect_local_variables()
 
@@ -172,14 +174,21 @@ def test_reaches_breakpoint_over_stream_transport():
     os.close(slave_fd)  # only the path is needed; the device opens it fresh
 
     proc = subprocess.Popen(
-        [str(_MICROPYTHON), str(_STREAM_DEBUGGEE), slave_path, "target", "main"],
+        [str(_MICROPYTHON), str(_BOOT_SCRIPT), "target", "main", "0", slave_path],
         env=_env(),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
     try:
         deadline = time.monotonic() + 10
-        LineReader(proc.stdout.fileno()).wait_for(lambda ln: "STREAM-READY" in ln, deadline)
+        # The boot script's own handshake line, on stdout as always - the DAP
+        # channel is the pty, so stdout carries only the human-readable output.
+        ready = LineReader(proc.stdout.fileno()).wait_for(
+            lambda ln: ln.startswith("MPDBG-READY "), deadline
+        )
+        payload = json.loads(ready[len("MPDBG-READY ") :])
+        assert payload["host"] == "serial" and payload["port"] == 0, payload
+        assert payload["caps"]["serial_dap"] is True, payload
 
         buf = b""
 

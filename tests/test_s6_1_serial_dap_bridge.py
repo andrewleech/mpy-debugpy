@@ -88,7 +88,7 @@ def _stream_session_boot_script(master_fd, module="target", method="main"):
     """Boot script for a REAL `debugpy` session over `master_fd` (a pty
     inherited via `pass_fds`), standing in for a board's dedicated DAP CDC
     interface - no TCP anywhere in the DAP path, matching
-    `tests/fixtures/stream_debuggee.py` but folded into the raw-REPL exec
+    the shipped boot script's stream mode but folded into the raw-REPL exec
     `do_debug` itself performs, so the whole bridge (`SerialDapBridge`,
     `PumpingProxy`) is exercised unmodified end to end rather than mocked.
     """

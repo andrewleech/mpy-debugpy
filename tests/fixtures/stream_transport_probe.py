@@ -2,7 +2,7 @@
 
 Runs inside a MicroPython (unix port) subprocess against a pair of host-
 supplied pipe fds (inherited, opened by number - the same technique
-`stream_debuggee.py` uses for a pty path). Exercises the socket-shaped
+the boot script uses for a `dap_device` path). Exercises the socket-shaped
 contract directly, independent of any DAP framing on top: `settimeout`
 governing both `recv` and `send`, `recv`'s EAGAIN-vs-EOF distinction, and
 `send` delivering a payload larger than one pipe write in full.

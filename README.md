@@ -73,7 +73,7 @@ Unix:
 ```bash
 make demo             # runs src/target.py under the debug launcher
 # or:
-firmware/.../micropython launcher/mpy_launch_debugpy.py <module> [method] [port]
+firmware/.../micropython launcher/mpy_launch_debugpy.py <module> [method] [port] [dap_device]
 ```
 
 Device: install the debugpy module and copy your source, then run the launcher

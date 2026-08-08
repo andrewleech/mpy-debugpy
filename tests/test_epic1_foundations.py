@@ -56,6 +56,10 @@ def test_epic1_mpdbg_ready_handshake(attach_server, micropython_debuggee):
     )
     for key in (*firmware.KNOWN_CAPABILITIES, "serial_dap"):
         assert isinstance(caps[key], bool), f"caps['{key}'] should be a bool, got {caps[key]!r}"
+    # This session's DAP channel is a TCP socket, so `serial_dap` must say so.
+    # The stream direction is asserted in test_s6_1_stream_transport.py; both
+    # are needed, or a constant satisfies whichever one is written alone.
+    assert caps["serial_dap"] is False, caps
 
 
 @pytest.mark.parametrize("source_file, bp_lines", [(_TARGET_PY, [78])])
