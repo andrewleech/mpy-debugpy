@@ -1527,12 +1527,18 @@ parallel.
     STORY-4.3/4.4/4.5 behind them, STORY-8.3 and STORY-8.4. Corrected
     2026-08-08: 4.3 and 4.5 are not board-gated, and 4.4 is unreachable.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
-    **STORY-8.4 DONE 2026-08-09.** **← the frontier is what is left of this
-    step: STORY-8.3, which retargets a public PR base and is the user's
-    decision.** Nothing else is autonomously reachable: STORY-6.1's criterion 2
-    needs a board with no second CDC (the ESP32 on this bench is offline),
-    STORY-4.4 is unreachable by design, and Q14's extension gap needs the shape
-    decided before it can be built.
+    **STORY-8.4 DONE 2026-08-09**, and closing it closed STORY-6.3's second
+    criterion, which had been deferred to exactly this docs pass. **← the
+    frontier is what is left of this step: STORY-8.3, which retargets a public
+    PR base and is the user's decision.** Nothing else is autonomously
+    reachable: STORY-6.1's criterion 2 needs a board with no second CDC (the
+    ESP32 on this bench is offline), STORY-4.4 is unreachable by design, and
+    Q14's extension gap needs the shape decided before it can be built.
+    One piece of found work is ready but not autonomous: both submodules' ruff
+    jobs are now green on the integration branches (see Status, 2026-08-09), and
+    getting that to the PRs means folding onto the feature branches and pushing
+    the fork - a STORY-8.6-shaped follow-up, and pointless to do locally, since
+    mbm resets those branches to the fork tips on every rebuild.
 
 Notes:
 - The whole of EPIC-3 (firmware) runs in parallel with EPIC-1 and the spikes; it only feeds
