@@ -121,3 +121,62 @@ test("HandshakeScanner.flush treats an unterminated remainder as a final line", 
   const found = scanner.flush();
   assert.deepEqual(found, { host: "127.0.0.1", port: 5678, caps: { settrace: true, set_local: false } });
 });
+
+test("parseHandshakeLine accepts pathMappings field", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": [{"localRoot": "/home/dev/src", "remoteRoot": "/remote"}]}';
+  const h = parseHandshakeLine(line);
+  assert.deepEqual(h.pathMappings, [{ localRoot: "/home/dev/src", remoteRoot: "/remote" }]);
+});
+
+test("parseHandshakeLine rejects pathMappings as non-array", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": "not-an-array"}';
+  assert.throws(() => parseHandshakeLine(line), /pathMappings.*array/i);
+});
+
+test("parseHandshakeLine rejects pathMappings entry missing localRoot", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": [{"remoteRoot": "/remote"}]}';
+  assert.throws(() => parseHandshakeLine(line), /localRoot.*non-empty string/i);
+});
+
+test("parseHandshakeLine rejects pathMappings entry missing remoteRoot", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": [{"localRoot": "/home"}]}';
+  assert.throws(() => parseHandshakeLine(line), /remoteRoot.*non-empty string/i);
+});
+
+test("parseHandshakeLine rejects pathMappings entry with empty localRoot", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": [{"localRoot": "", "remoteRoot": "/remote"}]}';
+  assert.throws(() => parseHandshakeLine(line), /localRoot.*non-empty string/i);
+});
+
+test("parseHandshakeLine rejects pathMappings entry with empty remoteRoot", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": [{"localRoot": "/home", "remoteRoot": ""}]}';
+  assert.throws(() => parseHandshakeLine(line), /remoteRoot.*non-empty string/i);
+});
+
+test("parseHandshakeLine accepts multiple pathMappings entries", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": [{"localRoot": "/home/src", "remoteRoot": "/remote"}, {"localRoot": "/home/tests", "remoteRoot": "/test-remote"}]}';
+  const h = parseHandshakeLine(line);
+  assert.deepEqual(h.pathMappings, [
+    { localRoot: "/home/src", remoteRoot: "/remote" },
+    { localRoot: "/home/tests", remoteRoot: "/test-remote" },
+  ]);
+});
+
+test("parseHandshakeLine omits pathMappings when absent", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}}';
+  const h = parseHandshakeLine(line);
+  assert.equal(h.pathMappings, undefined);
+});
+
+test("parseHandshakeLine rejects pathMappings entry that is not an object", () => {
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": ["not-an-object"]}';
+  assert.throws(() => parseHandshakeLine(line), /pathMappings.*must be an object/i);
+});
+
+test("HandshakeScanner extracts pathMappings from multi-root handshake", () => {
+  const lines: string[] = [];
+  const scanner = new HandshakeScanner((line) => lines.push(line));
+  const line = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {}, "pathMappings": [{"localRoot": "/a", "remoteRoot": "/b"}]}';
+  const found = scanner.push(line + "\n");
+  assert.deepEqual(found?.pathMappings, [{ localRoot: "/a", remoteRoot: "/b" }]);
+});

@@ -5,26 +5,31 @@
  * that hands the result to `vscode.debug.startDebugging`.
  */
 
-import { Handshake } from "./handshake";
+import { Handshake, PathMapping } from "./handshake";
+
+export type { PathMapping };
 
 export interface AttachConfigInput {
   handshake: Handshake;
   /** Debug-session display name; defaults to "MicroPython: Attach". */
   name?: string;
   /**
+   * Absolute local/remote directory pairs, generated host-side and never
+   * hand-written - typically `handshake.pathMappings`, forwarded by the
+   * caller. Takes precedence over `localRoot`/`remoteRoot` below when
+   * non-empty.
+   */
+  pathMappings?: PathMapping[];
+  /**
    * Absolute local directory the IDE edits, and the absolute remote
    * directory the target imports from. Omit both when the caller doesn't
-   * know the two are the same directory (only true today for the unix
-   * flow) - a wrong mapping is worse than none, since debugpy falls back
-   * to sane defaults when `pathMappings` is absent.
+   * know the two are the same directory. Only reached when `pathMappings`
+   * is absent or empty - the fallback for a handshake from an mpremote
+   * build old enough to not generate mappings itself, kept for the unix
+   * flow's identity mapping.
    */
   localRoot?: string;
   remoteRoot?: string;
-}
-
-export interface PathMapping {
-  localRoot: string;
-  remoteRoot: string;
 }
 
 export interface DebugpyAttachConfig {
@@ -52,7 +57,9 @@ export function buildAttachConfig(input: AttachConfigInput): DebugpyAttachConfig
     connect: { host: input.handshake.host, port: input.handshake.port },
     justMyCode: false,
   };
-  if (input.localRoot !== undefined && input.remoteRoot !== undefined) {
+  if (input.pathMappings && input.pathMappings.length > 0) {
+    config.pathMappings = input.pathMappings;
+  } else if (input.localRoot !== undefined && input.remoteRoot !== undefined) {
     config.pathMappings = [{ localRoot: input.localRoot, remoteRoot: input.remoteRoot }];
   }
   return config;

@@ -71,3 +71,66 @@ test("summarizeCapabilities reports editable locals when set_local is true", () 
   const notes = summarizeCapabilities({ set_local: true });
   assert.ok(notes.some((n) => /editable/i.test(n)));
 });
+
+test("buildAttachConfig prefers handshake pathMappings over constructed localRoot/remoteRoot", () => {
+  const handshakeWithMappings: Handshake = {
+    host: "127.0.0.1",
+    port: 5000,
+    caps: {},
+    pathMappings: [
+      { localRoot: "/absolute/mounted/source", remoteRoot: "/remote" },
+    ],
+  };
+  const config = buildAttachConfig({
+    handshake: handshakeWithMappings,
+    pathMappings: handshakeWithMappings.pathMappings,
+    localRoot: "/ignored/local",
+    remoteRoot: "/ignored/remote",
+  });
+  // Should use the passed pathMappings (from handshake), not the localRoot/remoteRoot
+  assert.deepEqual(config.pathMappings, [
+    { localRoot: "/absolute/mounted/source", remoteRoot: "/remote" },
+  ]);
+});
+
+test("buildAttachConfig with empty handshake pathMappings uses localRoot/remoteRoot", () => {
+  const handshakeWithEmptyMappings: Handshake = {
+    host: "127.0.0.1",
+    port: 5000,
+    caps: {},
+    pathMappings: [],
+  };
+  const config = buildAttachConfig({
+    handshake: handshakeWithEmptyMappings,
+    // The empty array from the handshake is forwarded explicitly, the same
+    // way extension.ts's caller does - omitting it here would exercise the
+    // undefined case instead of the empty-array one the test claims to.
+    pathMappings: handshakeWithEmptyMappings.pathMappings,
+    localRoot: "/local",
+    remoteRoot: "/remote",
+  });
+  // Empty pathMappings in handshake should fall back to localRoot/remoteRoot
+  assert.deepEqual(config.pathMappings, [
+    { localRoot: "/local", remoteRoot: "/remote" },
+  ]);
+});
+
+test("buildAttachConfig with multiple handshake pathMappings preserves all", () => {
+  const handshakeWithMultipleMappings: Handshake = {
+    host: "127.0.0.1",
+    port: 5000,
+    caps: {},
+    pathMappings: [
+      { localRoot: "/app", remoteRoot: "/remote-app" },
+      { localRoot: "/tests", remoteRoot: "/remote-tests" },
+    ],
+  };
+  const config = buildAttachConfig({
+    handshake: handshakeWithMultipleMappings,
+    pathMappings: handshakeWithMultipleMappings.pathMappings,
+  });
+  assert.deepEqual(config.pathMappings, [
+    { localRoot: "/app", remoteRoot: "/remote-app" },
+    { localRoot: "/tests", remoteRoot: "/remote-tests" },
+  ]);
+});

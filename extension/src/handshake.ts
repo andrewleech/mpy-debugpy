@@ -8,10 +8,26 @@
 
 export const HANDSHAKE_PREFIX = "MPDBG-READY ";
 
+/** One local/remote directory pair, always absolute on both sides. */
+export interface PathMapping {
+  localRoot: string;
+  remoteRoot: string;
+}
+
 export interface Handshake {
   host: string;
   port: number;
   caps: Record<string, boolean>;
+  /**
+   * The command's own generated mapping between the remote path the target
+   * imports under and the local directory that is its source - a unix
+   * target's identity mapping, or the absolute host directory a serial/network
+   * target mounted. Absent on a handshake from an mpremote build that
+   * predates this field, which callers must treat exactly like an empty
+   * list: fall back to whatever mapping (if any) they synthesized before
+   * this field existed.
+   */
+  pathMappings?: PathMapping[];
 }
 
 /**
@@ -19,7 +35,8 @@ export interface Handshake {
  * handshake. Throws if the line doesn't carry the prefix, its payload isn't
  * valid JSON, or the JSON doesn't match the handshake shape (`host` a
  * non-empty string, `port` an integer 1..65535, `caps` an object of
- * booleans) - a malformed handshake is a defect worth reporting, never a
+ * booleans, `pathMappings` when present a list of absolute local/remote
+ * string pairs) - a malformed handshake is a defect worth reporting, never a
  * silent skip.
  */
 export function parseHandshakeLine(line: string): Handshake {
@@ -34,6 +51,34 @@ export function parseHandshakeLine(line: string): Handshake {
     throw new Error(`malformed MPDBG-READY JSON (${(err as Error).message}): ${payload}`);
   }
   return validate(data, payload);
+}
+
+function validatePathMappings(raw: unknown, payload: string): PathMapping[] | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(raw)) {
+    throw new Error(`malformed MPDBG-READY payload, "pathMappings" must be an array: ${payload}`);
+  }
+  return raw.map((entry, i) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      throw new Error(
+        `malformed MPDBG-READY payload, pathMappings[${i}] must be an object: ${payload}`
+      );
+    }
+    const e = entry as Record<string, unknown>;
+    if (typeof e.localRoot !== "string" || e.localRoot.length === 0) {
+      throw new Error(
+        `malformed MPDBG-READY payload, pathMappings[${i}].localRoot must be a non-empty string: ${payload}`
+      );
+    }
+    if (typeof e.remoteRoot !== "string" || e.remoteRoot.length === 0) {
+      throw new Error(
+        `malformed MPDBG-READY payload, pathMappings[${i}].remoteRoot must be a non-empty string: ${payload}`
+      );
+    }
+    return { localRoot: e.localRoot, remoteRoot: e.remoteRoot };
+  });
 }
 
 function validate(data: unknown, payload: string): Handshake {
@@ -65,7 +110,14 @@ function validate(data: unknown, payload: string): Handshake {
     }
   }
 
-  return { host, port, caps: capsObj as Record<string, boolean> };
+  const pathMappings = validatePathMappings(obj.pathMappings, payload);
+
+  return {
+    host,
+    port,
+    caps: capsObj as Record<string, boolean>,
+    ...(pathMappings !== undefined ? { pathMappings } : {}),
+  };
 }
 
 // A handshake line is short and bounded; a source that never emits a

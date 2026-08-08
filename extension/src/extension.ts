@@ -196,12 +196,11 @@ class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvi
     }
     this.targetPicker.reportHandshake(target, handshake.caps);
 
-    // On unix the child imports the program from the cwd it was spawned in,
-    // so local and remote are the same absolute directory. That identity
-    // mapping is not valid for a serial/network target (the device's own
-    // filesystem doesn't mirror a host path) and there is no sync/mount
-    // record yet (STORY-4.3) to generate the real one, so pathMappings is
-    // left out there and debugpy's own defaults apply.
+    // handshake.pathMappings is mpremote's own generated mapping - a unix
+    // target's identity mapping, or the absolute source root a serial/network
+    // target mounted - and takes precedence whenever present. The
+    // localRoot/remoteRoot fallback below only fires for a handshake from an
+    // mpremote build old enough to predate that field.
     //
     // `target` is a name, not a transport - a `[target.<name>]` in
     // mpdebug.toml can call a "serial" target "unix", or vice versa - so
@@ -215,6 +214,7 @@ class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvi
     const attachConfig = buildAttachConfig({
       handshake,
       name: config.name,
+      pathMappings: handshake.pathMappings,
       ...(isUnixFlow ? { localRoot: cwd, remoteRoot: cwd } : {}),
     });
 
