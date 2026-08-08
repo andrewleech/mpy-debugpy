@@ -1198,10 +1198,16 @@ end-to-end; a device on WiFi reports its own address; serial devices need no IP.
   - component: mpremote + debugpy · effort: L · risk: high · model: sonnet
 
 - **STORY-6.3 — DAP monitor as a `--dap-log` flag**
+  - **DONE 2026-08-06** (flag; see Status), **criterion 2 closed 2026-08-09.**
+    `--dap-log` is `mpremote/dap_log.py`: an interposed localhost proxy, since
+    no TCP transport puts the byte stream through mpremote. The standalone
+    `dap_monitor.py` stays in the module as the no-mpremote fallback - the
+    ticket's revalidation ruled out importing it from mpremote, so retiring it
+    means retiring it as the *documented* workflow, which the docs pass did.
   - type: implementation
   - description: Fold `dap_monitor.py` into the command as `--dap-log`, replacing the
     separate task+config. Works across transports.
-  - acceptance criteria: [ ] `--dap-log` writes DAP traffic for any transport; [ ] the
+  - acceptance criteria: [x] `--dap-log` writes DAP traffic for any transport; [x] the
     standalone monitor task/config is removed from the wrapper.
   - dependencies: STORY-5.1
   - component: mpremote · effort: S · risk: low · model: sonnet

@@ -43,8 +43,8 @@ MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {...}, "pathMappings": [
 Attach VS Code's Python debugger to `127.0.0.1:5678` and set a breakpoint in
 `src/target.py` on line 79, `x = 78` - a good first one, because it is reached
 exactly once. The program stops there, in `main`, before that line has run. It
-does not start running at all until a client has attached and sent
-`configurationDone`, so nothing is missed while you connect.
+does not start running at all until a client has sent `configurationDone`, so
+nothing is missed while you connect.
 
 `PYTHONPATH` is only needed while `mpremote debug` lives on an integration
 branch rather than in a released mpremote; with a released one, `mpremote debug
