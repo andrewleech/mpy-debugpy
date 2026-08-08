@@ -68,23 +68,26 @@ capability-probe doctrine.
 
 ### 3. Start a debug session
 
-Unix:
+`mpremote debug` is the entry point for every transport. It resolves a target,
+starts the program, and prints where to attach:
 
 ```bash
-make demo             # runs src/target.py under the debug launcher
-# or:
-firmware/.../micropython launcher/mpy_launch_debugpy.py <module> [method] [port] [dap_device]
+export PYTHONPATH="$PWD/micropython/tools/mpremote"
+python3 -m mpremote debug unix target:main            # unix port
+python3 -m mpremote debug pico app                    # device, DAP over the network
 ```
 
-Device: install the debugpy module and copy your source, then run the launcher
-on the device:
+The `debug` command lives on the mpremote branches composed into
+`micropython/tools/mpremote`, so run that copy rather than a released
+`mpremote` until it upstreams.
 
-```bash
-uv run launcher/compile_debugpy.py         # cross-compile debugpy to .mpy
-mpremote mip install launcher/debugpy_mpy.json
-mpremote cp -r src/ :/
-mpremote run launcher/mpy_launch_debugpy.py
-```
+A target name comes from an `mpdebug.toml` beside your code; anything that is
+not a target name is treated as a connect string. See
+[`docs/debugging.md`](docs/debugging.md) for the target file, the three
+transports, the `--source`/`--loop` iteration loop, and troubleshooting.
+
+`make demo` runs `src/target.py` through the launcher directly, without
+mpremote, if you want to see the bare handshake.
 
 The launcher prints one machine-readable line once it is ready:
 

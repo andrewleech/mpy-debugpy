@@ -20,6 +20,7 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **STORY-8.4 DONE (2026-08-09): one guide, and writing it found four published documents claiming things the code contradicts.** `docs/debugging.md` covers the target file, the three transports, the `--source`/`--loop` iteration loop, attaching from VS Code, what the probe reports and what each value means in the editor, the measured limitations, and troubleshooting keyed on the error strings `commands.py` actually prints so a user can search for what they saw. Firmware is a link to `docs/firmware.md`, not a second capability table to keep in step. Verified by execution rather than inspection: the quick start ran verbatim from the documented environment to a breakpoint hit at `src/target.py:79` in `main`, the three-target TOML example loaded through the real `mpdebug_config` with all three resolving, and every quoted flag, config key and error string was grepped back - four of the error strings only match once the source's implicit string concatenation is joined, which is exactly how a docs-vs-code check gives a false negative. Four corrections came out of that pass, each a claim a reader would have acted on. (1) The placeholder local-name format is `local_%02d`, 0-based (`py/profile.c:183,207`), so `local_00` first - `_is_placeholder_local_name`'s own docstring said `local_1` and named `MICROPY_PY_SYS_SETTRACE_SAVE_NAMES`, a spelling that is a no-op on this branch, and `BACKGROUND.md` asserted `local_%d` 1-based as a correction *of* the right spelling. Only the runtime check was unaffected, because it tests the digits and not the width. (2) The debugpy module README advertised "Pause/continue execution", which the unimplemented `pause` contradicts, and "locals generally not supported", which `save_names` contradicts. (3) `docs/firmware.md` still marked the PYBD_SF6 row "build intent" although those four values have now been probed off the board - but by a local build of a later tip, not by the `f9d7c96b96` artifact the manifest publishes, so the row says that rather than claiming probe-confirmed, and the guide no longer implies every published artifact was probed. (4) The README's device quick start still described the pre-EPIC-5 manual flow (`compile_debugpy.py`, `cp -r`, `run launcher/...`) and never named `mpremote debug`. Documented and deliberately not fixed: the extension passes neither `--source` nor `--loop`, so the two flows EPIC-4 built are unreachable from an F5 launch. New: Q14.
 - **STORY-4.5 DONE (2026-08-09): an edit on the host is the next run, with no upload and no reset - and the VM had to be fixed twice to allow it.** `mpremote debug --loop --source <dir>` keeps one process, one DAP session and one handshake across many runs of the target: a DAP `restart` unwinds the target, evicts from `sys.modules` everything added since a baseline taken before the first target import, and imports again, so the mount serves the edited file. Verified live over a pty (`tests/test_s4_5_hot_reload.py`, `20260809_story4.5_hot_reload.md`): run 1 reads `total == 3`, one restart later run 2 stops on a line that exists only in the edited submodule and reads `total == 30`, with breakpoints set once before `configurationDone` and never re-sent, `evicted == ["app", "helper"]`, and exactly one `MPDBG-READY` for the session. The eviction set is a snapshot diff rather than the ticket's `__file__`-under-source-root rule: the debugger cannot be in it by construction, it needs no `__file__` (which on a mounted session reads as the device path anyway), and a changed submodule comes back with its parent - the classic hot-reload hole. Two VM-level settrace findings came out of it, both in the #8767 lineage. (1) FIXED in `py/profile.c`/`py/vm.c` (`20260809_settrace_raise_unwind.md`): a trace callback that raises left `mp_prof_is_executing` set forever, so *no* callback was ever invoked again while `sys.settrace`/`gettrace` went on reporting success - which silently disabled every breakpoint after the first restart, since a deliberate raise is the only mechanism on the device that can unwind a running target. The callback is now unset when it raises (CPython's semantics) and `TRACE_TICK` checks the global callback, without which `settrace(None)` did not stop tracing frames already running. (2) NOT fixed, characterised (`20260809_settrace_line_event_fidelity.md`): MicroPython emits one more `line` event for a loop body than it has executions, the extra one *before* the body has run, so a breakpoint in a loop body stops N+1 times; and `return` reports the last line the frame executed, which made a breakpoint on a function's final line stop twice per call until `should_stop` was gated on the event. Also found and not fixed: the DAP `pause` request is answered with success and never stops the target - `paused` is written in three places and read by no stop decision.
 - **STORY-4.3 DONE (2026-08-09): a device debugs a file the board has never held, and the session's ending is now two different claims.** `mpremote debug --source <dir>` mounts that directory at the device's remote-fs mount point before the boot script runs, reports the mapping as absolute `pathMappings` in its handshake, and refuses before touching the device if the directory is missing or the target module does not resolve under it. Green over a pty against the unix firmware and on the PYBD_SF6, where the breakpoint lands in a module the board is first proved unable to import. The extension consumes the handshake's mappings and no longer synthesizes one for a serial or network target. Two defects, both in code the criteria reach rather than in the new path (`20260809_story4.3_mount_teardown.md`): (1) `process_pending_messages` restored the channel's blocking mode in a `finally`, and the loop it guards is what closes that channel while handling `disconnect` - so every ordinary session end raised EBADF into whichever line of the debugged program was being traced, killing it with a traceback naming the debug channel's errno, and mpremote then read that traceback as a device fault and told the user to power-cycle a healthy board. Deterministic, and previously filed as a timing problem. (2) Teardown reported "only a power cycle clears it" for a `TransportExecError`, which by its existence proves the device answered. The two endings are now distinguished: a client that left first leaves a responsive board and teardown says nothing, while a client still holding a paused target leaves a board nothing can reach and gets exactly one bounded, actionable line. Also recorded there: a soft reset ends the unix port's process, so an in-process reachability check written with `enter_raw_repl`'s default destroys the device it is checking.
 - **EPIC-4 phase entry (2026-08-08): the mount the whole device mainline rests on was broken, and no story owned putting it in the debug flow.** `20260808_epic4_phase_entry.md`. `mount_local` swaps a `SerialIntercept` in for the transport's serial object; `read_until` saves and restores the serial-level read timeout, and the substitute carried no such attribute, so every read after a mount raised `AttributeError` - on hardware and on a pty alike. The unconditional read was this project's own `b8d443b4b5` on `mpremote_debug`, a branch destined for upstream, so the regression was ours. Two consequences: STORY-4.5 was never hardware-gated (the pty mount failure recorded against it was this defect, and the full loop is now testable on the host), and an aborted mount wedges a board past software recovery, because Ctrl-C is consumed as filesystem-RPC payload and the REPL never returns - the PYBD needed a power cycle. Separately, `mount_local` has exactly one caller, `do_mount`: `do_debug` mounts nothing, so both remaining EPIC-4 stories presupposed a mount that no story built. STORY-4.3 absorbs establishing it, which is what the roadmap's own D2 collapse text calls "a live-mount attach path". Eviction and re-import confirmed on the PYBD_SF6: `del sys.modules[name]` re-reads the mounted file, no upload, no reset.
@@ -597,10 +598,23 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-Q11 and Q12 are open. Q1–Q8 and Q13 are closed; see DECIDED entries below.
+Q11, Q12 and Q14 are open. Q1–Q8 and Q13 are closed; see DECIDED entries below.
 
 **OPEN:**
 
+- **Q14 (2026-08-09) - how does an F5 launch reach `--source` and `--loop`?**
+  `buildDebugArgs` (`extension/src/command.ts:26`) passes target, program,
+  `--port`, `--timeout`, `--dap-log` and `--dap-log-file` and nothing else, so
+  the two flows EPIC-4 built - debugging a directory the board has never held,
+  and re-running an edit without an upload - are CLI-only. EPIC-7 was marked
+  complete before either flag existed, so this is a gap rather than a defect.
+  What has to be decided is the shape, not whether: launch.json keys mirroring
+  the flags (`source`, `loop`) keep the config the single source of truth but
+  duplicate what a target's `source` key already says; deriving `--source` from
+  the target file instead means the extension passes a flag the user never
+  wrote; and `--loop` changes when a session ends, so a `restart` from the
+  client means something different with it than without. Surfaced by STORY-8.4's
+  docs-vs-code pass, which documented the gap rather than papering over it.
 - **Q12 (2026-08-08) - how does the firmware manifest express "this build has a
   second CDC interface"?** It cannot be `serial_dap`: that key deliberately
   reports which channel a session took, not what a board can do, so it is False
@@ -1349,11 +1363,15 @@ lineages (Josverl vs andrewleech) reconciled.
   - component: mpremote · effort: S · risk: med · model: sonnet
 
 - **STORY-8.4 — User-facing docs**
+  - **DONE 2026-08-09** — `docs/debugging.md`; see Status and
+    `s8.4_user-docs.md` Execution progress. Firmware became a link to
+    `docs/firmware.md` rather than a chapter, per the ticket's 2026-08-09
+    rescope.
   - type: docs
   - description: One "Debug MicroPython" guide covering the three transports, the target
     model, firmware fetch/build, and the honest capability story (no local editing;
     placeholder vs real local names).
-  - acceptance criteria: [ ] guide covers all three transports and firmware; [ ] no
+  - acceptance criteria: [x] guide covers all three transports and firmware; [x] no
     capability claim the probe contradicts.
   - dependencies: EPIC-5, EPIC-6, EPIC-3
   - component: wrapper · effort: M · risk: low · model: sonnet
@@ -1473,6 +1491,12 @@ parallel.
     STORY-4.3/4.4/4.5 behind them, STORY-8.3 and STORY-8.4. Corrected
     2026-08-08: 4.3 and 4.5 are not board-gated, and 4.4 is unreachable.
 16. **STORY-8.3** (needs 8.1,6.4), **STORY-8.4** (needs EPIC-5,6,3) — parallel.
+    **STORY-8.4 DONE 2026-08-09.** **← the frontier is what is left of this
+    step: STORY-8.3, which retargets a public PR base and is the user's
+    decision.** Nothing else is autonomously reachable: STORY-6.1's criterion 2
+    needs a board with no second CDC (the ESP32 on this bench is offline),
+    STORY-4.4 is unreachable by design, and Q14's extension gap needs the shape
+    decided before it can be built.
 
 Notes:
 - The whole of EPIC-3 (firmware) runs in parallel with EPIC-1 and the spikes; it only feeds

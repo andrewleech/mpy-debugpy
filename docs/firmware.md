@@ -33,12 +33,17 @@ claim was checked:
 | --- | --- | --- | --- | --- | --- |
 | `unix-standard-debug` | true | true | false | true | probe-confirmed |
 | `rp2-rpi-pico-w-debug` | true | true | false | true | build intent |
-| `stm32-pybd-sf6-debug` | true | true | false | true | build intent |
+| `stm32-pybd-sf6-debug` | true | true | false | true | build intent; same values probed on PYBD_SF6 hardware from a newer build |
 | `esp32-generic-debug` | true | true | false | true | build intent |
 
 `unix-standard-debug` is the only row checked against a live `MPDBG-READY`
-`caps` dict (fetch the artifact and attach); the three device rows are build
-intent, pending a hardware attach test. "Build intent" for `settrace` and
+`caps` dict produced by the published artifact itself (fetch it and attach).
+The PYBD_SF6 row's four values have been probed off the board and all four
+matched, but by a local build of a later integration tip
+(`v1.29.0-preview.702.g2c816215dc`, `planning/20260809_hil_PYBD_SF6.md`), not
+by the `f9d7c96b96` artifact this manifest publishes — same flags and same
+lineage, so it is evidence for the values and not for the artifact. The other
+two device rows have had no hardware attach test. "Build intent" for `settrace` and
 `save_names` means CI verified the compiled macro before staging the
 artifact (`.github/scripts/verify_capabilities.py`, run per build in
 `.github/workflows/firmware.yml`); each variant's `capabilities_note` in

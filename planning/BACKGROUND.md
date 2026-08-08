@@ -246,6 +246,11 @@ How the dict is populated depends on `MICROPY_PY_SYS_SETTRACE_SAVE_NAMES`:
   (`vstr_printf(..., "local_%d", order_idx + 1)`, `:240`) over the reverse-slot walk. These
   are positional placeholders, not source names. (The docs elsewhere say `local_01`; the
   actual format is `local_%d` with no zero-padding.)
+  **SUPERSEDED (2026-08-09):** the format is zero-padded and 0-based on the current
+  integration tip (`6a3e3f7d84`): `snprintf(var_name, sizeof(var_name), "local_%02d",
+  (int)local_num)` at `py/profile.c:183` (named path, per-slot fallback) and `:207`
+  (whole no-names path), so the first placeholder is `local_00`. The docs elsewhere are
+  right and this note's parenthetical was right only at `05b7818`.
 
 ### 2. `sys` trace primitives (`py/modsys.c`)
 
@@ -350,6 +355,10 @@ elsewhere in this doc describe) or a variant/board that sets them. This contradi
    as positional placeholders.
 5. **Placeholder name format** is `local_%d` (1-based, `py/profile.c:240`), e.g. `local_1`,
    not the `local_01` spelling used in prose elsewhere.
+   **SUPERSEDED (2026-08-09):** `local_%02d`, 0-based, on the current integration tip
+   (`py/profile.c:183,207`) - so `local_00` first, and the prose elsewhere is correct.
+   Consumers should test the digits rather than the width
+   (`debug_session._is_placeholder_local_name` does).
 6. **`co_names` is a dict**, not the CPython tuple-of-names (`py/objcode.c:137-139` returns
    `dict_locals`). Consumers assuming CPython semantics for `co_names` would be wrong.
 7. **`__code__` only under settrace** (`py/objfun.c:374`). Any non-settrace introspection of

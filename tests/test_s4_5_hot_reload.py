@@ -53,7 +53,6 @@ from helpers import (  # noqa: E402
     drain_lines,
     set_breakpoints,
     take_msg,
-    wait_for_msg,
     wait_for_prefixed_line,
 )
 
