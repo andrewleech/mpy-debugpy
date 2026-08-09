@@ -254,9 +254,8 @@ Without `--loop`, a session does not advertise restart support, and a restart
 request is refused with a message saying why, rather than accepted and silently
 ignored.
 
-`--source` and `--loop` are command-line only. The VS Code extension in
-`extension/` does not pass either one, so the mounted-source and hot-reload
-flows are not reachable from an F5 launch today.
+Both flags have launch-configuration equivalents, `source` and `loop`; see
+below.
 
 ## Attaching from VS Code
 
@@ -276,9 +275,26 @@ with nothing typed:
 ```
 
 Configuration keys: `target`, `program`, `port`, `timeout`, `dapLog`,
-`dapLogFile`, `cwd`, `mpremotePath`, `mpremoteArgs`, `env`. The status-bar
-picker selects among `mpdebug.toml` targets and remembers the choice per
-workspace.
+`dapLogFile`, `source`, `loop`, `cwd`, `mpremotePath`, `mpremoteArgs`, `env`.
+The status-bar picker selects among `mpdebug.toml` targets and remembers the
+choice per workspace.
+
+`source` and `loop` are the two command-line flags above. Each maps to its
+flag only when present, so a target that already declares `source` in
+`mpdebug.toml` mounts on F5 without the launch configuration repeating it -
+set the key only to override that, or to mount a directory no target names:
+
+```json
+{
+  "type": "micropython",
+  "request": "launch",
+  "name": "Iterate on device",
+  "target": "pico",
+  "program": "app:main",
+  "source": "${workspaceFolder}/app",
+  "loop": true
+}
+```
 
 Without the extension, run `mpremote debug` yourself and put the host and port
 from its output into a `debugpy` `attach` configuration.

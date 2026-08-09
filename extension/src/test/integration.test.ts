@@ -113,6 +113,54 @@ test(
   }
 );
 
+/**
+ * `--loop` is only reachable from an F5 launch through this argv, and the
+ * flag is the one launch-config property whose value changes what the target
+ * advertises (it is what turns on `supportsRestartRequest`). A handshake
+ * proves the CLI accepts what the extension now emits; the restart round trip
+ * itself belongs to the extension-host suite.
+ */
+test(
+  "the loop option reaches mpremote debug and still handshakes",
+  { skip: available ? false : `no unix firmware at ${FIRMWARE}` },
+  async () => {
+    const { handshake, child } = await runDebugCommand(
+      realSpawn,
+      "mpremote",
+      { target: "unix", program: "target:main", timeout: 30, loop: true },
+      { cwd: REPO, env: debugEnv }
+    );
+    try {
+      assert.equal(handshake.caps.settrace, true);
+      assert.ok(handshake.port > 0);
+    } finally {
+      child.kill();
+    }
+  }
+);
+
+/**
+ * The extension deliberately does not pre-check `source` against the target's
+ * kind - the CLI owns that rule. This asserts the consequence: the CLI's own
+ * message survives the trip back through the captured-output path, so the
+ * user sees why rather than a bare exit code.
+ */
+test(
+  "a source option on a unix target surfaces the command's own rejection",
+  { skip: available ? false : "needs a working mpremote checkout" },
+  async () => {
+    await assert.rejects(
+      runDebugCommand(
+        realSpawn,
+        "mpremote",
+        { target: "unix", program: "target:main", timeout: 10, source: REPO },
+        { cwd: REPO, env: debugEnv }
+      ),
+      /--source is not valid for a unix target/
+    );
+  }
+);
+
 test(
   "runDebugCommand reports the command's own error when the firmware is missing",
   { skip: available ? false : "needs a working mpremote checkout" },

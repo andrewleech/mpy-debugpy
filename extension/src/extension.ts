@@ -28,6 +28,8 @@ interface MicroPythonLaunchConfig extends vscode.DebugConfiguration {
   timeout?: number;
   dapLog?: boolean;
   dapLogFile?: string;
+  source?: string;
+  loop?: boolean;
   cwd?: string;
   mpremotePath?: string;
   mpremoteArgs?: string[];
@@ -142,6 +144,11 @@ class MicroPythonConfigurationProvider implements vscode.DebugConfigurationProvi
       timeout: config.timeout,
       dapLog: config.dapLog,
       dapLogFile: config.dapLogFile,
+      // Absent means "let the CLI decide": a configured target's own
+      // `source` still mounts. Set, it overrides that key, which is why it
+      // is only ever what the user wrote in the launch configuration.
+      source: config.source,
+      loop: config.loop,
     };
 
     let child: ChildProcessLike | undefined;

@@ -64,6 +64,15 @@
                 "type": "string",
                 "description": "Path for --dap-log's JSONL output; requires dapLog."
               },
+              "source": {
+                "type": "string",
+                "description": "Host directory to mount on the device and debug a live view of, instead of the copy the device already holds; relative paths resolve against cwd. Overrides the target's own 'source' in mpdebug.toml, so omit it to use that. Not valid for a unix target."
+              },
+              "loop": {
+                "type": "boolean",
+                "description": "Keep the session alive across re-runs: a restart request re-imports the program, so an edit takes effect with no upload and no reset.",
+                "default": false
+              },
               "cwd": {
                 "type": "string",
                 "description": "Working directory to spawn `mpremote debug` in; also the local/remote pathMappings root for a unix target.",

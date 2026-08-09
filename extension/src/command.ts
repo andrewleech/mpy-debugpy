@@ -20,17 +20,33 @@ export interface MpremoteDebugOptions {
   timeout?: number;
   dapLog?: boolean;
   dapLogFile?: string;
+  /**
+   * Host directory to mount at the device's remote-fs mount point. Absent
+   * means the CLI decides: a configured target's own `source` still mounts,
+   * and a target without one runs whatever the device already holds. Passing
+   * it here overrides a target's `source`, so it is only ever set from an
+   * explicit launch-configuration property, never derived.
+   */
+  source?: string;
+  /** Keep the session alive across re-runs (mpremote debug --loop). */
+  loop?: boolean;
 }
 
 /**
  * Builds argv for `mpremote debug`, options strictly before positionals -
  * `mpremote debug [--port N] [--timeout N] [--dap-log] [--dap-log-file F]
- * [target] [program]`. The returned array starts with "debug"; the caller
- * supplies the executable (`mpremote`) itself.
+ * [--source PATH] [--loop] [target] [program]`. The returned array starts
+ * with "debug"; the caller supplies the executable (`mpremote`) itself.
  */
 export function buildDebugArgs(options: MpremoteDebugOptions): string[] {
   if (options.dapLogFile !== undefined && !options.dapLog) {
     throw new Error("dapLogFile requires dapLog");
+  }
+  // `--source ""` would realpath to the child's cwd on the far side, which is
+  // never what an empty setting means; mpdebug.toml rejects an empty `source`
+  // for the same reason.
+  if (options.source !== undefined && options.source.length === 0) {
+    throw new Error("source must not be empty");
   }
   // mpremote's argparse fills the target/program positionals left to right;
   // a program with no target can't be expressed on the CLI.
@@ -50,6 +66,12 @@ export function buildDebugArgs(options: MpremoteDebugOptions): string[] {
   }
   if (options.dapLogFile !== undefined) {
     args.push("--dap-log-file", options.dapLogFile);
+  }
+  if (options.source !== undefined) {
+    args.push("--source", options.source);
+  }
+  if (options.loop) {
+    args.push("--loop");
   }
   if (options.target !== undefined) {
     args.push(options.target);

@@ -70,6 +70,23 @@ test("buildDebugArgs rejects program without target", () => {
   assert.throws(() => buildDebugArgs({ program: "app:main" }), /target/);
 });
 
+test("buildDebugArgs with --source and --loop, still before the positionals", () => {
+  assert.deepEqual(
+    buildDebugArgs({ source: "/proj/src", loop: true, target: "pico", program: "app:main" }),
+    ["debug", "--source", "/proj/src", "--loop", "pico", "app:main"]
+  );
+});
+
+// Absent is not the same as false: omitting them is what lets a target's own
+// `source` in mpdebug.toml keep deciding, so neither may leak into argv.
+test("buildDebugArgs omits --source and --loop when unset or false", () => {
+  assert.deepEqual(buildDebugArgs({ target: "pico", loop: false }), ["debug", "pico"]);
+});
+
+test("buildDebugArgs rejects an empty source", () => {
+  assert.throws(() => buildDebugArgs({ source: "", target: "pico" }), /source/);
+});
+
 // --- runDebugCommand ---
 
 test("runDebugCommand resolves with the handshake and child on success", async () => {
