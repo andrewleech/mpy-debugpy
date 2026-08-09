@@ -34,6 +34,7 @@ if str(_MPREMOTE_PATH) not in sys.path:
 # branch not composed into mpy-debugpy).
 pytest.importorskip("mpremote.debugpy_install", reason="mpremote_debugpy_install not composed")
 
+from mpremote import debugpy_install
 from mpremote.commands import CommandError
 from mpremote.debugpy_install import (
     _cache_key,
@@ -42,8 +43,10 @@ from mpremote.debugpy_install import (
     _prune_cache,
     _read_marker,
     _source_files,
+    do_debugpy_install,
     ensure_debugpy_installed,
 )
+from mpremote.main import _COMMANDS, argparse_debugpy_install
 from mpremote.transport import TransportError
 
 # The package structure installed by every test: mirrors the real
@@ -1356,6 +1359,93 @@ class TestPruneCache:
         assert not (tmp_path / stale).exists(), "a sibling key directory should be pruned"
         assert (tmp_path / "not-a-key").exists(), "unrelated names must be left alone"
         assert (tmp_path / ("c" * 63)).exists(), "only full 64-hex names are ours"
+
+
+class FakeState:
+    """The slice of mpremote's State that do_debugpy_install touches."""
+
+    def __init__(self, transport):
+        self.transport = transport
+        self.raw_repl_calls = []
+        self.action_count = 0
+
+    def ensure_raw_repl(self, soft_reset=None):
+        self.raw_repl_calls.append(soft_reset)
+
+    def did_action(self):
+        self.action_count += 1
+
+
+def _parse(*argv):
+    return argparse_debugpy_install().parse_args(argv)
+
+
+class TestDebugpyInstallCommand:
+    """`mpremote debugpy-install` - the installer's production call site (Q11)."""
+
+    def test_registered_under_its_own_name(self):
+        assert _COMMANDS["debugpy-install"][0] is do_debugpy_install
+
+    def test_the_flag_parses_ahead_of_the_positional(self):
+        args = _parse("--mpy-cross", "/opt/mpy-cross", "/pkg/debugpy")
+        assert args.mpy_cross == "/opt/mpy-cross"
+        assert args.package_dir == ["/pkg/debugpy"]
+
+    def test_mpy_cross_defaults_to_none_so_the_installer_searches(self):
+        assert _parse("/pkg/debugpy").mpy_cross is None
+
+    def test_a_missing_directory_is_refused(self, tmp_path):
+        state = FakeState(FakeTransport())
+        with pytest.raises(CommandError, match="is not a directory"):
+            do_debugpy_install(state, _parse(str(tmp_path / "nope")))
+        assert state.raw_repl_calls == [], "the device must not be touched to learn this"
+
+    def test_the_containing_folder_is_refused_with_the_package_named(self, tmp_path):
+        """The likely mistake: python-ecosys/debugpy instead of .../debugpy/debugpy."""
+        outer = tmp_path / "python-ecosys-debugpy"
+        (outer / "debugpy").mkdir(parents=True)
+        (outer / "debugpy" / "__init__.py").write_bytes(b"")
+        (outer / "README.md").write_bytes(b"")
+
+        state = FakeState(FakeTransport())
+        with pytest.raises(CommandError, match="did you mean") as excinfo:
+            do_debugpy_install(state, _parse(str(outer)))
+        assert str(outer / "debugpy") in str(excinfo.value)
+
+    def test_an_unrelated_directory_is_refused_without_a_guess(self, tmp_path):
+        state = FakeState(FakeTransport())
+        with pytest.raises(CommandError, match="no __init__.py") as excinfo:
+            do_debugpy_install(state, _parse(str(tmp_path)))
+        assert "did you mean" not in str(excinfo.value)
+
+    def test_installs_once_then_reports_an_up_to_date_device(
+        self, temp_package_dir, temp_cache_dir, mock_mpy_cross, monkeypatch, capsys
+    ):
+        """End to end through the real installer, with the host cache redirected."""
+        monkeypatch.setattr(
+            debugpy_install.platformdirs,
+            "user_cache_dir",
+            lambda **kwargs: temp_cache_dir,
+        )
+        transport = FakeTransport()
+        state = FakeState(transport)
+
+        do_debugpy_install(state, _parse("--mpy-cross", mock_mpy_cross, temp_package_dir))
+
+        assert state.raw_repl_calls == [None], "the command takes mpremote's own reset policy"
+        assert state.action_count == 1, "an action, so mpremote does not fall into a REPL"
+        assert transport.write_calls, "a first install must transfer the package"
+        first = capsys.readouterr().out
+        assert "debugpy installed from" in first
+        assert "soft-reset" in first, "a write that changed anything must say a reset is needed"
+
+        transport.write_calls.clear()
+        do_debugpy_install(state, _parse("--mpy-cross", mock_mpy_cross, temp_package_dir))
+
+        assert transport.write_calls == [], "an up-to-date device must not be rewritten"
+        second = capsys.readouterr().out
+        assert "already up to date" in second
+        assert "soft-reset" not in second, "nothing changed, so nothing shadows anything"
 
 
 if __name__ == "__main__":

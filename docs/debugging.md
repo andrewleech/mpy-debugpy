@@ -99,6 +99,43 @@ that has an `mpdebug.toml`.
 Reference tty devices by `/dev/serial/by-id/<name>`. `/dev/ttyACM*` numbering
 changes when devices are replugged.
 
+## Putting debugpy on a board
+
+`mpremote debug` starts the debug server by importing `debugpy` on the target,
+so the package has to be there already. On the unix port `MICROPYPATH` covers
+it; a board needs the files on its filesystem:
+
+```bash
+mpremote connect <device> debugpy-install micropython-lib/python-ecosys/debugpy/debugpy
+```
+
+The argument is a host directory - the debugpy package itself, the one holding
+`__init__.py`, not the micropython-lib folder wrapping it. The command
+cross-compiles it with mpy-cross, writes only the files whose contents differ
+from the device's copy, and removes anything in its install directory that it
+did not put there. Re-running it against an unchanged tree transfers nothing,
+so it is cheap enough to put in front of every session.
+
+`mpremote mip install debugpy` will be the other route once micropython-lib PR
+#1022 merges and the package reaches the index. It is the right one for a
+release: it fetches `.mpy` built for the target rather than compiling locally.
+It is also the wrong one while the debug server's own sources are what you are
+editing, since it rewrites every file each time and knows nothing about a local
+checkout.
+
+`--mpy-cross PATH` picks the compiler; the default takes `$MPY_CROSS`, then the
+`mpy_cross` package, then `PATH`. The install directory is not selectable: it
+is resolved from the target's own `sys.path`, which is what makes this work on
+a board that mounts at `/flash` rather than `/`.
+
+Installing does not reset the device, and a `debugpy` already imported into
+`sys.modules` shadows the files just written. A separate `mpremote` invocation
+soft-resets on its first command anyway; within one invocation, chain it:
+
+```bash
+mpremote connect <device> debugpy-install <dir> + soft-reset + debug <device> app:main
+```
+
 ## How a session is put together
 
 Two channels, and you only ever name the first one:
