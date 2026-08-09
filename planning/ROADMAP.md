@@ -1615,15 +1615,20 @@ parallel.
     unfolded mpremote commits onto `mpremote_debug` and rebasing it onto
     current master - touched nothing public and were done ahead of that
     decision on 2026-08-09, along with the message rewrite the third gate
-    needs; the branch is ready to push and PR. Nothing else is autonomously
-    reachable: STORY-6.1's criterion 2 needs a board with no second CDC (the
-    ESP32 on this bench is offline), STORY-4.4 is unreachable by design, and
-    Q14's extension gap needs the shape decided before it can be built.
-    One piece of found work is ready but not autonomous: both submodules' ruff
-    jobs are now green on the integration branches (see Status, 2026-08-09), and
-    getting that to the PRs means folding onto the feature branches and pushing
-    the fork - a STORY-8.6-shaped follow-up, and pointless to do locally, since
-    mbm resets those branches to the fork tips on every rebuild.
+    needs; the branch is ready to push and PR. **2026-08-09's reading that the
+    fold work was "pointless to do locally, since mbm resets those branches to
+    the fork tips on every rebuild" was wrong, and both submodules' folds were
+    done on 2026-08-10** (see the two Status entries of that date). The reset
+    hazard is real but is a reason to protect the tip, not to skip the work:
+    `pdb_support` is pushed, so the fork tip *is* the folded tip, and the
+    micropython-lib staging tip is held by the tag
+    `staged/add-debugpy-support-20260810` (`2c52eb3`), which mbm does not
+    touch. Restore from the tag if a rebuild moves the branch.
+    What remains not autonomously reachable: STORY-6.1's criterion 2 needs a
+    board with no second CDC (the ESP32 on this bench is offline), STORY-4.4 is
+    unreachable by design, Q14's extension gap needs the shape decided before it
+    can be built, and the two pushes that would put either fold in front of
+    reviewers are the user's call.
 
 Notes:
 - The whole of EPIC-3 (firmware) runs in parallel with EPIC-1 and the spikes; it only feeds
