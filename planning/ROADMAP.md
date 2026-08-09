@@ -1459,6 +1459,22 @@ lineages (Josverl vs andrewleech) reconciled.
     `CODECONVENTIONS.md`'s standard, which asks for one or two sentences. The
     push to the fork and the PR itself are not done - both are outward-facing
     and neither is needed for the two criteria above.
+  - **2026-08-10, on the fork only, by explicit user decision ("fork + draft
+    PR, stop there"): https://github.com/andrewleech/micropython/pull/51**,
+    draft, `mpremote_debug` at `33c065e033` into `review/mpremote_debug`, which
+    is the fork-internal staging shape STORY-8.3's correction describes.
+    Nothing is opened at `micropython/micropython`. 150 checks pass and 3 fail,
+    and neither failure is the branch's content. Both `build` failures are the
+    `Package mpremote / build` job, which is a fork-only `git describe`
+    artifact: hatch-vcs takes the nearest reachable tag, and this project's own
+    `mpy-debugpy-pin-<sha12>` tags sit on plain master commits in the fork,
+    where they shadow the `v*` tags the version scheme needs. Upstream carries
+    no such tags and the pins are the documented reproducibility mechanism, so
+    they were left alone. `qemu_mips` is a flake on
+    `cmdline/repl_paste.py`: the sibling event's `qemu_mips` job ran the same
+    content to success, and upstream's own `qemu_mips` is green at the shared
+    base `5f2181f938`. The two remaining acceptance criteria stay open, since
+    they are about the upstream PR.
   - dependencies: STORY-8.1, STORY-6.4
   - component: mpremote · effort: S · risk: med · model: sonnet
 
