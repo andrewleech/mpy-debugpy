@@ -34,6 +34,7 @@ import errno
 import json
 import os
 import pty
+import select
 import socket
 import sys
 import threading
@@ -112,7 +113,13 @@ def _stream_session_boot_script(master_fd, module="target", method="main"):
 
 
 def _read_master(fd, n, deadline):
-    """`os.read(fd, n)`, tolerating the pty-hangup window before a bridge opens it.
+    """`os.read(fd, n)` bounded by `deadline`, returning b"" when it passes.
+
+    Every caller loops on a condition until its deadline, so a bounded read
+    turns "the bytes never came" into that loop ending and the assertion below
+    it reporting what did arrive. A bare `os.read` on a blocking master would
+    instead park the test there forever, which is the wedge these tests exist
+    to catch reported as a hung run.
 
     Linux gives EIO reading a pty master while its slave has zero open
     references - the state right after `_open_loopback_pty` closes its own
@@ -121,6 +128,12 @@ def _read_master(fd, n, deadline):
     pty artifact, not something `SerialDapBridge` itself needs to handle.
     """
     while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return b""
+        ready, _, _ = select.select([fd], [], [], remaining)
+        if not ready:
+            return b""
         try:
             return os.read(fd, n)
         except OSError as er:
@@ -248,12 +261,20 @@ class TestSerialDapBridgePump:
                 good_body = b'{"seq": 1}'
                 client.sendall(f"Content-Length: {len(good_body)}\r\n\r\n".encode() + good_body)
 
+                # Both markers are waited for, not just the first: the frame
+                # after the malformed one is the whole claim, and it is the one
+                # that arrives second, so a wait ending at "HELLO" asserts it
+                # against whatever happened to have been read by then.
                 deadline = time.monotonic() + 5
                 received = b""
-                while time.monotonic() < deadline and b"HELLO" not in received:
+                while time.monotonic() < deadline and not (
+                    b"HELLO" in received and good_body in received
+                ):
                     received += _read_master(master_fd, 4096, deadline)
                 assert b"HELLO" in received, f"malformed frame wedged forwarding: {received!r}"
-                assert b'{"seq": 1}' in received
+                assert good_body in received, (
+                    f"the frame after the malformed one never arrived: {received!r}"
+                )
             finally:
                 client.close()
         finally:

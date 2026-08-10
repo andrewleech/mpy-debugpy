@@ -303,11 +303,29 @@ class TestDapProxyResilience:
                 good_body = b'{"seq": 1}'
                 client.sendall(f"Content-Length: {len(good_body)}\r\n\r\n".encode() + good_body)
 
+                # The echo returns both writes, and the second one is the
+                # claim: forwarding continued *past* the malformed header.
+                # Waiting only for "HELLO" would assert that against whatever
+                # had arrived by then.
                 deadline = time.time() + 5
                 received = b""
-                while time.time() < deadline and b"HELLO" not in received:
-                    received += client.recv(4096)
-                assert b"HELLO" in received, "forwarding stopped after the malformed header"
+                while time.time() < deadline and not (
+                    b"HELLO" in received and good_body in received
+                ):
+                    client.settimeout(max(0.05, deadline - time.time()))
+                    try:
+                        chunk = client.recv(4096)
+                    except TimeoutError:
+                        break
+                    if not chunk:
+                        break
+                    received += chunk
+                assert b"HELLO" in received, (
+                    f"forwarding stopped after the malformed header: {received!r}"
+                )
+                assert good_body in received, (
+                    f"the frame after the malformed one never arrived: {received!r}"
+                )
         finally:
             proxy.close()
             echo_listener.close()
