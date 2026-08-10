@@ -102,30 +102,30 @@ def wait_for_prefixed_line(sink, prefix, timeout):
     return None
 
 
-def wait_for_msg(server, *, count=0, event="", response="", timeout=5):
-    """Wait for a specific message, or number of messages, to be received.
+def wait_for_msg(server, *, event="", response="", timeout=5):
+    """Wait for a specific message; return it, or None if it never arrives.
 
-    Returns the matching message for an `event`/`response` wait (None if it
-    never arrives), so callers can use what the wait matched rather than
-    re-reading `rcv_messages[-1]` and racing an event that landed after it.
-    Count mode still returns a bool.
+    Callers use what the wait matched rather than re-reading
+    `rcv_messages[-1]` and racing an event that landed after it.
 
-    Matching itself is unchanged: this still waits for the awaited message to
-    be the most recent one, so a test triggering the same event or response
-    twice must `clear_messages()` in between. Making the match order-insensitive
-    is the open harness question in the risk register - two attempts measured
-    no better than this, so it is not folded in here.
+    A wait naming neither an event nor a response is a `ValueError`, not a wait
+    for anything that arrives: a success value that does not say what was found
+    makes `assert wait_for_msg(...)` pass on a timeout.
+
+    Matching still requires the awaited message to be the *most recent* one, so
+    a test triggering the same event or response twice must `clear_messages()`
+    in between; `take_msg` is the cursor-based alternative. Making the match
+    order-insensitive is the open harness question in the risk register - two
+    attempts measured no better than this, so it is not folded in here.
     """
+    if not event and not response:
+        raise ValueError("wait_for_msg needs event or response")
     t1 = time.time()
     server.run_single()
     while not server.rcv_messages and time.time() - t1 < timeout:
         time.sleep(0.1)
         server.run_single()
-    if count > 0:
-        while time.time() - t1 < timeout and len(server.rcv_messages) < count:
-            time.sleep(0.1)
-            server.run_single()
-    elif event:
+    if event:
         while time.time() - t1 < timeout and not (
             server.rcv_messages[-1].type == "event" and server.rcv_messages[-1].event == event
         ):
@@ -137,17 +137,15 @@ def wait_for_msg(server, *, count=0, event="", response="", timeout=5):
         ):
             time.sleep(0.1)
             server.run_single()
-    if event or response:
-        if not server.rcv_messages:
-            return None
-        last = server.rcv_messages[-1]
-        matched = (
-            last.type == "event" and last.event == event
-            if event
-            else last.type == "response" and last.command == response
-        )
-        return last if matched else None
-    return len(server.rcv_messages) >= count
+    if not server.rcv_messages:
+        return None
+    last = server.rcv_messages[-1]
+    matched = (
+        last.type == "event" and last.event == event
+        if event
+        else last.type == "response" and last.command == response
+    )
+    return last if matched else None
 
 
 def set_breakpoints(
@@ -156,12 +154,12 @@ def set_breakpoints(
     bp_lines: list[int],
     wait=False,
 ):
-    """Set breakpoints in the debug server.
-    This fixture uses the attach_server fixture to set
-    breakpoints in the debug server.
-    It can be parameterized with:
-    - source_file: The source file to set breakpoints in.
-    - bp_lines: The lines to set breakpoints on.
+    """Send a `setBreakpoints` request naming `bp_lines` as the whole set for
+    `source_file`.
+
+    Returns the response only when `wait` is set, and None if it never arrived;
+    a fire-and-forget call returns None too, so `assert set_breakpoints(...)`
+    cannot pass on a request nobody confirmed.
     """
     client = server.client
 
@@ -221,7 +219,6 @@ def set_breakpoints(
         source_modified=False,
     )
 
-    # Wait for the setBreakpoints response
     if not wait:
-        return True
+        return None
     return wait_for_msg(server, response="setBreakpoints")
