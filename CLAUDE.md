@@ -42,6 +42,22 @@ Rules that keep mbm safe here (learned the hard way, full detail in
   `mpy-debugpy` and push to the `andrewleech` fork by hand.
 - mbm force-moves local feature branches to rebased versions as a side
   effect; reset them to the canonical fork tips afterwards.
+- A rebuild is not unattended. `git merge` exits non-zero on any conflict, and
+  a rerere-replayed resolution is still a conflict, so mbm prints
+  `Error: git merge failed` and stops with the merge staged but uncommitted.
+  `mbm rebase --resume` only knows how to continue an in-progress *rebase*: it
+  continues a `rebase-merge` directory if it finds one and otherwise starts at
+  the branch *after* the index in `.git/mbm-rebase-state.json`, so an
+  uncommitted merge is skipped rather than finished. Commit it by hand first,
+  in mbm's own format
+  (`<integration>: Merge branch '<name>'.`, the branch title wrapped to 75,
+  then `MBM-URL:` and `Signed-off-by:` - copy the previous rebuild's message
+  for that branch), then resume.
+- To prove a composition change replays without moving the pin, rebuild with
+  `--target <the base the pin already sits on>` rather than `upstream/master`;
+  `git diff <pin> mpy-debugpy_update` empty is then a statement about the
+  composition alone. `git rev-parse` the local branch tips first: restoring
+  them afterwards is a diff against that list.
 
 `git rerere` records conflict resolutions so rebuilds replay them. After a
 manual conflict resolution during `add-pr`, fast-forward the integration branch
