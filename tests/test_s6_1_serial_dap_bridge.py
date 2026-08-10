@@ -35,7 +35,6 @@ import json
 import os
 import pty
 import socket
-import subprocess
 import sys
 import threading
 import time
@@ -58,6 +57,7 @@ from mpremote.mpdebug_config import Target  # noqa: E402
 from mpremote.transport_serial import SerialTransport  # noqa: E402
 
 from helpers import PerfServer, set_breakpoints, wait_for_msg  # noqa: E402
+from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
     os.environ.get(
@@ -461,30 +461,14 @@ class TestDoDebugSerialDapBridge:
         bridge's endpoint as soon as it's reported (both real seams `do_debug`
         already calls through, not new test-only hooks).
 
-        Returns `(future, reported_holder, control_master_fd, control_proc,
-        device_master_fd)`; the caller drives the client against
-        `reported_holder` once populated, then resolves `future`.
+        Returns `(future, reported_holder, control_device, device_master_fd,
+        transport)`; the caller drives the client against `reported_holder`
+        once populated, then resolves `future`.
         """
-        control_master_fd, control_slave_fd = pty.openpty()
-        control_slave_path = os.ttyname(control_slave_fd)
+        control_device = PtyDevice(_MICROPYTHON).start()
         device_master_fd, device_slave_path = _open_loopback_pty()
 
-        env = os.environ.copy()
-        import subprocess
-
-        proc = subprocess.Popen(
-            [str(_MICROPYTHON)],
-            stdin=control_master_fd,
-            stdout=control_master_fd,
-            stderr=control_master_fd,
-            env=env,
-            close_fds=True,
-        )
-        os.close(control_master_fd)
-        os.close(control_slave_fd)
-        time.sleep(0.3)  # let the interpreter start its REPL before talking to it
-
-        transport = SerialTransport(control_slave_path, baudrate=115200)
+        transport = SerialTransport(control_device.path, baudrate=115200)
         state = State()
         state.transport = transport
         commands.do_resume(state)  # the unix build exits on a raw-REPL soft reset
@@ -492,7 +476,7 @@ class TestDoDebugSerialDapBridge:
         resolved = Target(
             name="bench",
             kind="serial",
-            device=control_slave_path,
+            device=control_device.path,
             dap_device=device_slave_path,
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
@@ -532,7 +516,7 @@ class TestDoDebugSerialDapBridge:
         )()
 
         future = _DaemonFuture(commands.do_debug, state, args)
-        return future, reported_holder, proc, device_master_fd, transport
+        return future, reported_holder, control_device, device_master_fd, transport
 
     def _wait_for_report(self, reported_holder, timeout=10):
         deadline = time.monotonic() + timeout
@@ -542,19 +526,14 @@ class TestDoDebugSerialDapBridge:
             time.sleep(0.05)
         pytest.fail("do_debug never reported the bridge's endpoint")
 
-    def _cleanup(self, proc, device_master_fd, transport=None):
+    def _cleanup(self, control_device, device_master_fd, transport=None):
         # `transport` closes before the process it talks to is torn down:
-        # once `proc` dies, the control-plane pty's master side goes away
+        # once the device dies, the control-plane pty's master side goes away
         # and toggling RTS on the (now orphaned) slave through `transport`
         # raises EIO.
         if transport is not None:
             transport.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
-            proc.wait(timeout=5)
+        control_device.close()
         try:
             os.close(device_master_fd)
         except OSError:
@@ -567,7 +546,7 @@ class TestDoDebugSerialDapBridge:
             'print("MPDBG-READY " + json.dumps('
             '{"host": "serial", "port": 1, "caps": {"serial_dap": True}}))\n'
         )
-        future, reported_holder, proc, device_master_fd, transport = self._run_do_debug(
+        future, reported_holder, control_device, device_master_fd, transport = self._run_do_debug(
             monkeypatch, boot_script
         )
         try:
@@ -591,7 +570,7 @@ class TestDoDebugSerialDapBridge:
             final = future.result(timeout=10)
             assert final["host"] == reported["host"] and final["port"] == reported["port"]
         finally:
-            self._cleanup(proc, device_master_fd, transport)
+            self._cleanup(control_device, device_master_fd, transport)
 
     def test_dap_device_without_serial_dap_cap_is_a_hard_error(self, monkeypatch):
         """A configured `dap_device` the probe doesn't confirm must fail loudly."""
@@ -600,14 +579,14 @@ class TestDoDebugSerialDapBridge:
             'print("MPDBG-READY " + json.dumps('
             '{"host": "serial", "port": 1, "caps": {"serial_dap": False}}))\n'
         )
-        future, reported_holder, proc, device_master_fd, transport = self._run_do_debug(
+        future, reported_holder, control_device, device_master_fd, transport = self._run_do_debug(
             monkeypatch, boot_script
         )
         try:
             with pytest.raises(commands.CommandError, match="serial_dap"):
                 future.result(timeout=10)
         finally:
-            self._cleanup(proc, device_master_fd, transport)
+            self._cleanup(control_device, device_master_fd, transport)
 
     def test_board_reset_mid_session_is_a_clear_error_without_reconnect(self, monkeypatch):
         """Losing the device mid-session ends the session with a plain error.
@@ -622,7 +601,7 @@ class TestDoDebugSerialDapBridge:
             'print("MPDBG-READY " + json.dumps('
             '{"host": "serial", "port": 1, "caps": {"serial_dap": True}}))\n'
         )
-        future, reported_holder, proc, device_master_fd, transport = self._run_do_debug(
+        future, reported_holder, control_device, device_master_fd, transport = self._run_do_debug(
             monkeypatch, boot_script
         )
         try:
@@ -642,15 +621,9 @@ class TestDoDebugSerialDapBridge:
             finally:
                 client.close()
         finally:
-            if device_master_fd != -1:
-                self._cleanup(proc, device_master_fd, transport)
-            else:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except Exception:
-                    proc.kill()
-                    proc.wait(timeout=5)
+            # `device_master_fd` is -1 when the test closed it to stage the
+            # loss; `_cleanup` tolerates that.
+            self._cleanup(control_device, device_master_fd, transport)
 
 
 @requires_unix_firmware
@@ -673,7 +646,8 @@ class TestDoDebugSerialDapBridgeRealSession:
         """Wire `do_debug`'s serial path to a real `debugpy` session on a
         second pty standing in for a dedicated DAP CDC interface.
 
-        Returns `(future, reported_holder, proc, transport, bridge_holder)`.
+        Returns `(future, reported_holder, control_device, transport,
+        bridge_holder, device_slave_fd)`.
         Unlike `TestDoDebugSerialDapBridge._run_do_debug`, the *device* (not
         the test) holds the data-plane pty's master fd, since a real session
         has to run somewhere real - the unix firmware process started here.
@@ -681,8 +655,6 @@ class TestDoDebugSerialDapBridgeRealSession:
         bridge (a real seam it already calls through, wrapped here purely to
         observe it - not to replace any of its behaviour).
         """
-        control_master_fd, control_slave_fd = pty.openpty()
-        control_slave_path = os.ttyname(control_slave_fd)
         device_master_fd, device_slave_fd = pty.openpty()
         # Raw mode: a DAP frame is length-prefixed binary-ish data, not
         # terminal input - canonical-mode echo would corrupt it. This is the
@@ -691,38 +663,26 @@ class TestDoDebugSerialDapBridgeRealSession:
         # of the slave path).
         tty.setraw(device_slave_fd)
         device_slave_path = os.ttyname(device_slave_fd)
-        # Kept open (unlike `_open_loopback_pty`) for this whole session: a
-        # pty slave with zero open references makes the master's next
-        # read/poll return EIO (see `_read_master`'s docstring) - closing it
-        # now, before `SerialDapBridge` lazily reopens it on first client
-        # connect, would open exactly that window and hand the device a
+        # `device_slave_fd` is kept open (unlike `_open_loopback_pty`) for this
+        # whole session: a pty slave with zero open references makes the
+        # master's next read/poll return EIO (see `_read_master`'s docstring) -
+        # closing it now, before `SerialDapBridge` lazily reopens it on first
+        # client connect, would open exactly that window and hand the device a
         # spurious EIO before any real client byte ever arrives. A pty slave
         # tolerates more than one opener, so holding this one alongside the
         # bridge's own is harmless as long as this side never reads/writes it.
-        env = os.environ.copy()
-        env["MICROPYPATH"] = _MICROPYPATH
-
-        proc = subprocess.Popen(
-            [str(_MICROPYTHON)],
-            stdin=control_master_fd,
-            stdout=control_master_fd,
-            stderr=control_master_fd,
-            env=env,
-            close_fds=True,
-            pass_fds=(device_master_fd,),
-        )
-        os.close(control_master_fd)
-        os.close(control_slave_fd)
+        control_device = PtyDevice(
+            _MICROPYTHON, _MICROPYPATH, pass_fds=(device_master_fd,)
+        ).start()
         os.close(device_master_fd)  # the child now owns its own reference
-        time.sleep(0.3)  # let the interpreter start its REPL before talking to it
 
-        transport = SerialTransport(control_slave_path, baudrate=115200)
+        transport = SerialTransport(control_device.path, baudrate=115200)
         state = State()
         state.transport = transport
         commands.do_resume(state)  # the unix build exits on a raw-REPL soft reset
 
         resolved = Target(
-            name="bench", kind="serial", device=control_slave_path, dap_device=device_slave_path
+            name="bench", kind="serial", device=control_device.path, dap_device=device_slave_path
         )
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
 
@@ -769,7 +729,7 @@ class TestDoDebugSerialDapBridgeRealSession:
         )()
 
         future = _DaemonFuture(commands.do_debug, state, args)
-        return future, reported_holder, proc, transport, bridge_holder, device_slave_fd
+        return future, reported_holder, control_device, transport, bridge_holder, device_slave_fd
 
     def _wait_for_report(self, reported_holder, timeout=10):
         deadline = time.monotonic() + timeout
@@ -779,17 +739,12 @@ class TestDoDebugSerialDapBridgeRealSession:
             time.sleep(0.05)
         pytest.fail("do_debug never reported the bridge's endpoint")
 
-    def _cleanup(self, proc, device_slave_fd, transport=None):
+    def _cleanup(self, control_device, device_slave_fd, transport=None):
         # `transport` closes before the process it talks to is torn down -
         # see the sibling `_cleanup` above for why order matters here.
         if transport is not None:
             transport.close()
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except Exception:
-            proc.kill()
-            proc.wait(timeout=5)
+        control_device.close()
         if device_slave_fd != -1:
             os.close(device_slave_fd)
 
@@ -799,7 +754,7 @@ class TestDoDebugSerialDapBridgeRealSession:
         session (running over the second pty, not TCP) to a breakpoint stop
         - through the actual `SerialDapBridge`, not a hand-rolled pump.
         """
-        future, reported_holder, proc, transport, _bridge_holder, device_slave_fd = (
+        future, reported_holder, control_device, transport, _bridge_holder, device_slave_fd = (
             self._spawn_stream_session(monkeypatch)
         )
         try:
@@ -829,7 +784,7 @@ class TestDoDebugSerialDapBridgeRealSession:
             final = future.result(timeout=10)
             assert final["host"] == reported["host"] and final["port"] == reported["port"]
         finally:
-            self._cleanup(proc, device_slave_fd, transport)
+            self._cleanup(control_device, device_slave_fd, transport)
 
     def test_killing_the_bridge_while_stopped_leaves_the_device_usable(self, monkeypatch):
         """Killing the bridge while the device is stopped at a breakpoint
@@ -837,8 +792,8 @@ class TestDoDebugSerialDapBridgeRealSession:
         cleanly closed, per the ticket) - not spinning forever unable to
         ever resume.
         """
-        future, reported_holder, proc, transport, bridge_holder, device_slave_fd = self._spawn_stream_session(
-            monkeypatch
+        future, reported_holder, control_device, transport, bridge_holder, device_slave_fd = (
+            self._spawn_stream_session(monkeypatch)
         )
         try:
             reported = self._wait_for_report(reported_holder)
@@ -881,4 +836,4 @@ class TestDoDebugSerialDapBridgeRealSession:
             finally:
                 server.stop()
         finally:
-            self._cleanup(proc, device_slave_fd, transport)
+            self._cleanup(control_device, device_slave_fd, transport)

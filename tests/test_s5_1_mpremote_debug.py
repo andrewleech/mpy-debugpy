@@ -33,13 +33,17 @@ import pytest
 
 _TOP_DIR = Path(__file__).resolve().parents[1]
 _SUBMODULE_DIR = _TOP_DIR / "micropython" / "tools" / "mpremote"
+_TESTS_DIR = Path(__file__).resolve().parent
 
-if str(_SUBMODULE_DIR) not in sys.path:
-    sys.path.insert(0, str(_SUBMODULE_DIR))
+for _dir in (_SUBMODULE_DIR, _TESTS_DIR):
+    if str(_dir) not in sys.path:
+        sys.path.insert(0, str(_dir))
 
 from mpremote import commands  # noqa: E402
 from mpremote.main import State  # noqa: E402
 from mpremote.transport_serial import SerialIntercept, SerialTransport  # noqa: E402
+
+from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
     os.environ.get(
@@ -523,33 +527,14 @@ def test_debug_reports_missing_debugpy_on_device(free_tcp_port):
     Exercises the two-channel raw-REPL framing against the real interpreter: a
     fake transport cannot prove the stderr chunk is actually read off the wire.
     """
-    master_fd, slave_fd = pty.openpty()
-    slave_path = os.ttyname(slave_fd)
-    env = dict(os.environ)
-    env["MICROPYPATH"] = ""  # debugpy deliberately unreachable
-
-    proc = subprocess.Popen(
-        [str(_MICROPYTHON)],
-        stdin=master_fd,
-        stdout=master_fd,
-        stderr=master_fd,
-        env=env,
-        close_fds=True,
-    )
-    os.close(master_fd)
-    os.close(slave_fd)
+    # an empty MICROPYPATH makes debugpy deliberately unreachable
+    device = PtyDevice(_MICROPYTHON, "").start()
     try:
-        time.sleep(0.3)  # let the interpreter start its REPL before talking to it
         code, stdout, stderr = _mpremote_cmd(
-            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "5", slave_path, "mod:main"]
+            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "5", device.path, "mod:main"]
         )
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=2)
+        device.close()
 
     assert code != 0, f"expected failure; stdout: {stdout}"
     assert "debugpy" in stderr, f"the device's ImportError should reach the error; got: {stderr}"
@@ -684,35 +669,15 @@ def test_port_before_positionals_takes_effect(free_tcp_port):
     port the device actually bound to still reaches that error message,
     which is what proves `--port` took effect here.
     """
-    master_fd, slave_fd = pty.openpty()
-    slave_path = os.ttyname(slave_fd)
-    env = dict(os.environ)
-    env["MICROPYPATH"] = _MICROPYPATH
-
-    proc = subprocess.Popen(
-        [str(_MICROPYTHON)],
-        stdin=master_fd,
-        stdout=master_fd,
-        stderr=master_fd,
-        env=env,
-        close_fds=True,
-    )
-    os.close(master_fd)
-    os.close(slave_fd)
+    device = PtyDevice(_MICROPYTHON, _MICROPYPATH).start()
     try:
-        time.sleep(0.3)  # let the interpreter start its REPL before talking to it
         start = time.monotonic()
         code, stdout, stderr = _mpremote_cmd(
-            ["resume", "debug", "--port", str(free_tcp_port), slave_path, "mod:main"]
+            ["resume", "debug", "--port", str(free_tcp_port), device.path, "mod:main"]
         )
         elapsed = time.monotonic() - start
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=2)
+        device.close()
 
     # listen() returns as soon as the socket is bound, before any client
     # connects, so the handshake is readable without a client. The device
@@ -738,31 +703,11 @@ def test_debug_with_default_port_reads_handshake():
     The device binds the wildcard and a pty peer is local, so the reported
     endpoint resolves to loopback on that default port.
     """
-    master_fd, slave_fd = pty.openpty()
-    slave_path = os.ttyname(slave_fd)
-    env = dict(os.environ)
-    env["MICROPYPATH"] = _MICROPYPATH
-
-    proc = subprocess.Popen(
-        [str(_MICROPYTHON)],
-        stdin=master_fd,
-        stdout=master_fd,
-        stderr=master_fd,
-        env=env,
-        close_fds=True,
-    )
-    os.close(master_fd)
-    os.close(slave_fd)
+    device = PtyDevice(_MICROPYTHON, _MICROPYPATH).start()
     try:
-        time.sleep(0.3)  # let the interpreter start its REPL before talking to it
-        code, stdout, stderr = _mpremote_cmd(["resume", "debug", slave_path, "mod:main"])
+        code, stdout, stderr = _mpremote_cmd(["resume", "debug", device.path, "mod:main"])
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=2)
+        device.close()
 
     assert code == 0, f"expected success; stdout: {stdout}; stderr: {stderr}"
     # debugpy.DEFAULT_PORT (micropython-lib python-ecosys/debugpy/debugpy/common/constants.py).
@@ -786,35 +731,16 @@ def test_timeout_before_positionals_takes_effect(tmp_path, free_tcp_port):
     stub_dir.mkdir()
     (stub_dir / "debugpy.py").write_text("def listen(*args, **kwargs):\n    while True:\n        pass\n")
 
-    master_fd, slave_fd = pty.openpty()
-    slave_path = os.ttyname(slave_fd)
-    env = dict(os.environ)
-    env["MICROPYPATH"] = str(stub_dir)  # only the hanging stub is importable as "debugpy"
-
-    proc = subprocess.Popen(
-        [str(_MICROPYTHON)],
-        stdin=master_fd,
-        stdout=master_fd,
-        stderr=master_fd,
-        env=env,
-        close_fds=True,
-    )
-    os.close(master_fd)
-    os.close(slave_fd)
+    # only the hanging stub is importable as "debugpy"
+    device = PtyDevice(_MICROPYTHON, str(stub_dir)).start()
     try:
-        time.sleep(0.3)  # let the interpreter start its REPL before talking to it
         start = time.monotonic()
         code, stdout, stderr = _mpremote_cmd(
-            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "2", slave_path, "mod:main"]
+            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "2", device.path, "mod:main"]
         )
         elapsed = time.monotonic() - start
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=2)
+        device.close()
 
     assert code != 0, f"expected the handshake wait to time out; stdout: {stdout}"
     assert "timed out waiting" in stderr, f"expected a timeout error; got: {stderr}"
@@ -837,24 +763,9 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
     merely parsed. `state.transport.device_name` already matches
     `args.target`, exercising the connection-reuse path.
     """
-    master_fd, slave_fd = pty.openpty()
-    slave_path = os.ttyname(slave_fd)
-    env = dict(os.environ)
-    env["MICROPYPATH"] = _MICROPYPATH
-
-    proc = subprocess.Popen(
-        [str(_MICROPYTHON)],
-        stdin=master_fd,
-        stdout=master_fd,
-        stderr=master_fd,
-        env=env,
-        close_fds=True,
-    )
-    os.close(master_fd)
-    os.close(slave_fd)
+    device = PtyDevice(_MICROPYTHON, _MICROPYPATH).start()
     try:
-        time.sleep(0.3)  # let the interpreter start its REPL before talking to it
-        transport = SerialTransport(slave_path, baudrate=115200)
+        transport = SerialTransport(device.path, baudrate=115200)
 
         state = State()
         state.transport = transport
@@ -866,7 +777,7 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
             "Args",
             (),
             {
-                "target": slave_path,
+                "target": device.path,
                 "program": "mod:main",
                 "port": free_tcp_port,
                 "dap_log": False,
@@ -899,9 +810,4 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
             f"client did not receive an initialize response; got: {reply!r}"
         )
     finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=2)
+        device.close()

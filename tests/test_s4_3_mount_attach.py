@@ -39,7 +39,6 @@ instead.
 
 import json
 import os
-import pty
 import signal
 import subprocess
 import sys
@@ -68,6 +67,7 @@ from helpers import (  # noqa: E402
     wait_for_msg,
     wait_for_prefixed_line,
 )
+from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
     os.environ.get(
@@ -1036,44 +1036,40 @@ class _MountedPtySession:
         self.source_dir = tmp_path / "src"
         self.source_dir.mkdir()
         self.app_py = self.source_dir / "app.py"
+        self.finished_marker = self.source_dir / "finished"
+        # The last line writes back through the mount, which is the only way
+        # this process can see the released target reach its own end:
+        # mpremote's mount pump discards the device's console output, so the
+        # `print` never arrives here. Writing it proves the mount still serves
+        # RPC after the debug client has gone, and its content proves the loop
+        # ran to completion rather than the file merely being created.
         self.app_py.write_text(
             "def main():\n"
             "    total = 0\n"
             "    for i in range(3):\n"
             "        total += i\n"
             "    print('total', total)\n"
+            f"    with open('{SerialTransport.fs_hook_mount}/finished', 'w') as f:\n"
+            "        f.write(str(total))\n"
         )
         self.port = port
         self.stdout_lines = []
         self.stderr_lines = []
         self.dap_server = None
-        self.device_proc = None
+        self.device = PtyDevice(_MICROPYTHON, _MICROPYPATH)
         self.mpremote_proc = None
-        self.slave_path = None
         self._threads = []
 
     @property
     def stderr_text(self):
         return "".join(self.stderr_lines)
 
+    def _mpremote_output(self):
+        return f"mpremote stdout {''.join(self.stdout_lines)!r}; stderr {self.stderr_text!r}"
+
     def start(self):
         """Bring the session up to a breakpoint hit in the mounted-only module."""
-        master_fd, slave_fd = pty.openpty()
-        self.slave_path = os.ttyname(slave_fd)
-        env = dict(os.environ)
-        env["MICROPYPATH"] = _MICROPYPATH
-
-        self.device_proc = subprocess.Popen(
-            [str(_MICROPYTHON)],
-            stdin=master_fd,
-            stdout=master_fd,
-            stderr=master_fd,
-            env=env,
-            close_fds=True,
-        )
-        os.close(master_fd)
-        os.close(slave_fd)
-        time.sleep(0.3)  # let the interpreter start its REPL before mpremote talks to it
+        self.device.start()
 
         self.mpremote_proc = subprocess.Popen(
             [
@@ -1088,7 +1084,7 @@ class _MountedPtySession:
                 "15",
                 "--source",
                 str(self.source_dir),
-                self.slave_path,
+                self.device.path,
                 "app:main",
             ],
             cwd=str(_SUBMODULE_DIR),
@@ -1157,17 +1153,31 @@ class _MountedPtySession:
         assert frames[0]["source"]["path"] == str(self.app_py), frames[0]["source"]
 
     def detach_client(self):
-        """Drop the DAP client, then let the released target reach its own end.
+        """Drop the DAP client, then wait for the released target to reach its own end.
 
-        The settle wait is not observable from here and so cannot be polled
-        for: mpremote's mount pump discards the device's console output, so
-        the `print('total', total)` that marks the program finishing never
-        reaches this process. Three loop iterations of an untraced program is
-        microseconds of device time, so the margin is generous.
+        `app.main()` writes its result back through the mount as its last act,
+        so the wait is for that file rather than for a duration: the device
+        has demonstrably run the loop out and returned before teardown is
+        asked to unmount.
         """
         self.dap_server.stop()
         self.dap_server = None
-        time.sleep(1.0)
+        deadline = time.monotonic() + 15
+        written = None
+        while time.monotonic() < deadline:
+            # Absent until the device opens it, and empty between the open and
+            # the write completing, so the content is the condition.
+            written = (
+                self.finished_marker.read_text() if self.finished_marker.exists() else None
+            )
+            if written == "3":
+                return
+            time.sleep(0.01)
+        raise AssertionError(
+            f"the released target never finished: {self.finished_marker} "
+            + ("was never written" if written is None else f"holds {written!r}")
+            + f"; mpremote stdout {''.join(self.stdout_lines)!r}; stderr {self.stderr_text!r}"
+        )
 
     def end_with(self, sig, timeout=15):
         """Signal mpremote, and return (exit code, seconds it took to exit)."""
@@ -1184,35 +1194,20 @@ class _MountedPtySession:
 
         `SerialTransport` opened on the same slave path either finds a raw-REPL
         prompt or it doesn't; there is no third way to make this pass.
-
-        `soft_reset=False` is what `mpremote resume` does, and the only thing
-        that can be asked of this device: the ctrl-D of a soft reset ends the
-        unix port's process outright, which hangs up the pty and so would
-        report a device destroyed by the check as a device the session left
-        broken.
         """
-        device_transport = SerialTransport(self.slave_path, baudrate=115200)
-        try:
-            device_transport.enter_raw_repl(soft_reset=False, timeout_overall=10)
-            output = device_transport.exec("print(1)", timeout_overall=10)
-            assert output.strip() == b"1", (
-                f"device did not respond normally after the mount session: {output!r}"
-            )
-        finally:
-            device_transport.close()
+        self.device.assert_usable(context=self._mpremote_output)
 
     def close(self):
         if self.dap_server is not None:
             self.dap_server.stop()
-        for proc, grace in ((self.mpremote_proc, 5), (self.device_proc, 5)):
-            if proc is None or proc.poll() is not None:
-                continue
-            proc.terminate()
+        if self.mpremote_proc is not None and self.mpremote_proc.poll() is None:
+            self.mpremote_proc.terminate()
             try:
-                proc.wait(timeout=grace)
+                self.mpremote_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=grace)
+                self.mpremote_proc.kill()
+                self.mpremote_proc.wait(timeout=5)
+        self.device.close()
 
 
 @requires_settrace_firmware

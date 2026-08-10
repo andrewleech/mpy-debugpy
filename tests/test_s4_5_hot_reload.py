@@ -28,7 +28,6 @@ the launcher mirrors its markers to the debug console (see `_report` there).
 
 import json
 import os
-import pty
 import signal
 import subprocess
 import sys
@@ -46,8 +45,6 @@ for _dir in (_SUBMODULE_DIR, _TESTS_DIR):
     if str(_dir) not in sys.path:
         sys.path.insert(0, str(_dir))
 
-from mpremote.transport_serial import SerialTransport  # noqa: E402
-
 from helpers import (  # noqa: E402
     PerfServer,
     drain_lines,
@@ -55,6 +52,7 @@ from helpers import (  # noqa: E402
     take_msg,
     wait_for_prefixed_line,
 )
+from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
     os.environ.get(
@@ -173,33 +171,20 @@ class _LoopSession:
         self.stdout_lines = []
         self.stderr_lines = []
         self.dap_server = None
-        self.device_proc = None
+        self.device = PtyDevice(_MICROPYTHON, _MICROPYPATH)
         self.mpremote_proc = None
-        self.slave_path = None
         self._threads = []
 
     @property
     def stderr_text(self):
         return "".join(self.stderr_lines)
 
+    def _mpremote_output(self):
+        return f"mpremote stdout {''.join(self.stdout_lines)!r}; stderr {self.stderr_text!r}"
+
     def start(self):
         """Bring the session up to the point where the first run is about to start."""
-        master_fd, slave_fd = pty.openpty()
-        self.slave_path = os.ttyname(slave_fd)
-        env = dict(os.environ)
-        env["MICROPYPATH"] = _MICROPYPATH
-
-        self.device_proc = subprocess.Popen(
-            [str(_MICROPYTHON)],
-            stdin=master_fd,
-            stdout=master_fd,
-            stderr=master_fd,
-            env=env,
-            close_fds=True,
-        )
-        os.close(master_fd)
-        os.close(slave_fd)
-        time.sleep(0.3)  # let the interpreter start its REPL before mpremote talks to it
+        self.device.start()
 
         self.mpremote_proc = subprocess.Popen(
             [
@@ -215,7 +200,7 @@ class _LoopSession:
                 "--source",
                 str(self.source_dir),
                 "--loop",
-                self.slave_path,
+                self.device.path,
                 "app:main",
             ],
             cwd=str(_SUBMODULE_DIR),
@@ -391,7 +376,7 @@ class _LoopSession:
         assert len(handshakes) == 1, (
             f"expected exactly one handshake for the session, got {handshakes}"
         )
-        assert self.device_proc.poll() is None, (
+        assert self.device.proc.poll() is None, (
             "the device process died during the session, so something did reset it"
         )
 
@@ -422,34 +407,20 @@ class _LoopSession:
         return exit_code
 
     def assert_device_still_usable(self):
-        """A fresh connection finds a live device, carrying none of the session's state.
-
-        `soft_reset=False` is what `mpremote resume` does, and the only thing
-        that can be asked of this device: the ctrl-D of a soft reset ends the
-        unix port's process outright.
-        """
-        device_transport = SerialTransport(self.slave_path, baudrate=115200)
-        try:
-            device_transport.enter_raw_repl(soft_reset=False, timeout_overall=10)
-            output = device_transport.exec("print(1)", timeout_overall=10)
-            assert output.strip() == b"1", (
-                f"device did not respond normally after the session: {output!r}"
-            )
-        finally:
-            device_transport.close()
+        """A fresh connection finds a live device, carrying none of the session's state."""
+        self.device.assert_usable(context=self._mpremote_output)
 
     def close(self):
         if self.dap_server is not None:
             self.dap_server.stop()
-        for proc, grace in ((self.mpremote_proc, 5), (self.device_proc, 5)):
-            if proc is None or proc.poll() is not None:
-                continue
-            proc.terminate()
+        if self.mpremote_proc is not None and self.mpremote_proc.poll() is None:
+            self.mpremote_proc.terminate()
             try:
-                proc.wait(timeout=grace)
+                self.mpremote_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait(timeout=grace)
+                self.mpremote_proc.kill()
+                self.mpremote_proc.wait(timeout=5)
+        self.device.close()
 
 
 @pytest.fixture()
