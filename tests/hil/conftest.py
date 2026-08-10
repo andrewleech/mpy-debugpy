@@ -111,10 +111,11 @@ def hil_reset_board(hil_device):
     shell, so the bench supplies whatever it has, and the scenario skips where
     it has none.
 
-    Returns once `hil_device` and any `also` path the caller names are back,
-    so the run leaves the bench as it found it. Their disappearance is not
-    waited for: a reset command may well outlast it, and the scenario's own
-    assertion is what proves the reset was seen.
+    Returns once `hil_device` and any `also` path the caller names are back
+    *and* the board has finished booting, so the run leaves the bench as it
+    found it. Their disappearance is not waited for: a reset command may well
+    outlast it, and the scenario's own assertion is what proves the reset was
+    seen.
     """
     command = os.environ.get(RESET_ENV)
     if not command:
@@ -127,8 +128,38 @@ def hil_reset_board(hil_device):
             while not Path(path).exists():
                 assert time.monotonic() < deadline, f"{path} never came back after {command!r}"
                 time.sleep(0.2)
+        _wait_for_repl(hil_device, deadline)
 
     return _reset
+
+
+def _wait_for_repl(device, deadline):
+    """Block until the board is back at its REPL, so its boot script has run.
+
+    The ports coming back does not mean the board is ready. A boot script
+    that reconfigures USB - which is how a second CDC interface is asked for -
+    enumerates where it makes that call, not when it returns, so the paths
+    reappear while the rest of the script is still running. On this bench the
+    rest is a WiFi association, seconds on a good day and half a minute when
+    the first attempt fails, and a scenario that reset the board and then went
+    looking for it on the network would race that.
+
+    A newline is sent rather than a banner waited for. It sits unread in the
+    interface's rx buffer until the REPL starts, and the prompt echoed back is
+    the signal; waiting passively would miss a board whose boot script returns
+    before this port is open, because a CDC interface discards what it writes
+    while nobody holds it.
+    """
+    import serial
+
+    with serial.Serial(device, BAUDRATE, timeout=0.2) as port:
+        port.write(b"\r\n")
+        seen = b""
+        while b">>>" not in seen:
+            assert time.monotonic() < deadline, (
+                f"{device} never reached a REPL prompt after the reset; read: {seen!r}"
+            )
+            seen += port.read(4096)
 
 
 @pytest.fixture(scope="session")

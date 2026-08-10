@@ -98,6 +98,27 @@ case, dropping the check in `recv` fails the fourth.
 the same read as the one it matched, which no earlier caller had noticed
 because each waited on a step the host itself triggered. It now keeps them.
 
+## Correction, 2026-08-10: the scenario was watching too late
+
+The first scenario opened the board's primary port only after the kill, on the
+reasoning that the killed command held it until then and that the board could
+not resume before the kill. Two processes can hold a tty, and the reasoning
+missed what holding it is for: the interface carries stdout only while some
+host is on it, so between the command dying and the port being reopened the
+board's output is discarded, and the board resumes and reaches its completion
+line inside that window. The scenario was a race it could only lose silently,
+because a dropped line and a board that never resumed read the same from the
+host. It passed until it did not, on unchanged firmware.
+
+The capture is now opened before the kill, alongside the command. A target
+stopped at a breakpoint prints nothing, so nothing is taken from the command by
+reading with it, and the DAP interface is untouched. The mechanism above is
+unaffected and was re-confirmed on its own first, driving `StreamTransport`
+against the board's installed `.mpy` with no debugpy session involved: EAGAIN
+with the line down and no traffic yet, EAGAIN while a host held the port,
+traffic latched on the first byte, `b""` on the first poll after the host
+closed. See `20260810_integration-rebuild.md`.
+
 ## Left undone
 
 Stale bytes in the board's second-CDC rx buffer desynchronise DAP framing for

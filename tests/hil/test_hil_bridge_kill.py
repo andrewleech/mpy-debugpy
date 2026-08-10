@@ -17,6 +17,7 @@ never exercises the mechanism that matters.
 Needs both device paths; see `conftest.py`.
 """
 
+import contextlib
 from pathlib import Path
 
 from conftest import DeviceOutput
@@ -48,21 +49,24 @@ def test_hil_killing_the_bridge_at_a_breakpoint_leaves_the_board_usable(
         stopped = run_to_breakpoint(server, DEVICE_SOURCE_PATH, LOOP_LINE)
         assert stopped.body["reason"] == "breakpoint", stopped
 
-        proc.kill()
-        proc.wait(timeout=15)
+        # Opened before the kill, and a second holder of a port the command
+        # still has. A CDC interface only carries stdout while some host holds
+        # it, and the killed command is the only holder of the primary one:
+        # everything the board prints between its death and this port being
+        # reopened is discarded by the device, and the board resumes within a
+        # poll and prints its way to the completion line in well under the
+        # time reopening takes. Nothing is stolen from the command by reading
+        # alongside it, because a target stopped at a breakpoint prints
+        # nothing. The DAP interface, the one whose loss is under test, is
+        # untouched.
+        with contextlib.closing(DeviceOutput(hil_device)) as output:
+            proc.kill()
+            proc.wait(timeout=15)
 
-    # Only now is the board's primary port free to read: the killed command
-    # held it for the whole session. The target cannot have resumed before
-    # the kill, so nothing it prints after this point is missed for long -
-    # noticing the dead channel costs the device at least one poll.
-    output = DeviceOutput(hil_device)
-    try:
-        assert output.wait_for(COMPLETION_LINE, timeout=_RESUME_TIMEOUT), (
-            "the target never resumed after the bridge was killed while it was "
-            f"stopped; the board printed:\n{output.text()}"
-        )
-    finally:
-        output.close()
+            assert output.wait_for(COMPLETION_LINE, timeout=_RESUME_TIMEOUT), (
+                "the target never resumed after the bridge was killed while it "
+                f"was stopped; the board printed:\n{output.text()}"
+            )
 
     # A vanished interface would fail the next run with a config error rather
     # than the wedge this is about, so it is worth separating.
