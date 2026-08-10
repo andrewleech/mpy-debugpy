@@ -37,6 +37,7 @@ on:
       - "extension/**"
       - "src/**"
       - "Makefile"
+      - "tools/**"
       - "pyproject.toml"
       - "uv.lock"
 

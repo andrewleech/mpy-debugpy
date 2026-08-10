@@ -15,8 +15,9 @@ UNIX_VARIANT   := standard
 # ports, define MICROPY_PY_SYS_SETTRACE=1 and MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1.
 DEBUG_CFLAGS   :=
 
-.PHONY: bootstrap integrate firmware-unix mpy-cross test lint lint-submodules \
-        lint-submodule-commits demo firmware-list firmware-verify clean
+.PHONY: bootstrap install-hooks check-pins integrate firmware-unix mpy-cross \
+        test lint lint-submodules lint-submodule-commits demo firmware-list \
+        firmware-verify clean
 
 # Versions pinned by both submodules' own CI jobs and .pre-commit-config.yaml;
 # keep in step with them.
@@ -32,9 +33,29 @@ RANGE := upstream/master..HEAD
 # One-shot setup: check out the recorded integration commits and the libraries
 # the unix port needs. Checkout-only; rebuilding the integration branches from
 # mbm.toml is the separate `integrate` target below.
-bootstrap:
+bootstrap: install-hooks
 	git submodule update --init --recursive
 	$(MAKE) -C $(UNIX_PORT) VARIANT=$(UNIX_VARIANT) submodules
+
+# A core.hooksPath setting silently overrides .git/hooks, and a check that looks
+# installed but never runs is exactly the failure this hook exists to prevent,
+# so report that case instead of symlinking into the void.
+install-hooks:
+	@hooks=$$(git rev-parse --git-path hooks); \
+	if git config --get core.hooksPath >/dev/null; then \
+	  echo "core.hooksPath is set to $$(git config --get core.hooksPath);"; \
+	  echo "install tools/pre-push-check.sh as pre-push there by hand."; \
+	else \
+	  mkdir -p "$$hooks"; \
+	  ln -sf "$(CURDIR)/tools/pre-push-check.sh" "$$hooks/pre-push"; \
+	  echo "Installed $$hooks/pre-push -> tools/pre-push-check.sh"; \
+	fi
+
+# A submodule pin that exists only in a local clone leaves the top repo looking
+# correct and takes CI down at the submodule checkout, before any job runs.
+# The pre-push hook runs this for each ref pushed; run it by hand to check HEAD.
+check-pins:
+	./tools/check-submodule-pins.sh
 
 # Rebuild the integration branches from mbm.toml on top of the latest upstream
 # master, into <integration>_update branches (mpy-debugpy_update). --local
