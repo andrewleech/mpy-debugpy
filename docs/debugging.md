@@ -84,8 +84,8 @@ program = "app:main"
 | `device` | connect string as `mpremote connect` accepts. Required for `serial`; for `network` it names the control-plane device used for the pre-IP handshake. Never the debug endpoint - the device reports its own. |
 | `firmware` | for `unix`, a path to a built binary (relative paths resolve against this file's directory), or `system` for whatever `micropython` is on `PATH`. |
 | `program` | default `module[:method]`. Without it, `target:main`. |
-| `requires` | capability names checked against the handshake before the session starts. Vocabulary: `settrace`, `save_names`, `set_local`, `f_back`. A typo is caught before any device is touched. |
-| `dap_device` | the board's second CDC interface, for DAP over serial instead of over the network. Only used when the handshake also reports `serial_dap: true`. |
+| `requires` | capability names checked against the handshake before the session starts. Vocabulary: `settrace`, `save_names`, `set_local`, `f_back`, `second_cdc`. A typo is caught before any device is touched. `serial_dap` is deliberately not accepted here - it reports which channel a run took, so requiring it would fail every target before the run that could satisfy it. |
+| `dap_device` | the board's second CDC interface, for DAP over serial instead of over the network. Only used when the handshake also reports `serial_dap: true`. The node has to exist first - see [serial](#serial). |
 | `source` | host directory mounted at the device's `/remote` before the program runs, so it debugs a live view of this directory. Relative paths resolve against this file's directory. Not valid on a `unix` target. |
 
 Unknown keys are ignored, so a front-end can keep its own metadata alongside
@@ -219,23 +219,43 @@ connection in `boot.py`, or in the program before it imports `debugpy`.
 mpremote debug pybd app:main
 ```
 
-DAP rides the board's own dedicated serial interface instead of the network, and
-mpremote bridges it to a loopback port so the client sees an ordinary TCP
-endpoint. Two things have to be true, and both are checked rather than assumed:
+DAP rides a serial interface of its own instead of the network, and mpremote
+bridges it to a loopback port so the client sees an ordinary TCP endpoint. Two
+things have to be true, and both are checked rather than assumed:
 
 - the target has a `dap_device`, because only the host can name the interface by
   tty node; and
 - the handshake reports `serial_dap: true`, because only the device can map that
   node to a runtime object.
 
-This needs a board with a second CDC interface. Measured on a PYBD_SF6:
-81.7-108.8 kB/s. Boards with a single UART have no second channel to give, so
-they use the network path; the framing work that would let DAP share one UART
-with the REPL is not done.
+Measured on a PYBD_SF6: 81.7-108.8 kB/s.
 
-Do not infer the second interface from a variant name or from
-`pyb.USB_VCP(1)` constructing successfully - that answers from the build-time
-`MICROPY_HW_USB_CDC_NUM`, not from what boot actually enumerated.
+This is the narrowest of the three paths, not a shortcut around the network one.
+It needs both a build with a second USB CDC interface and a boot that enumerates
+it, and the second part is not the default anywhere: stm32 brings up a single
+VCP unless `boot.py` says otherwise (`ports/stm32/main.c`), and no board in this
+project's set ships a `boot.py` that does. So a board that has the interface
+still needs
+
+```python
+import pyb
+pyb.usb_mode("2xVCP+MSC")
+```
+
+in `boot.py` and a reboot - the second tty node does not exist until the board
+re-enumerates with it.
+
+Boards with a single UART have no second interface to enumerate at all. Sharing
+the one UART between DAP and the REPL needs an in-band framing layer that is not
+built; see `planning/20260810_single-uart-dap-framing.md` for the intended shape
+and why the network path is the mainline meanwhile.
+
+Three questions get confused here, and they can answer differently on the same
+run. `second_cdc` in the handshake is the build's maximum, read from
+`MICROPY_HW_USB_CDC_NUM`: it says a second interface is possible, not that this
+boot has one. `pyb.usb_mode()` says what boot actually enumerated, which is what
+decides whether a session can run. `USB_VCP.isconnected()` says whether a host
+is currently holding the interface open. A variant name answers none of them.
 
 ## The iteration loop
 
@@ -348,13 +368,21 @@ is not evidence, and neither is this page.
 | `save_names` | local variables appear under their real names. Without it they are `local_00`, `local_01`, ... positional placeholders. |
 | `set_local` | a local variable can be written from the debugger. |
 | `f_back` | frames chain to their caller, so a call stack deeper than one frame can be walked. |
+| `second_cdc` | the build could enumerate a second USB CDC interface for DAP to use. A fact about the build, not about this boot - see [serial](#serial) for what still has to be true before one exists. |
 | `serial_dap` | this session's DAP channel is a serial stream rather than a TCP socket. A fact about the session, not about the firmware. |
 
 On every firmware artifact this project publishes, and on the unix build:
-`settrace`, `save_names` and `f_back` are true and `set_local` is false. Two of
-those builds have been probed rather than assumed - the unix `build-standard`
-binary and a PYBD_SF6 - and both report the same four values. Function
-parameters do appear under their real names, not just locals.
+`settrace`, `save_names` and `f_back` are true, and `set_local` and
+`second_cdc` are false. Two of those builds have been probed rather than
+assumed - the unix `build-standard` binary and a PYBD_SF6 - and both report the
+same values. Function parameters do appear under their real names, not just
+locals.
+
+`second_cdc` is the one that will move: the published PYBD_SF6 artifact is
+built from a commit predating `MICROPY_HW_USB_CDC_NUM (2)` on that board, so
+false is the honest value for it, while a current build of the same board
+probes true. The manifest is corrected by the build job that republishes it,
+not by hand.
 
 So **local variables are read-only**. No branch implements local write-back, so
 the tooling marks them read-only from the probe rather than accepting an edit

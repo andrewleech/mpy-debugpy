@@ -8,8 +8,11 @@ debug endpoint comes from the device's own handshake, as it does in
 production.
 
 `MPY_DEBUG_HIL_DAP_DEVICE` is a second by-id path, the board's dedicated DAP
-interface; it gates the serial-DAP scenarios separately, since a board with
-one CDC interface can still run everything else here.
+interface; it gates the serial-DAP scenarios separately, since a board showing
+one CDC interface can still run everything else here. That node is not a
+given even on a board built for it: stm32 enumerates one VCP unless `boot.py`
+runs `pyb.usb_mode("2xVCP+MSC")`, so a bench board needs that line and a
+reboot before this variable has anything to point at.
 
 Set `MPY_DEBUG_HIL_BOARD` to name the board in the results record; without it
 the record uses the board name the firmware reports for itself.
@@ -112,12 +115,22 @@ def hil_dap_device():
     """The board's dedicated DAP interface, or a skip.
 
     A separate opt-in from `hil_device`: whether a board exposes a second CDC
-    interface is a per-board fact, so the serial-DAP scenarios skip on a board
-    that has only one rather than failing the whole run.
+    interface is a per-board *and per-boot* fact, so the serial-DAP scenarios
+    skip rather than failing the whole run when there is no second node.
+
+    Both halves have to be true and only the first is a property of the
+    firmware. A build with `MICROPY_HW_USB_CDC_NUM (2)` still enumerates one
+    VCP unless `boot.py` asks for the other (`ports/stm32/main.c`), so the
+    commonest reason for this skip on a board that is perfectly capable is an
+    unconfigured boot, which the skip message says so an operator does not go
+    looking for a firmware problem.
     """
     device = os.environ.get(DAP_DEVICE_ENV)
     if not device:
-        pytest.skip(f"set {DAP_DEVICE_ENV} to the board's second /dev/serial/by-id/... path")
+        pytest.skip(
+            f"set {DAP_DEVICE_ENV} to the board's second /dev/serial/by-id/... path; "
+            'on stm32 that node exists only after boot.py runs pyb.usb_mode("2xVCP+MSC")'
+        )
     if "/by-id/" not in device:
         pytest.fail(f"{DAP_DEVICE_ENV} must be a /dev/serial/by-id/... path, got {device}")
     if not Path(device).exists():
