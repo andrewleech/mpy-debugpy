@@ -28,6 +28,7 @@ a context manager, not a live connection.
 import contextlib
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -48,6 +49,7 @@ if str(_SUBMODULE_DIR) not in sys.path:
 DEVICE_ENV = "MPY_DEBUG_HIL_DEVICE"
 DAP_DEVICE_ENV = "MPY_DEBUG_HIL_DAP_DEVICE"
 BOARD_ENV = "MPY_DEBUG_HIL_BOARD"
+RESET_ENV = "MPY_DEBUG_HIL_RESET_CMD"
 BAUDRATE = 115200
 
 DEBUGPY_SRC = _TOP_DIR / "micropython-lib" / "python-ecosys" / "debugpy" / "debugpy"
@@ -97,6 +99,36 @@ def hil_dap_device():
     if not Path(device).exists():
         pytest.skip(f"{DAP_DEVICE_ENV}={device} is not present")
     return device
+
+
+@pytest.fixture()
+def hil_reset_board(hil_device):
+    """Call to reset the board out from under whatever is talking to it.
+
+    The command comes from the environment because there is no portable way
+    to reset a board: a bench may cut USB power at a hub, drive NRST from a
+    probe, or have nothing at all. `MPY_DEBUG_HIL_RESET_CMD` runs through the
+    shell, so the bench supplies whatever it has, and the scenario skips where
+    it has none.
+
+    Returns once `hil_device` and any `also` path the caller names are back,
+    so the run leaves the bench as it found it. Their disappearance is not
+    waited for: a reset command may well outlast it, and the scenario's own
+    assertion is what proves the reset was seen.
+    """
+    command = os.environ.get(RESET_ENV)
+    if not command:
+        pytest.skip(f"set {RESET_ENV} to a command that resets the board")
+
+    def _reset(also=(), timeout=60):
+        subprocess.run(command, shell=True, check=True, timeout=timeout)
+        deadline = time.monotonic() + timeout
+        for path in [hil_device, *also]:
+            while not Path(path).exists():
+                assert time.monotonic() < deadline, f"{path} never came back after {command!r}"
+                time.sleep(0.2)
+
+    return _reset
 
 
 @pytest.fixture(scope="session")

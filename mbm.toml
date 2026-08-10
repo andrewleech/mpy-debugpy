@@ -44,6 +44,11 @@ pr_number = 18436
 title = "tools/mpremote: Add streaming hash verification to file transfers"
 
 [[submodules.branches]]
+name = "mpremote_close_lost_device"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_close_lost_device"
+title = "tools/mpremote: Close the serial port even if clearing RTS/DTR fails"
+
+[[submodules.branches]]
 name = "mpremote_debugpy_install"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debugpy_install"
 title = "tools/mpremote: Add cached, cross-compiled debugpy package installer"
