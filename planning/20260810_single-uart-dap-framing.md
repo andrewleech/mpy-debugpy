@@ -120,3 +120,47 @@ No framing layer, no prototype, no measurement. STORY-6.1 criterion 2 - the
 single-UART negative probe - is still unmet and still needs a board that is not
 on the bench, and it is a *negative*: it asserts such a board refuses the serial
 path and falls back, not that it debugs over one UART.
+
+## Correction, 2026-08-10: the program's stdout cannot be diverted from Python
+
+Obstacle 2 above offers two ways out - escape the marker byte, or "stop the
+program's stdout going out in band at all and route it through the DAP `output`
+event instead". The second is not implementable on the device in Python. Three
+independent reasons, any one of which is enough:
+
+- `print()` does not read `sys.stdout`. Its `file` keyword defaults to a ROM
+  pointer at the `mp_sys_stdout_obj` object itself
+  (`py/modbuiltins.c:393`), so the destination is fixed at build time and a
+  rebound name could not change it.
+- `sys.stdout` is not assignable anyway. The `sys` globals are a const dict, and
+  the attribute-store delegation covers exactly `path`, `ps1`, `ps2` and
+  `tracebacklimit` (`py/modsys.c:298-320`). On the unix build
+  `sys.stdout = sys.stderr` raises `AttributeError: 'module' object has no
+  attribute 'stdout'` - the store path, not a missing attribute; reading it
+  yields `<io.TextIOWrapper 1>`.
+- `os.dupterm` duplicates rather than diverts. `mp_hal_stdout_tx_strn` writes
+  the stdio UART, then the CDC, then dupterm
+  (`ports/stm32/mphalport.c:82-105`), so adding a dupterm destination adds a
+  copy and removes nothing from the stream the framing layer is trying to keep
+  clean.
+
+Rebinding `print` in the debuggee's own globals is not a substitute: a traceback
+and any direct `sys.stdout.write` still go out in band, and those are exactly
+the output a debug session most needs to see.
+
+So STORY-6.7 inherits a narrower choice than this note recorded. Either the
+marker byte is escaped in the device's stdout path, or the divert is made in C -
+a port-level stdout hook, or a `dupterm` variant that replaces rather than
+adds - which puts it in `micropython` rather than in `micropython-lib` and
+changes which repo the story lands in.
+
+## Correction, 2026-08-10: STORY-6.1 criterion 2 is met
+
+"What is not done" above states that criterion 2 "is still unmet and still needs
+a board that is not on the bench". It was closed the same day, by this note's own
+finding: if an stm32 enumerates one VCP unless `boot.py` calls `pyb.usb_mode()`,
+then the bench PYBD booted without that line is a board with no dedicated DAP
+interface, and no second chip is needed to ask the criterion's question. See
+`tickets/s6.1_serial-transport.md` and
+`20260810_hil_PYBD_SF6_no-dap-device.md`. The rest of that section stands: no
+framing layer, no prototype, no measurement.
