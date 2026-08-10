@@ -33,6 +33,11 @@ pr_url = "https://github.com/andrewleech/micropython/tree/local_names_implementa
 title = "frame.f_locals with real local names + placeholder fallback"
 
 [[submodules.branches]]
+name = "settrace_loop_line_events"
+pr_url = "https://github.com/andrewleech/micropython/tree/settrace_loop_line_events"
+title = "py/vm: Fire settrace line events on backward jumps, not FOR_ITER"
+
+[[submodules.branches]]
 name = "debug_board_flags"
 pr_url = "https://github.com/andrewleech/micropython/tree/debug_board_flags"
 title = "Enable sys.settrace on the RPI_PICO_W, PYBD_SF6, ESP32_GENERIC debug-firmware build targets"

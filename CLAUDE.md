@@ -53,6 +53,9 @@ Per submodule, one PR-number entry fetched live from upstream at each rebase
 plus one local-only entry (fork `/tree/` pr_url, no pr_number, must exist as a
 local branch): `micropython` = `pdb_support` (#8767) + `local_names_implementation`;
 `micropython-lib` = `add-debugpy-support` (#1022) + `mpy-debugpy-foundations`.
+Further local-only entries accumulate as work finds fixes that belong upstream
+on their own - `debug_board_flags`, `settrace_loop_line_events` - so read
+`mbm.toml` for the current set rather than this list.
 Register new local-only branches by hand in `mbm.toml`, as ampremote does; the
 ampremote mpremote branches (#18436 etc.) get added only when the EPIC-4/5
 ticket that needs them starts (decision D6).

@@ -374,12 +374,14 @@ your program is at fault.
   inside a long-running C function, nothing stops until it comes back - the
   request stays pending rather than being lost. Pausing a program whose work is
   one long `time.sleep` will look like the pause did nothing.
-- **A breakpoint inside a loop body stops one more time than the body runs, and
-  the first stop happens before the body has run at all** - so a variable the
-  body assigns still reads its pre-loop value at that first stop. MicroPython
-  attributes an extra `line` event to the body line when the loop is set up.
-  Stepping and values are correct; only the number and position of the stops are
-  off.
+- **A breakpoint on the last line of a `for x in range(...)` or `while` body
+  stops one time too many, the extra stop before the body has run at all** - so
+  a variable the body assigns still reads its pre-loop value there. MicroPython
+  compiles the loop test to the bottom of the loop, where it inherits the last
+  body line's number. A `while` line itself is only reported once, at loop
+  entry, rather than on each pass. Every other body line, the `for` line, and
+  loops over anything but `range` are exact. Stepping and values are correct;
+  only the number and position of the stops are off.
 - **A `line` event fires before its statement executes.** When you are stopped
   on a line, that line has not run yet. This matches CPython, and it is worth
   restating because it decides what a variable reads at a breakpoint.

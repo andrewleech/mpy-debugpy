@@ -80,7 +80,26 @@ counts for a breakpoint inside a loop body: `tests/test_s4_5_hot_reload.py`
 asserts which lines were reached and what the values were there, never how many
 times, precisely so it does not cement this artifact as expected behaviour.
 
+## Correction, 2026-08-10
+
+Difference 1 as measured above is real but is one of three distortions, and the
+fix prescribed in the paragraph above - "changing which line the VM attributes
+the loop-setup instructions to" - is not reachable. The .mpy line-number table
+is monotonically non-decreasing by construction, so loop-control code emitted
+after the body cannot carry a line number from before it.
+
+What the measurement here could not separate, because its loop body is a single
+line: the extra event lands on the **last** line of the body, not on the body
+generally, and only for optimised-`range` `for` loops and `while` loops. General
+`for` loops had a different and larger distortion - the header line reported
+twice per iteration - which is fixed in `py/vm.c` by invalidating the reported
+line on a backward jump rather than on `MP_BC_FOR_ITER`. Full measurement,
+including the narrowed statement of what remains and what tests may now count,
+in `20260810_loop-line-events.md`.
+
 ## Related
 
+- `20260810_loop-line-events.md` - the follow-up that fixed part of difference 1
+  and bounded the rest.
 - `20260809_settrace_raise_unwind.md` - the other VM-level settrace finding from
   the same story, fixed in `py/profile.c` and `py/vm.c`.
