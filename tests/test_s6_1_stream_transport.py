@@ -15,6 +15,13 @@ Two tiers, both against the real unix firmware (no hardware, no mocks):
   so the frame arrives intact only if every partial write is accounted
   for - a sender that discards the count it reached resends a prefix, and
   the frame's declared length then covers a body that will not parse.
+- `test_stream_transport_peer_gone_signal` drives
+  `fixtures/stream_liveness_probe.py` over a pipe the host never closes, so
+  the transport has no EOF to find, and checks when the caller-supplied
+  host-present signal is allowed to stand in for one: not before the channel
+  has carried a byte, not while a connected peer is merely idle, promptly
+  once a peer that was talking goes away, and never at all for a stream that
+  supplies no signal.
 - `test_reaches_breakpoint_over_stream_transport` promotes the former
   `s6_1_stream_transport_proof.py` script into a collected test: a real
   `debugpy` session run over `listen_stream()` on a pty pair, with no socket
@@ -44,6 +51,7 @@ _MICROPYPATH = "{}:{}:{}".format(
     _TOP_DIR / "src", _TOP_DIR / "micropython-lib/python-ecosys/debugpy", _TOP_DIR / "micropython-lib"
 )
 _PROBE_SCRIPT = _TOP_DIR / "tests" / "fixtures" / "stream_transport_probe.py"
+_LIVENESS_PROBE = _TOP_DIR / "tests" / "fixtures" / "stream_liveness_probe.py"
 # The shipped boot script, not a stand-in: given a `dap_device` it runs the
 # DAP channel over that stream, which is the product path under test here.
 _BOOT_SCRIPT = _TOP_DIR / "launcher" / "mpy_launch_debugpy.py"
@@ -75,8 +83,16 @@ class LineReader:
     def __init__(self, fd):
         self.fd = fd
         self._buf = b""
+        # Whole lines already parsed out of an earlier read but not yet
+        # handed to a caller. A device that prints several steps faster than
+        # this side reads delivers them in one chunk, and a caller waiting
+        # for them one at a time would otherwise never see the later ones.
+        self._pending = []
 
     def poll_lines(self, timeout):
+        if self._pending:
+            lines, self._pending = self._pending, []
+            return lines
         r, _, _ = select.select([self.fd], [], [], timeout)
         if not r:
             return []
@@ -93,11 +109,13 @@ class LineReader:
     def wait_for(self, predicate, deadline):
         seen = []
         while time.monotonic() < deadline:
-            for line in self.poll_lines(max(0.05, deadline - time.monotonic())):
+            lines = self.poll_lines(max(0.05, deadline - time.monotonic()))
+            for i, line in enumerate(lines):
                 seen.append(line)
                 if line.startswith("FAIL:"):
                     pytest.fail(f"device reported failure: {line}; prior output: {seen}")
                 if predicate(line):
+                    self._pending = lines[i + 1 :] + self._pending
                     return line
         pytest.fail(f"device never reported the expected line within the deadline; output so far: {seen}")
 
@@ -226,6 +244,58 @@ def test_stream_transport_contract():
     finally:
         if host_write_fd != -1:
             os.close(host_write_fd)
+        os.close(host_read_fd)
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+@requires_unix_firmware
+def test_stream_transport_peer_gone_signal():
+    """When a caller-supplied host-present signal may stand in for EOF.
+
+    Both pipe ends stay open for the whole run, so the transport can never
+    find an EOF of its own - the situation a USB CDC interface is permanently
+    in, and the reason the signal exists. Each step is asserted separately
+    because the two ways of getting this wrong fail in opposite directions:
+    trusting the signal too early ends a session that was only waiting for
+    its client to attach, and not trusting it at all leaves a board stopped
+    at a breakpoint until someone power-cycles it.
+    """
+    dev_read_fd, host_write_fd = os.pipe()  # host -> device
+    host_read_fd, dev_write_fd = os.pipe()  # device -> host
+
+    proc = subprocess.Popen(
+        [str(_MICROPYTHON), str(_LIVENESS_PROBE), str(dev_read_fd), str(dev_write_fd)],
+        env=_env(),
+        pass_fds=(dev_read_fd, dev_write_fd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    os.close(dev_read_fd)
+    os.close(dev_write_fd)
+    stdout = LineReader(proc.stdout.fileno())
+    try:
+        deadline = time.monotonic() + 20
+        stdout.wait_for(lambda ln: ln.startswith("OK:quiet-before-traffic"), deadline)
+
+        # The device is blocked in recv() waiting for this, which is what
+        # makes the step above a real "nothing has arrived yet" and not a
+        # race with data already in the pipe.
+        os.write(host_write_fd, b"HELLO")
+
+        for step in (
+            "OK:traffic",
+            "OK:idle-is-not-gone",
+            "OK:peer-gone",
+            "OK:peer-gone-sticky",
+            "OK:no-signal-no-eof",
+        ):
+            stdout.wait_for(lambda ln, s=step: ln.startswith(s), deadline)
+
+        assert proc.wait(timeout=10) == 0
+    finally:
+        os.close(host_write_fd)
         os.close(host_read_fd)
         if proc.poll() is None:
             proc.kill()

@@ -303,8 +303,8 @@ def hil_debug_session(hil_debug_runner):
 
 
 @pytest.fixture()
-def hil_serial_dap_session(hil_device, hil_dap_device, hil_facts, tmp_path):
-    """One `mpremote debug <named target>` run with DAP on the second CDC.
+def hil_serial_dap_runner(hil_device, hil_dap_device, hil_facts, tmp_path):
+    """Call to start a `mpremote debug <named target>` run, DAP on the 2nd CDC.
 
     The two device paths reach the command through an `mpdebug.toml` because
     that is the only way to configure a `dap_device`; it is written to a
@@ -313,9 +313,14 @@ def hil_serial_dap_session(hil_device, hil_dap_device, hil_facts, tmp_path):
     is committed. `PYTHONPATH` carries the mpremote under test, which the
     other runs get from their working directory instead.
 
-    Unlike the network runs, this one does not detach: mpremote *is* the DAP
+    Unlike the network runs, these do not detach: mpremote *is* the DAP
     endpoint here, so the process has to outlive the handshake and is only
-    reaped once the test's client session has ended.
+    reaped at the end of the test.
+
+    A second call is what a user does after a session ends badly, so nothing
+    is reset between runs beyond what the command does for itself. The
+    board's two ports must be free before it can start, which for a run this
+    fixture is still holding means the test has to have ended it.
     """
     (tmp_path / "mpdebug.toml").write_text(
         "[target.hil]\n"
@@ -326,27 +331,39 @@ def hil_serial_dap_session(hil_device, hil_dap_device, hil_facts, tmp_path):
     )
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(_SUBMODULE_DIR), env.get("PYTHONPATH")]))
+    procs = []
 
-    proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
-    try:
-        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=60)
+    def _run(timeout=60):
+        proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
+        procs.append(proc)
+        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=timeout)
         if matched is None:
             pytest.fail(f"never saw MPDBG-READY; output:\n{''.join(lines)}")
         payload = json.loads(matched[matched.index("{") :])
         payload["command_output"] = "".join(lines)
         payload["process"] = proc
-        yield payload
+        return payload
+
+    try:
+        yield _run
     finally:
         # A finished client session ends the bridge and the command with it,
         # so a live process here means the test left one open; either way the
         # board's ports must be free before the next test spawns a run.
-        with contextlib.suppress(Exception):
-            proc.terminate()
-        try:
-            proc.wait(timeout=15)
-        except Exception:
-            proc.kill()
-            proc.wait(timeout=5)
+        for proc in procs:
+            with contextlib.suppress(Exception):
+                proc.terminate()
+            try:
+                proc.wait(timeout=15)
+            except Exception:
+                proc.kill()
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def hil_serial_dap_session(hil_serial_dap_runner):
+    """One serial-DAP run, for the tests that only need one."""
+    return hil_serial_dap_runner()
 
 
 # --- results record -------------------------------------------------------
