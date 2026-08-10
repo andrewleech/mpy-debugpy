@@ -10,6 +10,16 @@ requires-python = ">=3.10"
 # (test_s4_1_debugpy_install.py, test_s5_1_mpremote_debug.py).
 test = ["pytest", "anyio", "debugpy", "pyserial", "platformdirs"]
 
+[dependency-groups]
+# Declared and pinned so `make lint` resolves ruff from uv.lock instead of
+# whichever one happens to be on PATH - a machine without it gets "Failed to
+# spawn: ruff" and a machine with a different one gets a different answer to
+# the same question. A group rather than an extra: this is developer tooling,
+# not something an installer of this project should acquire. The version is
+# deliberately not `SUBMODULE_RUFF`; that pin tracks upstream micropython's CI
+# and is not this repo's choice to make.
+lint = ["ruff==0.12.1"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

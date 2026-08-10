@@ -72,7 +72,7 @@ test:
 # Lint only, no formatting: several tests break at a fixed line in the sample
 # debuggees under src/, so reformatting them would move the breakpoints.
 lint:
-	uv run ruff check .
+	uv run --group lint ruff check .
 
 # `lint` excludes both submodules (pyproject.toml), so it says nothing about a
 # change made inside one. Each submodule has its own config and its own CI jobs,
