@@ -8,8 +8,9 @@ regresses even when the surrounding code is refactored:
   target with a `stopped`/`breakpoint` event, and the target does not run
   past it while still paused.
 - STORY-1.2/1.4: the launcher emits exactly one `MPDBG-READY` line whose
-  JSON payload carries a `caps` dict with boolean settrace/save_names/
-  set_local/f_back entries.
+  JSON payload carries a `caps` dict of booleans, keyed exactly by the
+  manifest's capability vocabulary (`firmware.KNOWN_CAPABILITIES`) so a probe
+  and a manifest entry can be compared key for key.
 - STORY-1.3: local-scope variables at a breakpoint carry a
   `presentationHint.attributes == ["readOnly"]` hint when the firmware
   reports no `set_local` support, while global-scope variables never do.

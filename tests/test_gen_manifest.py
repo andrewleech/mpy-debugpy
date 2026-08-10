@@ -2,18 +2,28 @@
 
 Focused on the `artifact` path check: `validate_fragment`'s failure message
 claims "artifact must be a non-empty relative path", so an absolute path or a
-`..`-escaping path must actually be rejected, not just an empty one.
+`..`-escaping path must actually be rejected, not just an empty one. Also holds
+the manifest side's three copies of the capability vocabulary to each other,
+since they are edited on three different occasions and only meet in a release
+job. (mpremote's fourth copy is held to the same set by
+`test_s5_2_mpdebug_config.py`.)
 """
 
 import json
 import sys
 from pathlib import Path
 
-_LAUNCHER_DIR = str(Path(__file__).resolve().parents[1] / "launcher")
+_TOP_DIR = Path(__file__).resolve().parents[1]
+_LAUNCHER_DIR = str(_TOP_DIR / "launcher")
 if _LAUNCHER_DIR not in sys.path:
     sys.path.insert(0, _LAUNCHER_DIR)
+_SCRIPTS_DIR = str(_TOP_DIR / ".github" / "scripts")
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
 
+import firmware  # noqa: E402
 import gen_manifest  # noqa: E402
+import write_fragment  # noqa: E402
 
 _VALID_FRAGMENT = {
     "id": "unix-standard-debug",
@@ -85,3 +95,30 @@ def test_check_fragments_accepts_exact_expected_id_set(tmp_path):
     (tmp_path / "unix-standard-debug.json").write_text(json.dumps(_VALID_FRAGMENT))
     problems = gen_manifest.check_fragments(tmp_path, expect_ids=["unix-standard-debug"])
     assert problems == []
+
+
+# --- the capability vocabulary ----------------------------------------------
+
+
+def test_the_three_capability_vocabularies_agree():
+    """Written into a build job, validated at assembly, resolved at select.
+
+    Nothing else brings the three together: a key a build job may emit but
+    `gen_manifest.py` rejects fails the release run after every artifact is
+    already built, and one `firmware.py` does not know is a `--need` that can
+    never match.
+    """
+    assert set(write_fragment.KNOWN_CAPABILITIES) == set(gen_manifest.KNOWN_CAPABILITIES)
+    assert set(firmware.KNOWN_CAPABILITIES) == set(gen_manifest.KNOWN_CAPABILITIES)
+
+
+def test_validate_fragment_accepts_every_known_capability_key():
+    frag = dict(_VALID_FRAGMENT, capabilities=dict.fromkeys(gen_manifest.KNOWN_CAPABILITIES, True))
+    problems = gen_manifest.validate_fragment(Path("frag.json"), frag)
+    assert problems == []
+
+
+def test_validate_fragment_rejects_an_unknown_capability_key():
+    frag = dict(_VALID_FRAGMENT, capabilities={"settrace": True, "second_cdcs": True})
+    problems = gen_manifest.validate_fragment(Path("frag.json"), frag)
+    assert any("unknown key(s): second_cdcs" in p for p in problems), problems

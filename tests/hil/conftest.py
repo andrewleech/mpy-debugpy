@@ -240,12 +240,20 @@ def hil_facts(hil_device, hil_serial):
         transport.fs_writefile(debuggee, TARGET_SRC.read_bytes())
 
         transport.exec("import os, sys, debugpy")
-        # The USB mode is a boot-time choice, not a firmware property, and it
-        # is what decides whether a second CDC interface exists to run DAP
-        # over. Recording it makes a run reproducible from the record alone;
-        # ports without `pyb` simply have nothing to say here.
+        # The USB mode is a boot-time choice; `second_cdc` is the build's
+        # maximum, and the two can disagree - a board can be built for two CDC
+        # interfaces and booted with one. Recording both makes a run
+        # reproducible from the record alone, and the second is also the
+        # independent probe `test_hil_handshake_caps_match_a_live_probe`
+        # compares the launcher's handshake against, so it is written out here
+        # in full rather than borrowed from that handshake. Ports without
+        # `pyb` have nothing to say to either.
         transport.exec(
             "try:\n import pyb\n _usb_mode = pyb.usb_mode()\nexcept Exception:\n _usb_mode = None\n"
+        )
+        transport.exec(
+            "try:\n import pyb\n pyb.USB_VCP(1)\n _second_cdc = True\n"
+            "except Exception:\n _second_cdc = False\n"
         )
         return {
             "device": hil_device,
@@ -257,7 +265,10 @@ def hil_facts(hil_device, hil_serial):
             # here identifies what produced these results.
             "firmware": transport.eval("os.uname().version"),
             "usb_mode": transport.eval("_usb_mode"),
-            "capabilities": transport.eval("debugpy.get_capabilities()"),
+            "capabilities": dict(
+                transport.eval("debugpy.get_capabilities()"),
+                second_cdc=transport.eval("_second_cdc"),
+            ),
             "debuggee": debuggee,
         }
 

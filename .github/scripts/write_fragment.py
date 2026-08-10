@@ -18,6 +18,23 @@ from __future__ import annotations
 import argparse
 import json
 
+# The manifest's capability vocabulary. `launcher/gen_manifest.py` validates
+# assembled fragments against the same set and `launcher/firmware.py` resolves
+# `select --need` from it; `tests/test_gen_manifest.py` holds the three to each
+# other, since a key accepted here and rejected there fails the release job
+# after the artifacts are already built.
+KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back", "second_cdc")
+
+# The capabilities with no build-time evidence gate, and the value that stands
+# in. Write-back (`set_local`) is not built into any v1 debug-firmware variant.
+# `second_cdc` defaults false for the same reason the runtime probe does: only
+# a port defining MICROPY_HW_USB_CDC_NUM has build evidence to offer, so a job
+# that passes nothing is claiming the absence rather than failing to measure
+# the presence. `settrace` and `save_names` are deliberately absent from this
+# table - every caller must supply them from a verify_capabilities.py check
+# against the build's resolved macros.
+DEFAULT_CAPABILITIES = {"set_local": False, "f_back": True, "second_cdc": False}
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -69,15 +86,11 @@ def _parse_bool(value: str) -> bool:
 
 
 def _parse_capabilities(pairs: list[str]) -> dict[str, bool | str]:
-    # write-back (`set_local`) is not built into any v1 debug-firmware
-    # variant; there is no build-time evidence gate for it, unlike settrace
-    # and save_names below, which every caller must supply from a
-    # verify_capabilities.py check against the build's resolved macros.
-    capabilities: dict[str, bool | str] = {"set_local": False, "f_back": True}
+    capabilities: dict[str, bool | str] = dict(DEFAULT_CAPABILITIES)
     given = {}
     for pair in pairs:
         key, _, value = pair.partition("=")
-        if key not in ("settrace", "save_names", "set_local", "f_back"):
+        if key not in KNOWN_CAPABILITIES:
             raise SystemExit(f"error: unknown --capability {key!r}")
         given[key] = _parse_bool(value)
     missing = {"settrace", "save_names"} - given.keys()

@@ -166,6 +166,7 @@ jobs:
           python3 .github/scripts/verify_capabilities.py \
             --pp-file micropython/ports/unix/build-standard/py/modsys.pp \
             --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --report "second_cdc=MICROPY_HW_USB_CDC_NUM>=2" \
             >> "$GITHUB_OUTPUT"
 
       - name: Stage release asset
@@ -197,6 +198,7 @@ jobs:
             --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
             --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
             --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --capability "second_cdc=${{ steps.capabilities.outputs.second_cdc }}" \
             --capabilities-note "Flags enabled by ports/unix/variants/standard/mpconfigvariant.h on the mpy-debugpy integration branch (no CFLAGS_EXTRA needed)." \
             --toolchain \
               "gcc=${{ steps.toolchain.outputs.gcc }}" \
@@ -423,6 +425,7 @@ jobs:
             --compile-commands micropython/ports/rp2/build-RPI_PICO_W/compile_commands.json \
             --source py/modsys.c \
             --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --report "second_cdc=MICROPY_HW_USB_CDC_NUM>=2" \
             >> "$GITHUB_OUTPUT"
 
       - name: Stage release asset
@@ -454,6 +457,7 @@ jobs:
             --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
             --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
             --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --capability "second_cdc=${{ steps.capabilities.outputs.second_cdc }}" \
             --capabilities-note "Flags committed in boards/RPI_PICO_W/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA." \
             --toolchain \
               "gcc=${{ steps.toolchain.outputs.gcc }}" \
@@ -534,6 +538,7 @@ jobs:
           python3 .github/scripts/verify_capabilities.py \
             --pp-file micropython/ports/stm32/build-PYBD_SF6/py/modsys.pp \
             --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --report "second_cdc=MICROPY_HW_USB_CDC_NUM>=2" \
             >> "$GITHUB_OUTPUT"
 
       - name: Stage release asset
@@ -563,6 +568,7 @@ jobs:
             --artifact stm32-pybd-sf6-debug/firmware.dfu \
             --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
             --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --capability "second_cdc=${{ steps.capabilities.outputs.second_cdc }}" \
             --release-asset firmware-PYBD_SF6.dfu \
             --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
             --capabilities-note "Flags committed in boards/PYBD_SF6/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA." \
@@ -658,6 +664,7 @@ jobs:
             --compile-commands micropython/ports/esp32/build-ESP32_GENERIC/compile_commands.json \
             --source py/modsys.c \
             --expect MICROPY_PY_SYS_SETTRACE=1 MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1 \
+            --report "second_cdc=MICROPY_HW_USB_CDC_NUM>=2" \
             >> "$GITHUB_OUTPUT"
 
       - name: Stage release asset
@@ -689,6 +696,7 @@ jobs:
             --artifact-sha256 "${{ steps.hash.outputs.sha256 }}" \
             --capability "settrace=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE }}" \
             --capability "save_names=${{ steps.capabilities.outputs.MICROPY_PY_SYS_SETTRACE_LOCALNAMES }}" \
+            --capability "second_cdc=${{ steps.capabilities.outputs.second_cdc }}" \
             --capabilities-note "Flags committed in boards/ESP32_GENERIC/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA." \
             --notes "Built with ESP-IDF v5.3 (espressif/idf:v5.3 container image, pinned by digest in the toolchain table)." \
             --toolchain \

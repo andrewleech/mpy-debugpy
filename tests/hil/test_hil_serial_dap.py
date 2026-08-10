@@ -56,6 +56,22 @@ def test_hil_serial_dap_takes_the_stream_instead_of_a_port(hil_serial_dap_sessio
     assert ipaddress.ip_address(session["host"]).is_loopback, session
 
 
+def test_hil_second_cdc_is_reported_as_a_build_property(hil_serial_dap_session, hil_facts):
+    """Q12: the one run where a true `second_cdc` is guaranteed.
+
+    This suite only runs when the board's second interface was supplied, so
+    it is the place the positive can be asserted outright; the network
+    suite's claimed-equals-probed check would be satisfied by two falses.
+    `hil_facts` probes over the REPL, independently of the handshake, so the
+    two agreeing is two measurements rather than one value read twice.
+    """
+    caps = hil_serial_dap_session["caps"]
+
+    assert caps["second_cdc"] is True, caps
+    assert caps["serial_dap"] is True, caps
+    assert hil_facts["capabilities"]["second_cdc"] is True, hil_facts
+
+
 def test_hil_serial_dap_reaches_a_breakpoint(hil_serial_dap_session):
     """The whole criterion in one scenario: attach, stop, read the frame back.
 

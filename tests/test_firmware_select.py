@@ -97,6 +97,21 @@ def test_select_variants_rejects_empty_need():
         firmware.select_variants(variants, [])
 
 
+def test_select_variants_can_require_a_second_cdc():
+    """Q12: "a build I can debug over a channel of its own" is a selection.
+
+    The reason `second_cdc` is a manifest capability at all rather than
+    handshake-only - by the time a session is up and could report it, the
+    firmware to install has already been chosen.
+    """
+    variants = [
+        _variant("pybd", port="stm32", board="PYBD_SF6", settrace=True, second_cdc=True),
+        _variant("pico", port="rp2", board="RPI_PICO_W", settrace=True, second_cdc=False),
+    ]
+    _, matches = firmware.select_variants(variants, ["settrace", "second_cdc"])
+    assert [v["id"] for v in matches] == ["pybd"]
+
+
 def test_select_variants_treats_unknown_string_as_not_satisfying():
     # The legacy schema records "unknown" for a build that was never
     # confirmed; that must not satisfy a --need for the same key.

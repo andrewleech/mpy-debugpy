@@ -24,6 +24,13 @@ Exits nonzero (with a `::error::`-prefixed message per problem) if any
 `--expect`ed macro is undefined or resolves to a different boolean. On
 success, prints one `NAME=true`/`NAME=false` line per `--expect`ed macro
 (suitable for appending to `$GITHUB_OUTPUT`).
+
+`--report NAME=MACRO>=N` covers the capabilities whose evidence is a count
+rather than a flag - `second_cdc` from `MICROPY_HW_USB_CDC_NUM` (Q12). It
+asserts nothing: a macro no port in the build defines is reported false,
+because for these the undefined case is the real answer and not a failure to
+measure. A macro that is defined but does not evaluate to an integer is
+still an error, since that is a value this cannot read either way.
 """
 
 from __future__ import annotations
@@ -39,14 +46,18 @@ from pathlib import Path
 _DEFINE_RE = re.compile(r"^#define\s+(\S+)\s+(.*)$")
 
 
-def _truthy(value: str) -> bool:
+def _integer(value: str) -> int:
     v = value.strip()
     if v.startswith("(") and v.endswith(")"):
         v = v[1:-1].strip()
     try:
-        return int(v, 0) != 0
+        return int(v, 0)
     except ValueError:
         raise SystemExit(f"error: macro value {value!r} is not a plain integer; can't evaluate capability")
+
+
+def _truthy(value: str) -> bool:
+    return _integer(value) != 0
 
 
 def macros_from_text(text: str) -> dict[str, str]:
@@ -108,7 +119,25 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="MACRO=0|1",
         help="macro name and the boolean value it must resolve to",
     )
+    parser.add_argument(
+        "--report",
+        nargs="+",
+        default=[],
+        metavar="NAME=MACRO>=N",
+        help="report NAME as the truth of a threshold on a counted macro; asserts nothing",
+    )
     return parser
+
+
+def _report_value(spec: str, macros: dict[str, str]) -> tuple[str, bool]:
+    name, _, comparison = spec.partition("=")
+    macro, sep, threshold = comparison.partition(">=")
+    if not name or not sep or not macro.strip() or not threshold.strip():
+        raise SystemExit(f"error: --report {spec!r} is not NAME=MACRO>=N (only >= is supported)")
+    macro = macro.strip()
+    if macro not in macros:
+        return name, False
+    return name, _integer(macros[macro]) >= _integer(threshold)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -140,6 +169,12 @@ def main(argv: list[str] | None = None) -> int:
         for p in problems:
             print(f"::error::  {p}", file=sys.stderr)
         return 1
+
+    # After the assertions, so a build that fails one reports that rather than
+    # a threshold it cannot read.
+    for spec in args.report:
+        name, value = _report_value(spec, macros)
+        results[name] = value
 
     for name, value in results.items():
         print(f"{name}={'true' if value else 'false'}")

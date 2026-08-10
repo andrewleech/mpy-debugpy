@@ -8,6 +8,18 @@
 # STORY-3.1/3.3). A claimed-true-but-probed-false capability is a hard error
 # (launcher/capcheck.py).
 #
+# `second_cdc` says the build has a second USB CDC interface, so a session can
+# put DAP on a channel of its own instead of on TCP. It is a build maximum
+# (`MICROPY_HW_USB_CDC_NUM >= 2`), not a boot-time choice and not a live
+# connection - the boot script probes it by constructing `pyb.USB_VCP(1)`,
+# which answers from the same constant. Distinct from the `serial_dap`
+# capability in the handshake, which reports the channel one session actually
+# took and is therefore not a firmware property and never appears here. All
+# four entries below are false: `source_commit` f9d7c96b96 predates
+# `MICROPY_HW_USB_CDC_NUM (2)` reaching boards/PYBD_SF6/mpconfigboard.h, and
+# the other three ports build TinyUSB with a single CDC or have no USB device
+# peripheral at all.
+#
 # `source_commit` is the exact commit the binary was built from, recoverable
 # from the `MicroPython vX.Y.Z[-preview].g<sha>` version string embedded in each
 # artifact (readable via `strings <binary> | grep MicroPython`). It tracks the
@@ -41,7 +53,7 @@ build_flags = [
     "MICROPY_PY_SYS_SETTRACE=1",
     "MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1",
 ]
-capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
+capabilities = { set_local = false, f_back = true, settrace = true, save_names = true, second_cdc = false }
 capabilities_note = "Flags committed in boards/ESP32_GENERIC/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA."
 artifact = "esp32-generic-debug/firmware.bin"
 artifact_sha256 = "62b3bf77d6513f868f2e2ca23225005c1cb65b86483c94e1840e68f7c1160b35"
@@ -61,7 +73,7 @@ build_flags = [
     "MICROPY_PY_SYS_SETTRACE=1",
     "MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1",
 ]
-capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
+capabilities = { set_local = false, f_back = true, settrace = true, save_names = true, second_cdc = false }
 capabilities_note = "Flags committed in boards/RPI_PICO_W/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA."
 artifact = "rp2-rpi-pico-w-debug/firmware.uf2"
 artifact_sha256 = "51c133c71d65d3ef0bf4ac88355b9f2c6498029b3ed3396bb117840239c2188d"
@@ -80,7 +92,7 @@ build_flags = [
     "MICROPY_PY_SYS_SETTRACE=1",
     "MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1",
 ]
-capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
+capabilities = { set_local = false, f_back = true, settrace = true, save_names = true, second_cdc = false }
 capabilities_note = "Flags committed in boards/PYBD_SF6/mpconfigboard.h on the debug_board_flags composition branch, not passed via CFLAGS_EXTRA."
 artifact = "stm32-pybd-sf6-debug/firmware.dfu"
 artifact_sha256 = "12baf712cf5c1895dbda27e6c9a953ecb25039f6169c2a77ffb3169727deab09"
@@ -100,7 +112,7 @@ build_flags = [
     "MICROPY_PY_SYS_SETTRACE=1",
     "MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1",
 ]
-capabilities = { set_local = false, f_back = true, settrace = true, save_names = true }
+capabilities = { set_local = false, f_back = true, settrace = true, save_names = true, second_cdc = false }
 capabilities_note = "Flags enabled by ports/unix/variants/standard/mpconfigvariant.h on the mpy-debugpy integration branch (no CFLAGS_EXTRA needed)."
 artifact = "unix-standard-debug/micropython"
 artifact_sha256 = "ba031c4aab66d463b6a874c72f1c0c5e1b4658a415e4b4579023f0ea557a13d2"

@@ -43,7 +43,7 @@ from typing import Any
 # `firmware.py`'s KNOWN_CAPABILITIES) plus "unknown", the one non-boolean value
 # the manifest schema allows for a capability that was never confirmed either
 # way (see firmware.toml's header note on `set_local`/`save_names`).
-KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back")
+KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back", "second_cdc")
 KNOWN_CAPABILITY_VALUES = (True, False, "unknown")
 
 REQUIRED_FRAGMENT_FIELDS = (
