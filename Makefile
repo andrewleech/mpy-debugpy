@@ -15,9 +15,9 @@ UNIX_VARIANT   := standard
 # ports, define MICROPY_PY_SYS_SETTRACE=1 and MICROPY_PY_SYS_SETTRACE_LOCALNAMES=1.
 DEBUG_CFLAGS   :=
 
-.PHONY: bootstrap install-hooks check-pins integrate firmware-unix mpy-cross \
-        test lint lint-submodules lint-submodule-commits demo firmware-list \
-        firmware-verify clean
+.PHONY: bootstrap install-hooks check-pins check-submodule-ci integrate \
+        firmware-unix mpy-cross test lint lint-submodules lint-submodule-commits \
+        demo firmware-list firmware-verify clean
 
 # Versions pinned by both submodules' own CI jobs and .pre-commit-config.yaml;
 # keep in step with them.
@@ -57,6 +57,16 @@ install-hooks:
 check-pins:
 	./tools/check-submodule-pins.sh
 
+# Which gating jobs would a submodule PR run that have never run for the branch?
+# A `pull_request` event uses the workflows from the merge with the base, so a
+# job upstream added after a branch was cut runs against that branch on every PR
+# while appearing nowhere in what the branch carries - and a green push build on
+# the fork, which uses the pushed commit's workflows, cannot have covered it.
+# Run before claiming a submodule branch is CI-green; the remedy for a hit is to
+# rebase that branch onto upstream/master.
+check-submodule-ci:
+	uv run --no-project tools/check_submodule_ci.py
+
 # Rebuild the integration branches from mbm.toml on top of the latest upstream
 # master, into <integration>_update branches (mpy-debugpy_update). --local
 # skips mbm's own push routing, which targets upstream, not the andrewleech
@@ -74,6 +84,10 @@ integrate:
 	@echo "  git -C <submodule> push andrewleech +mpy-debugpy:mpy-debugpy"
 	@echo "mbm's own push routing targets upstream, not the fork; never run"
 	@echo "mbm rebase without --local."
+	@echo
+	@echo "The rebuild moves the integration branch, not the feature branches"
+	@echo "that face CI, so their gating-job state is reported but not fatal:"
+	-@$(MAKE) --no-print-directory check-submodule-ci
 
 mpy-cross:
 	$(MAKE) -C $(MPY)/mpy-cross
@@ -102,9 +116,10 @@ lint:
 # submodule; a red job there blocks the upstream PR.
 #
 # A submodule's CI is not fully described by the workflows in its own tree: an
-# older feature branch can predate a job that still runs against it. Confirm
-# against the PR's own check list (`gh api repos/<upstream>/commits/<sha>/check-runs`)
-# rather than treating this target as the definition of green.
+# older feature branch can predate a job that still runs against it. `make
+# check-submodule-ci` names those jobs; the PR's own check list
+# (`gh api repos/<upstream>/commits/<sha>/check-runs`) is the final word. Neither
+# this target nor that one alone is the definition of green.
 lint-submodules:
 	for sub in micropython micropython-lib; do \
 	  echo "== $$sub =="; \
