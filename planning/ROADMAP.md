@@ -1498,6 +1498,26 @@ end-to-end; a device on WiFi reports its own address; serial devices need no IP.
     precondition, and the story starts in `micropython-lib` where it can be
     measured end to end on the bench. Third dated correction in
     `20260810_single-uart-dap-framing.md`.
+  - **Ticket written 2026-08-10**: `s6.7_single-uart-dap.md`, which settles two
+    things the criteria below leave open. The stdout choice is *escape*, not
+    divert: diverting into DAP `output` events puts a program's prints where a
+    VS Code user expects them but drops them entirely for a terminal user with
+    no client attached, and hides a traceback behind the channel that may be
+    the broken thing. The wrapper is the same object either way, so routing to
+    `output` events stays available once the channel is proven. Running
+    `mpremote mount` concurrently with a session on the same stream is deferred
+    to a follow-up story and refused with an explicit error meanwhile - three
+    protocols on one wire, and the fs-hook reads `sys.stdin` directly, so its
+    payloads would have to pass through the new demux too. The framing is
+    chosen so that is an extension: one marker namespace with fs-hook codes
+    1..13 untouched, DAP at 14 with an explicit length so the demux never scans
+    a payload, and the host echo made conditional on the code rather than
+    unconditional. Two hazards the ticket names that the story did not: an
+    exception out of a dupterm slot's `write()` deactivates the slot
+    (`extmod/os_dupterm.c:196-209`), which on this board is the whole stdout
+    path, and the CDC RX ring discards the tail of a packet on overflow
+    (`ports/stm32/usbd_cdc_interface.c:319-322`) rather than exerting
+    back-pressure, which is obstacle (1) in its real form.
   - type: implementation
   - description: the no-network answer for boards with one UART, which is most
     of them. `mpremote mount` already interleaves a request/response protocol
