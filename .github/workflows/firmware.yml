@@ -21,6 +21,11 @@ on:
   # gating a PR before merge.
   push:
     branches: [main]
+    # Everything a job here reads, not only the sources it builds. The last
+    # four are what the jobs are *made of* - the commands they run, the
+    # versions those resolve, and the sample debuggees the suite sets its
+    # breakpoints in at fixed line numbers - so a change to one of them can
+    # break a job while leaving nothing in this list touched.
     paths:
       - "micropython"
       - "micropython-lib"
@@ -30,6 +35,10 @@ on:
       - "launcher/**"
       - "tests/**"
       - "extension/**"
+      - "src/**"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
 
 permissions:
   contents: read
@@ -332,6 +341,15 @@ jobs:
             extension/.vscode-test/vscode-linux-x64-*
             extension/.vscode-test/extensions
           key: vscode-test-${{ runner.os }}-${{ hashFiles('extension/src/test/host/runHostTests.ts') }}
+
+      # `npm test` and `npm run test:host` are different suites: the node
+      # tests under out/test, and the ones that need a real VS Code. The
+      # node tests reach CI only from here - the pytest case that wraps them
+      # lives in the `unix` job, which installs no node toolchain and so
+      # skips it.
+      - name: Run extension node tests
+        working-directory: extension
+        run: npm test
 
       - name: Run extension-host suite
         working-directory: extension
