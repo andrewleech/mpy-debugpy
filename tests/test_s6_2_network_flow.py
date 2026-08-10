@@ -68,7 +68,7 @@ def _run_against_pty(port, env):
         proc = _spawn_debug(
             _RESUME + ["debug", "--port", str(port), slave_path, "target:main"], env=env
         )
-        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=20)
+        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=20, at_line_start=True)
         if matched is None:
             pytest.fail(f"never saw MPDBG-READY on port {port}; output: {''.join(lines)}")
         return json.loads(matched[matched.index("{") :])

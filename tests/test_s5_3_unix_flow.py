@@ -23,7 +23,6 @@ Coverage:
 
 import json
 import os
-import select
 import signal
 import subprocess
 import sys
@@ -34,6 +33,7 @@ import pytest
 
 import mpremote_debug
 from helpers import PerfServer, wait_for_msg
+from mpremote_debug import read_until as _read_until, spawn_debug as _spawn_debug
 
 _TOP_DIR = Path(__file__).resolve().parents[1]
 _SUBMODULE_DIR = mpremote_debug.SUBMODULE_DIR
@@ -106,64 +106,6 @@ def _mpremote_cmd(args, timeout=90, env=None, cwd=None):
         env=env,
     )
     return result.returncode, result.stdout, result.stderr
-
-
-def _spawn_debug(args, env=None, cwd=None):
-    """Start `mpremote debug` and return the live Popen (stdout+stderr merged).
-
-    Binary mode, not `text=True`: `_read_until` reads the raw fd directly via
-    `os.read`, bypassing Python's own buffered line reader - mixing a
-    buffered `readline()` with `select()` on the underlying fd is exactly
-    the trap this avoids (see `_read_until`'s docstring).
-    """
-    if env is None:
-        env = os.environ.copy()
-    return subprocess.Popen(
-        [sys.executable, "-m", "mpremote"] + args,
-        cwd=str(cwd or _SUBMODULE_DIR),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        env=env,
-    )
-
-
-def _read_until(proc, marker, timeout=30):
-    """Read `proc.stdout` lines until one contains `marker`, EOF, or timeout.
-
-    Reads the raw fd via `os.read`, never `proc.stdout.readline()`: a
-    buffered reader can slurp several already-flushed lines into its own
-    buffer on one underlying read, after which `select()` on the raw fd sees
-    no *new* data and blocks until the next real I/O event - stranding
-    lines that are already sitting in Python-land unread.
-
-    Returns `(lines_read, matched_line)`; `matched_line` is None if the
-    marker never appeared, which the caller must treat as a failure (and
-    kill `proc` itself - this never does).
-    """
-    deadline = time.monotonic() + timeout
-    fd = proc.stdout.fileno()
-    buf = ""
-    lines = []
-    while True:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            break
-        ready, _, _ = select.select([fd], [], [], remaining)
-        if not ready:
-            break
-        chunk = os.read(fd, 4096)
-        if chunk == b"":
-            break
-        buf += chunk.decode(errors="replace")
-        while "\n" in buf:
-            line, buf = buf.split("\n", 1)
-            line += "\n"
-            lines.append(line)
-            if marker in line:
-                return lines, line
-    if buf:
-        lines.append(buf)
-    return lines, None
 
 
 def _new_launcher_pids(proc, before_pids):
@@ -252,7 +194,7 @@ def test_unix_debug_port_from_handshake(tmp_path, free_tcp_port):
     env["MPY_DEBUG_FIRMWARE"] = str(stub_path)
     before = _debug_child_pids()
     proc = _spawn_debug(["debug", "--port", str(requested_port), "unix", "target:main"], env=env)
-    lines, matched = _read_until(proc, "MPDBG-READY")
+    lines, matched = _read_until(proc, "MPDBG-READY ", at_line_start=True)
     if matched is None:
         proc.kill()
         proc.wait(timeout=5)

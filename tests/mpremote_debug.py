@@ -143,7 +143,7 @@ def spawn_debug(args, env=None, cwd=None):
     )
 
 
-def read_until(proc, marker, timeout=30):
+def read_until(proc, marker, timeout=30, at_line_start=False):
     """Read `proc.stdout` lines until one contains `marker`, EOF, or timeout.
 
     Reads the raw fd via `os.read`, never `proc.stdout.readline()`: a
@@ -151,6 +151,14 @@ def read_until(proc, marker, timeout=30):
     buffer on one underlying read, after which `select()` on the raw fd sees
     no *new* data and blocks until the next real I/O event - stranding
     lines that are already sitting in Python-land unread.
+
+    `at_line_start=True` requires the marker to open the line rather than
+    appear anywhere in it. Mandatory for `MPDBG-READY `, because mpremote
+    quotes that marker when reporting its absence ("device exited before
+    printing a 'MPDBG-READY ' line"): a substring search hands the caller
+    the report of the absence as the thing itself. mpremote prints the
+    handshake on a line of its own (`commands.py`), and its own reader
+    anchors the same way (`mpdebug_handshake.read_handshake`).
 
     `marker=None` drains whatever arrives for `timeout` seconds without
     looking for anything in particular; `matched_line` is then always None.
@@ -177,7 +185,9 @@ def read_until(proc, marker, timeout=30):
             line, buf = buf.split("\n", 1)
             line += "\n"
             lines.append(line)
-            if marker is not None and marker in line:
+            if marker is None:
+                continue
+            if line.startswith(marker) if at_line_start else marker in line:
                 return lines, line
     if buf:
         lines.append(buf)

@@ -74,7 +74,7 @@ def _mount_session(device, source_dir):
         cwd=source_dir,
     )
     try:
-        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=90)
+        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=90, at_line_start=True)
         if matched is None:
             pytest.fail(f"never saw MPDBG-READY; output:\n{''.join(lines)}")
         payload = json.loads(matched[matched.index("{") :])

@@ -84,6 +84,11 @@ def single_cdc_debug_run(single_cdc_board, tmp_path_factory):
     One run for the module: the three assertions below are three claims about
     the same event, and re-running would put the board through a reset for
     each of them without asking it anything new.
+
+    `at_line_start` is what makes "no handshake" observable here rather than
+    everywhere else: this is the one scenario whose expected output contains
+    mpremote's own quotation of the marker, so an unanchored search would
+    report the absence as the thing itself.
     """
     tmp_path = tmp_path_factory.mktemp("single-cdc")
     absent_node = str(tmp_path / "no-such-dap-node")
@@ -100,7 +105,7 @@ def single_cdc_debug_run(single_cdc_board, tmp_path_factory):
     proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
     try:
         started = time.monotonic()
-        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=_TIMEOUT)
+        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=_TIMEOUT, at_line_start=True)
         try:
             returncode = proc.wait(timeout=_TIMEOUT)
         except subprocess.TimeoutExpired:

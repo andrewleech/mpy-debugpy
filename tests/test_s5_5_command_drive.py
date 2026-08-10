@@ -98,7 +98,7 @@ def mpremote_debuggee(free_tcp_port):
     proc = _spawn_debug(["debug", "--port", str(free_tcp_port), "unix", "target:main"], env=env)
 
     # Read until we see the handshake
-    lines, matched = _read_until(proc, "MPDBG-READY")
+    lines, matched = _read_until(proc, "MPDBG-READY ", at_line_start=True)
     if matched is None:
         proc.kill()
         proc.wait(timeout=5)

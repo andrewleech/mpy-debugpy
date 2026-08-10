@@ -6,9 +6,12 @@ tests built on it green rather than failing itself. What is pinned here is that
 each way of asking either returns what it matched or reports nothing at all.
 """
 
+import os
+
 import pytest
 from dap import Message
 from helpers import set_breakpoints, take_msg, wait_for_msg
+from mpremote_debug import read_until
 
 
 class FakeClient:
@@ -106,3 +109,65 @@ def test_a_waited_breakpoint_set_returns_the_response():
     server = FakeServer(pending=[_response("setBreakpoints")])
 
     assert set_breakpoints(server, "src/app.py", [3], wait=True) is not None
+
+
+class FakeProc:
+    """Output already written, offered through a real fd.
+
+    `read_until` selects on `proc.stdout.fileno()` and reads it with
+    `os.read`, so a pipe with the write end closed is the whole of what it
+    needs: everything is readable at once and EOF follows immediately.
+    """
+
+    def __init__(self, output):
+        read_fd, write_fd = os.pipe()
+        os.write(write_fd, output.encode())
+        os.close(write_fd)
+        self.stdout = os.fdopen(read_fd, "rb")
+
+    def close(self):
+        self.stdout.close()
+
+
+# What mpremote prints when the device never reported an endpoint. It quotes
+# the marker the caller is hunting, which is the whole reason `at_line_start`
+# exists (`mpdebug_handshake.read_handshake` raises it, `read_until` reads it).
+_ABSENCE = (
+    "mpremote: device exited before printing a 'MPDBG-READY ' line; "
+    "last output: 'Error: no dedicated DAP interface on this board'\n"
+)
+_HANDSHAKE = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {"settrace": true}}\n'
+
+
+def test_an_anchored_search_does_not_match_a_report_of_the_marker_missing():
+    """The failure this flag exists for: an absence read as its own presence."""
+    proc = FakeProc(_ABSENCE)
+    try:
+        lines, matched = read_until(proc, "MPDBG-READY ", timeout=5, at_line_start=True)
+    finally:
+        proc.close()
+
+    assert matched is None
+    assert "".join(lines) == _ABSENCE, "the output still has to reach the caller"
+
+
+def test_an_unanchored_search_does_match_it():
+    """Pinned deliberately: the default is a substring search, and this text
+    is why every handshake call site must opt out of it."""
+    proc = FakeProc(_ABSENCE)
+    try:
+        _, matched = read_until(proc, "MPDBG-READY ", timeout=5)
+    finally:
+        proc.close()
+
+    assert matched == _ABSENCE
+
+
+def test_an_anchored_search_still_finds_the_handshake():
+    proc = FakeProc("Waiting for the device to report its endpoint...\n" + _HANDSHAKE)
+    try:
+        _, matched = read_until(proc, "MPDBG-READY ", timeout=5, at_line_start=True)
+    finally:
+        proc.close()
+
+    assert matched == _HANDSHAKE

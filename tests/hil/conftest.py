@@ -355,7 +355,7 @@ def hil_debug_runner(hil_device, hil_facts):
         if runs:
             runs[-1]["device"].close()
         proc = _spawn_debug(["debug", hil_device, f"{TARGET_MODULE}:main"])
-        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=60)
+        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=60, at_line_start=True)
         if matched is None:
             proc.kill()
             proc.wait(timeout=5)
@@ -415,7 +415,7 @@ def hil_serial_dap_runner(hil_device, hil_dap_device, hil_facts, tmp_path):
     def _run(timeout=60):
         proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
         procs.append(proc)
-        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=timeout)
+        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=timeout, at_line_start=True)
         if matched is None:
             pytest.fail(f"never saw MPDBG-READY; output:\n{''.join(lines)}")
         payload = json.loads(matched[matched.index("{") :])
@@ -487,6 +487,24 @@ def pytest_sessionfinish(session):
     dap_device = os.environ.get(DAP_DEVICE_ENV)
     arrangement = "" if dap_device else "_no-dap-device"
     path = _TOP_DIR / "planning" / "{}_hil_{}{}.md".format(time.strftime("%Y%m%d"), board, arrangement)
+    capabilities = facts.get("capabilities")
+    if dap_device:
+        channel_note = [
+            "The serial-DAP scenarios below assert it is `True` in the",
+            "handshake of the stream session they start.",
+        ]
+    else:
+        channel_note = [
+            "No run in this arrangement takes that channel: the scenarios that",
+            "would were skipped for want of a second interface, which is what",
+            "this arrangement is for.",
+        ]
+        if isinstance(capabilities, dict) and capabilities.get("second_cdc"):
+            channel_note += [
+                "`second_cdc` being `True` beside a single-VCP USB mode is not a",
+                "contradiction: it reports what the firmware can construct, so this",
+                "is a board built for two interfaces and booted with one.",
+            ]
     lines = [
         f"# Hardware-in-loop run: {board}",
         "",
@@ -501,23 +519,12 @@ def pytest_sessionfinish(session):
         f"- Firmware: {facts.get('firmware', 'unknown')}",
         f"- USB mode: {facts.get('usb_mode') or 'n/a'}",
         f"- Debuggee on device: `{facts.get('debuggee', 'unknown')}`",
-        f"- Probed capabilities: `{facts.get('capabilities', 'unknown')}`",
+        f"- Probed capabilities: `{capabilities if capabilities is not None else 'unknown'}`",
         "",
         "`serial_dap` is `False` above because these capabilities come from a plain",
         "REPL probe: the key reports which channel a session took, not what the",
         "firmware can do.",
-        *(
-            [
-                "The serial-DAP scenarios below assert it is `True` in the",
-                "handshake of the stream session they start.",
-            ]
-            if dap_device
-            else [
-                "No run in this arrangement takes that channel: the scenarios that",
-                "would were skipped for want of a second interface, which is what",
-                "this arrangement is for.",
-            ]
-        ),
+        *channel_note,
         "",
         "| scenario | result |",
         "| --- | --- |",
