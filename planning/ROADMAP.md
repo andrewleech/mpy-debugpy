@@ -1708,8 +1708,9 @@ parallel.
     micropython-lib staging tip is held by a tag, which mbm does not touch -
     `staged/add-debugpy-support-20260810` (`2c52eb3`), then
     `staged/add-debugpy-support-20260810b` (`2a125e4`) once criterion 3's fix
-    landed on the branch. Restore from the latest tag if a rebuild moves the
-    branch.
+    landed on the branch, then `staged/add-debugpy-support-20260810c`
+    (`2ff694e`) with STORY-6.6's. Restore from the latest tag if a rebuild
+    moves the branch.
     What remains not autonomously reachable: STORY-6.1's criterion 2 needs a
     board with no second CDC (the ESP32 on this bench is offline), STORY-4.4 is
     unreachable by design, and the two pushes that would put either fold in
@@ -1723,7 +1724,10 @@ parallel.
     held by fork PR #51 and was not: the installer lives on
     `mpremote_debugpy_install`, a different branch, so giving it a command left
     #51 untouched. Q12 is the only open question left, and it waits on
-    STORY-3.2's republish rather than on anything decidable now.
+    STORY-3.2's republish rather than on anything decidable now. **STORY-6.6
+    (2026-08-10) came off the risk register rather than out of this sequence**,
+    which is where the reachable work now comes from: the epics are complete
+    except for what needs a board or a reviewer.
 
 Notes:
 - The whole of EPIC-3 (firmware) runs in parallel with EPIC-1 and the spikes; it only feeds
