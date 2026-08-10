@@ -144,6 +144,43 @@ def hil_dap_device():
     return device
 
 
+@pytest.fixture(scope="session")
+def hil_single_vcp_board(hil_device, hil_facts):
+    """The board, having been booted with no second interface, or a skip.
+
+    Two arrangements of the same bench board, mutually exclusive by
+    construction: the second-CDC scenarios need it booted with two interfaces
+    and the single-UART ones need it booted with one, which is how every stm32
+    board comes up unless `boot.py` says otherwise (`ports/stm32/main.c`
+    applies `USBD_MODE_CDC_MSC` when boot.py set no mode). A suite-wide run is
+    therefore always in one arrangement and skips the other.
+
+    What the board enumerated decides, not the environment. Two ways a board
+    qualifies and the boot script's probe treats them the same: a port with no
+    `pyb` at all, and a `pyb` whose `usb_mode()` reports a single VCP.
+    `hil_facts` reads both over the REPL, independently of any debug session.
+
+    `MPY_DEBUG_HIL_DAP_DEVICE` set against a board that came up single-VCP is
+    the one real contradiction: the variable names a node the board did not
+    enumerate, so every scenario keyed to it is testing something that is not
+    there.
+    """
+    usb_mode = hil_facts["usb_mode"]
+    if usb_mode and "xVCP" in usb_mode:
+        pytest.skip(
+            f"the board enumerated a second CDC interface (usb_mode {usb_mode!r}); "
+            "this scenario needs a boot with one, which is the stm32 default when "
+            "boot.py calls no pyb.usb_mode()"
+        )
+    if os.environ.get(DAP_DEVICE_ENV):
+        pytest.fail(
+            f"{DAP_DEVICE_ENV} is set, but the board came up with a single VCP "
+            f"(usb_mode {usb_mode!r}); the variable names a node this boot cannot "
+            "have enumerated, so the two-interface scenarios are testing nothing"
+        )
+    return hil_device
+
+
 @pytest.fixture()
 def hil_reset_board(hil_device):
     """Call to reset the board out from under whatever is talking to it.

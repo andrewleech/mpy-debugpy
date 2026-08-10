@@ -1,7 +1,35 @@
+import sys
 import time
 from pathlib import Path
 
 from dap import ThreadedServer
+
+_MPREMOTE_DIR = str(Path(__file__).resolve().parents[1] / "micropython" / "tools" / "mpremote")
+if _MPREMOTE_DIR not in sys.path:
+    sys.path.insert(0, _MPREMOTE_DIR)
+
+
+def debug_args(**overrides):
+    """The argument namespace `mpremote debug` builds, with `overrides` applied.
+
+    Taken from the command's own parser rather than hand-rolled, so every
+    option `do_debug` reads is present with the default a real invocation
+    would give it. A hand-rolled stand-in only carries the options that
+    existed when it was written, and adding an option to the command then
+    breaks every test that built one.
+
+    An override naming something the parser does not define is an error: the
+    parser is the whole vocabulary, so a misspelt name is a test setting
+    nothing and asserting against the default.
+    """
+    from mpremote.main import argparse_debug
+
+    args = argparse_debug().parse_args([])
+    for name, value in overrides.items():
+        if not hasattr(args, name):
+            raise AttributeError(f"'mpremote debug' has no argument {name!r}")
+        setattr(args, name, value)
+    return args
 
 
 def firmware_variant(id, port="unix", board="standard", deprecated=False, sha256="0" * 64, url="", **caps):

@@ -43,6 +43,7 @@ from mpremote import commands  # noqa: E402
 from mpremote.main import State  # noqa: E402
 from mpremote.transport_serial import SerialIntercept, SerialTransport  # noqa: E402
 
+from helpers import debug_args  # noqa: E402
 from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
@@ -578,20 +579,7 @@ def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
         ]
     )
     state = _FakeState(transport)
-    args = type(
-        "Args",
-        (),
-        {
-            "target": "u0",
-            "program": "mod:main",
-            "port": None,
-            "dap_log": False,
-            "dap_log_file": None,
-            "timeout": 60,
-            "source": None,
-            "loop": False,
-        },
-    )()
+    args = debug_args(target="u0", program="mod:main")
 
     commands.do_debug(state, args)
 
@@ -611,20 +599,7 @@ def test_do_debug_hard_errors_on_unreachable_device(monkeypatch):
     handshake = {"host": "0.0.0.0", "port": 5678, "caps": {}}
     transport = _FakeTransport([("MPDBG-READY " + json.dumps(handshake) + "\n").encode()])
     state = _FakeState(transport)
-    args = type(
-        "Args",
-        (),
-        {
-            "target": "u0",
-            "program": "mod:main",
-            "port": None,
-            "dap_log": False,
-            "dap_log_file": None,
-            "timeout": 60,
-            "source": None,
-            "loop": False,
-        },
-    )()
+    args = debug_args(target="u0", program="mod:main")
 
     with pytest.raises(commands.CommandError, match="no network address"):
         commands.do_debug(state, args)
@@ -637,20 +612,7 @@ def test_do_debug_missing_caps_key(monkeypatch):
     handshake = {"host": "0.0.0.0", "port": 5678}  # no "caps"
     transport = _FakeTransport([("MPDBG-READY " + json.dumps(handshake) + "\n").encode()])
     state = _FakeState(transport)
-    args = type(
-        "Args",
-        (),
-        {
-            "target": "u0",
-            "program": "mod:main",
-            "port": None,
-            "dap_log": False,
-            "dap_log_file": None,
-            "timeout": 60,
-            "source": None,
-            "loop": False,
-        },
-    )()
+    args = debug_args(target="u0", program="mod:main")
 
     with pytest.raises(commands.CommandError, match="missing key"):
         commands.do_debug(state, args)
@@ -773,20 +735,7 @@ def test_do_debug_over_real_pty_reads_handshake_before_client_attach(free_tcp_po
         # reset used to prime a fresh device, rather than rebooting into a
         # new REPL; do_resume's flag is the existing way to skip that reset.
         commands.do_resume(state)
-        args = type(
-            "Args",
-            (),
-            {
-                "target": device.path,
-                "program": "mod:main",
-                "port": free_tcp_port,
-                "dap_log": False,
-                "dap_log_file": None,
-                "timeout": 15,
-                "source": None,
-                "loop": False,
-            },
-        )()
+        args = debug_args(target=device.path, program="mod:main", port=free_tcp_port, timeout=15)
 
         handshake = commands.do_debug(state, args)
         assert state.run_repl_on_completion() is False

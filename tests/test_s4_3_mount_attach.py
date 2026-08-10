@@ -62,6 +62,7 @@ from mpremote.transport_serial import SerialTransport  # noqa: E402
 
 from helpers import (  # noqa: E402
     PerfServer,
+    debug_args,
     drain_lines,
     set_breakpoints,
     wait_for_msg,
@@ -180,18 +181,9 @@ class _FakeMountTransport:
 
 
 def _args(**overrides):
-    defaults = {
-        "target": "u0",
-        "program": "target:main",
-        "port": None,
-        "dap_log": False,
-        "dap_log_file": None,
-        "timeout": 60,
-        "source": None,
-        "loop": False,
-    }
+    defaults = {"target": "u0", "program": "target:main"}
     defaults.update(overrides)
-    return type("Args", (), defaults)()
+    return debug_args(**defaults)
 
 
 # ==============================================================================

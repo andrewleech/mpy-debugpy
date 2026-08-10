@@ -79,8 +79,10 @@ def test_the_requires_row_lists_the_vocabulary_a_target_may_actually_name():
     for capability in mpdebug_config.KNOWN_CAPABILITIES:
         assert capability in named, f"`requires` row omits {capability!r}"
 
-    # `serial_dap` is the one the resolver refuses, and the row has to say so:
-    # it is reported by the handshake next to the others, so a reader with the
-    # probe output in front of them has no way to tell it apart otherwise.
-    assert "serial_dap" in named
-    assert "serial_dap" not in mpdebug_config.KNOWN_CAPABILITIES
+    # `serial_dap` and `repl_dap` are the ones the resolver refuses, and the row
+    # has to say so: both are reported by the handshake next to the others, so a
+    # reader with the probe output in front of them has no way to tell them
+    # apart otherwise.
+    for refused in ("serial_dap", "repl_dap"):
+        assert refused in named, f"`requires` row does not mention {refused!r}"
+        assert refused not in mpdebug_config.KNOWN_CAPABILITIES

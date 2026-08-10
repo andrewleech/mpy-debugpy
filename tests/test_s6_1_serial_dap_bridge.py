@@ -57,7 +57,7 @@ from mpremote.main import State  # noqa: E402
 from mpremote.mpdebug_config import Target  # noqa: E402
 from mpremote.transport_serial import SerialTransport  # noqa: E402
 
-from helpers import PerfServer, set_breakpoints, wait_for_msg  # noqa: E402
+from helpers import PerfServer, debug_args, set_breakpoints, wait_for_msg  # noqa: E402
 from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
@@ -521,20 +521,7 @@ class TestDoDebugSerialDapBridge:
 
         monkeypatch.setattr(commands, "_report_debug_result", _capture_report)
 
-        args = type(
-            "Args",
-            (),
-            {
-                "target": "bench",
-                "program": "mod:main",
-                "port": None,
-                "dap_log": False,
-                "dap_log_file": None,
-                "timeout": 15,
-                "source": None,
-                "loop": False,
-            },
-        )()
+        args = debug_args(target="bench", program="mod:main", timeout=15)
 
         future = _DaemonFuture(commands.do_debug, state, args)
         return future, reported_holder, control_device, device_master_fd, transport
@@ -734,20 +721,7 @@ class TestDoDebugSerialDapBridgeRealSession:
 
         monkeypatch.setattr(commands, "_maybe_start_serial_dap", _capture_bridge)
 
-        args = type(
-            "Args",
-            (),
-            {
-                "target": "bench",
-                "program": f"{module}:{method}",
-                "port": None,
-                "dap_log": False,
-                "dap_log_file": None,
-                "timeout": 15,
-                "source": None,
-                "loop": False,
-            },
-        )()
+        args = debug_args(target="bench", program=f"{module}:{method}", timeout=15)
 
         future = _DaemonFuture(commands.do_debug, state, args)
         return future, reported_holder, control_device, transport, bridge_holder, device_slave_fd

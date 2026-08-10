@@ -48,19 +48,21 @@ def test_epic1_mpdbg_ready_handshake(attach_server, micropython_debuggee):
     assert "host" in payload and "port" in payload and "caps" in payload
 
     caps = payload["caps"]
-    # `serial_dap` is probed and reported like any other capability but is
-    # deliberately excluded from `KNOWN_CAPABILITIES` (see mpdebug_config.py):
-    # it names a specific dap_device wiring, not a generic interpreter
-    # feature a target's `requires`/`--need` can ask for.
-    assert set(caps) - {"serial_dap"} == set(firmware.KNOWN_CAPABILITIES), (
-        f"caps keys {set(caps)} != {set(firmware.KNOWN_CAPABILITIES)} + {{'serial_dap'}}"
+    # `serial_dap` and `repl_dap` are probed and reported like any other
+    # capability but are deliberately excluded from `KNOWN_CAPABILITIES` (see
+    # mpdebug_config.py): each names the channel this session took, not a
+    # generic interpreter feature a target's `requires`/`--need` can ask for.
+    _SESSION_CAPS = {"serial_dap", "repl_dap"}
+    assert set(caps) - _SESSION_CAPS == set(firmware.KNOWN_CAPABILITIES), (
+        f"caps keys {set(caps)} != {set(firmware.KNOWN_CAPABILITIES)} + {_SESSION_CAPS}"
     )
-    for key in (*firmware.KNOWN_CAPABILITIES, "serial_dap"):
+    for key in (*firmware.KNOWN_CAPABILITIES, *_SESSION_CAPS):
         assert isinstance(caps[key], bool), f"caps['{key}'] should be a bool, got {caps[key]!r}"
-    # This session's DAP channel is a TCP socket, so `serial_dap` must say so.
-    # The stream direction is asserted in test_s6_1_stream_transport.py; both
-    # are needed, or a constant satisfies whichever one is written alone.
+    # This session's DAP channel is a TCP socket, so neither channel key may
+    # claim it. The stream direction is asserted in test_s6_1_stream_transport.py;
+    # both are needed, or a constant satisfies whichever one is written alone.
     assert caps["serial_dap"] is False, caps
+    assert caps["repl_dap"] is False, caps
 
 
 @pytest.mark.parametrize("source_file, bp_lines", [(_TARGET_PY, [78])])

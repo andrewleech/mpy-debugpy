@@ -8,10 +8,10 @@ a PYBD-SF6W running the bench `board_boot.py` without its `pyb.usb_mode` line
 is the board this scenario is about, and no second chip is needed to reach it.
 
 Arranged by the operator, never from here: the USB mode is settled before the
-first `mpremote` connection, exactly as the second interface is. The gate below
-reads what the board actually did rather than trusting an environment variable,
-so a bench still in two-interface mode skips instead of asserting the wrong
-thing about the right board.
+first `mpremote` connection, exactly as the second interface is. That is what
+`hil_single_vcp_board` gates on, reading what the board actually did rather
+than trusting an environment variable, so a bench still in two-interface mode
+skips instead of asserting the wrong thing about the right board.
 
 `tests/test_s6_1_no_second_cdc.py` covers every route to the refusal under the
 unix build with `pyb` stubs; the one thing it cannot do is prove that a real
@@ -23,7 +23,7 @@ import subprocess
 import time
 
 import pytest
-from conftest import BAUDRATE, DAP_DEVICE_ENV
+from conftest import BAUDRATE
 from debuggee import TARGET_MODULE
 from mpremote_debug import (
     SUBMODULE_DIR as _SUBMODULE_DIR,
@@ -42,40 +42,7 @@ _TIMEOUT = 30
 
 
 @pytest.fixture(scope="module")
-def single_cdc_board(hil_device, hil_facts):
-    """The board, having been booted with no second interface, or a skip.
-
-    Two ways a board qualifies, and the boot script's probe treats them the
-    same: a port with no `pyb` at all, and a `pyb` whose `usb_mode()` reports
-    a single VCP. `hil_facts` reads both over the REPL, independently of any
-    debug session.
-
-    What the board enumerated decides, not the environment. The two bench
-    arrangements are mutually exclusive by construction, so a suite-wide run
-    always has one set of scenarios that cannot apply, and being in the other
-    arrangement is a skip. `MPY_DEBUG_HIL_DAP_DEVICE` set against a board that
-    came up single-VCP is the one real contradiction: the variable names a node
-    the board did not enumerate, so every scenario keyed to it is testing
-    something that is not there.
-    """
-    usb_mode = hil_facts["usb_mode"]
-    if usb_mode and "xVCP" in usb_mode:
-        pytest.skip(
-            f"the board enumerated a second CDC interface (usb_mode {usb_mode!r}); "
-            "this scenario needs a boot with one, which is the stm32 default when "
-            "boot.py calls no pyb.usb_mode()"
-        )
-    if os.environ.get(DAP_DEVICE_ENV):
-        pytest.fail(
-            f"{DAP_DEVICE_ENV} is set, but the board came up with a single VCP "
-            f"(usb_mode {usb_mode!r}); the variable names a node this boot cannot "
-            "have enumerated, so the two-interface scenarios are testing nothing"
-        )
-    return hil_device
-
-
-@pytest.fixture(scope="module")
-def single_cdc_debug_run(single_cdc_board, tmp_path_factory):
+def single_cdc_debug_run(hil_single_vcp_board, tmp_path_factory):
     """Run `mpremote debug` against a target configured for serial DAP.
 
     The `dap_device` names a node that does not exist, which is the honest
@@ -100,7 +67,7 @@ def single_cdc_debug_run(single_cdc_board, tmp_path_factory):
     (tmp_path / "mpdebug.toml").write_text(
         "[target.hil]\n"
         'kind = "serial"\n'
-        f'device = "{single_cdc_board}"\n'
+        f'device = "{hil_single_vcp_board}"\n'
         f'dap_device = "{absent_node}"\n'
         f'program = "{TARGET_MODULE}:main"\n'
     )
@@ -165,7 +132,7 @@ def test_hil_the_refusal_names_the_board_not_the_missing_node(single_cdc_debug_r
     )
 
 
-def test_hil_the_board_survives_the_refusal(single_cdc_debug_run, single_cdc_board):
+def test_hil_the_board_survives_the_refusal(single_cdc_debug_run, hil_single_vcp_board):
     """A script that ended, not a board that broke.
 
     Its own connection rather than `hil_serial`: this has to be a fresh one
@@ -175,7 +142,7 @@ def test_hil_the_board_survives_the_refusal(single_cdc_debug_run, single_cdc_boa
     """
     import serial
 
-    with serial.Serial(single_cdc_board, BAUDRATE, timeout=0.2) as port:
+    with serial.Serial(hil_single_vcp_board, BAUDRATE, timeout=0.2) as port:
         port.write(b"\r\n")
         seen = b""
         deadline = time.monotonic() + 15

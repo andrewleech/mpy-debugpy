@@ -84,8 +84,9 @@ program = "app:main"
 | `device` | connect string as `mpremote connect` accepts. Required for `serial`; for `network` it names the control-plane device used for the pre-IP handshake. Never the debug endpoint - the device reports its own. |
 | `firmware` | for `unix`, a path to a built binary (relative paths resolve against this file's directory), or `system` for whatever `micropython` is on `PATH`. |
 | `program` | default `module[:method]`. Without it, `target:main`. |
-| `requires` | capability names checked against the handshake before the session starts. Vocabulary: `settrace`, `save_names`, `set_local`, `f_back`, `second_cdc`. A typo is caught before any device is touched. `serial_dap` is deliberately not accepted here - it reports which channel a run took, so requiring it would fail every target before the run that could satisfy it. |
+| `requires` | capability names checked against the handshake before the session starts. Vocabulary: `settrace`, `save_names`, `set_local`, `f_back`, `second_cdc`. A typo is caught before any device is touched. `serial_dap` and `repl_dap` are deliberately not accepted here - each reports which channel a run took, so requiring one would fail every target before the run that could satisfy it. |
 | `dap_device` | the board's second CDC interface, for DAP over serial instead of over the network. Only used when the handshake also reports `serial_dap: true`. The node has to exist first - see [serial](#serial). |
+| `dap_repl` | put DAP on the stream that already carries the REPL, for a board with one UART and no network. Conflicts with `dap_device`, and is refused for a `unix` target. See [one UART](#one-uart). |
 | `source` | host directory mounted at the device's `/remote` before the program runs, so it debugs a live view of this directory. Relative paths resolve against this file's directory. Not valid on a `unix` target. |
 
 Unknown keys are ignored, so a front-end can keep its own metadata alongside
@@ -175,9 +176,9 @@ is nothing mounted and no mapping to report.
 
 ## Transports
 
-The three kinds differ only in what the control plane is and where the data
-plane ends up. Everything after the handshake is identical, and a DAP client
-cannot tell them apart.
+The four differ only in what the control plane is and where the data plane ends
+up. Everything after the handshake is identical, and a DAP client cannot tell
+them apart.
 
 ### unix
 
@@ -245,10 +246,8 @@ pyb.usb_mode("2xVCP+MSC")
 in `boot.py` and a reboot - the second tty node does not exist until the board
 re-enumerates with it.
 
-Boards with a single UART have no second interface to enumerate at all. Sharing
-the one UART between DAP and the REPL needs an in-band framing layer that is not
-built; see `planning/20260810_single-uart-dap-framing.md` for the intended shape
-and why the network path is the mainline meanwhile.
+Boards with a single UART have no second interface to enumerate at all; they
+take the [one UART](#one-uart) path instead.
 
 Three questions get confused here, and they can answer differently on the same
 run. `second_cdc` in the handshake is the build's maximum, read from
@@ -256,6 +255,48 @@ run. `second_cdc` in the handshake is the build's maximum, read from
 boot has one. `pyb.usb_mode()` says what boot actually enumerated, which is what
 decides whether a session can run. `USB_VCP.isconnected()` says whether a host
 is currently holding the interface open. A variant name answers none of them.
+
+### one UART
+
+```bash
+mpremote debug --dap-repl pybd app:main
+```
+
+For a board with one UART and no network, which is every board as it ships. DAP
+rides the stream that already carries the REPL, marked in band with `0x18` the
+way `mpremote mount` marks its filesystem RPC, and mpremote bridges it to a
+loopback port so the client still sees an ordinary TCP endpoint. Program output
+travels on the same wire and reaches your terminal unchanged; a program that
+prints `0x18` is escaped, not mistaken for framing.
+
+A target can ask for it instead of the flag:
+
+```toml
+[target.pybd]
+kind = "serial"
+device = "/dev/serial/by-id/usb-MicroPython_Pyboard_Virtual_Comm_Port_in_FS_Mode_3254335D3037-if01"
+dap_repl = true
+program = "app:main"
+```
+
+**The REPL is not usable for anything else while the session runs, and Ctrl-C
+does not interrupt the target.** What makes the channel possible is that the
+runtime's console is a Python object in a `dupterm` slot, so it can be replaced
+with a framing wrapper for the length of the session. On stm32 installing
+anything in that slot detaches the interface from the REPL, which stops the
+interrupt character being scanned - so Ctrl-C arrives at the target as ordinary
+data. Use the client's pause button instead. mpremote puts the slot back on
+every exit path, including a failed one.
+
+That mechanism is also the port scope: **stm32 boards on the legacy USB stack**,
+where the REPL is the object in `dupterm` slot 1. rp2 and esp32 build one slot
+and the REPL is not in it, and the unix port has no `dupterm` at all; on those
+the session refuses to start rather than handing back a stream that would carry
+nothing.
+
+`--source` is refused alongside `--dap-repl`: a mount frames the same stream
+with the same marker, and the two cannot share it. Put the program on the
+device's own filesystem for these sessions.
 
 ## The iteration loop
 
@@ -370,6 +411,7 @@ is not evidence, and neither is this page.
 | `f_back` | frames chain to their caller, so a call stack deeper than one frame can be walked. |
 | `second_cdc` | the build could enumerate a second USB CDC interface for DAP to use. A fact about the build, not about this boot - see [serial](#serial) for what still has to be true before one exists. |
 | `serial_dap` | this session's DAP channel is a serial stream rather than a TCP socket. A fact about the session, not about the firmware. |
+| `repl_dap` | this session's DAP channel is sharing the stream that carries the REPL. A fact about the session, not about the firmware; `serial_dap` is true as well, since a shared stream is still a stream. |
 
 On every firmware artifact this project publishes, and on the unix build:
 `settrace`, `save_names` and `f_back` are true, and `set_local` and
@@ -417,7 +459,9 @@ your program is at fault.
 
 ## Ending a session
 
-Ctrl-C. Detach the client first if a mounted session is stopped at a
+Ctrl-C, at mpremote. (In a `--dap-repl` session that is the only thing Ctrl-C
+still does - it no longer reaches the target; see [one UART](#one-uart).) Detach
+the client first if a mounted session is stopped at a
 breakpoint: mpremote has to reach the device over the raw REPL to unmount, and a
 target still parked in the debugger will not answer. Detaching lets the program
 finish, which puts the device back at a REPL prompt, and teardown is then clean

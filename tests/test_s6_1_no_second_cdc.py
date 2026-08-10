@@ -51,6 +51,7 @@ from mpremote.main import State  # noqa: E402
 from mpremote.mpdebug_config import Target  # noqa: E402
 from mpremote.transport_serial import SerialTransport  # noqa: E402
 
+from helpers import debug_args  # noqa: E402
 from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
@@ -311,20 +312,7 @@ def test_do_debug_reports_the_missing_interface_promptly(monkeypatch, tmp_path, 
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
 
         timeout = 30
-        args = type(
-            "Args",
-            (),
-            {
-                "target": "single-cdc",
-                "program": "mod:main",
-                "port": free_tcp_port,
-                "dap_log": False,
-                "dap_log_file": None,
-                "timeout": timeout,
-                "source": None,
-                "loop": False,
-            },
-        )()
+        args = debug_args(target="single-cdc", program="mod:main", port=free_tcp_port, timeout=timeout)
 
         start = time.monotonic()
         with pytest.raises(commands.CommandError) as excinfo:

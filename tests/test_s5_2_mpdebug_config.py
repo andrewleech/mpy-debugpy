@@ -31,6 +31,7 @@ from mpremote.commands import CommandError  # noqa: E402
 
 import firmware  # noqa: E402
 import gen_manifest  # noqa: E402
+from helpers import debug_args  # noqa: E402
 
 
 def _mpremote_cmd(args, cwd, env=None):
@@ -628,20 +629,14 @@ class _FakeState:
 
 
 def _args(target=None, program=None, port=None, dap_log=False, timeout=60, source=None):
-    return type(
-        "Args",
-        (),
-        {
-            "target": target,
-            "program": program,
-            "port": port,
-            "dap_log": dap_log,
-            "dap_log_file": None,
-            "timeout": timeout,
-            "source": source,
-            "loop": False,
-        },
-    )()
+    return debug_args(
+        target=target,
+        program=program,
+        port=port,
+        dap_log=dap_log,
+        timeout=timeout,
+        source=source,
+    )
 
 
 def _handshake_transport(caps, device_name):
