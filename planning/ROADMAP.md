@@ -1728,7 +1728,11 @@ parallel.
     STORY-3.2's republish rather than on anything decidable now. **STORY-6.6
     (2026-08-10) came off the risk register rather than out of this sequence**,
     which is where the reachable work now comes from: the epics are complete
-    except for what needs a board or a reviewer.
+    except for what needs a board or a reviewer. **The loop line-event fix
+    (2026-08-10) came off the register the same way**, and confirmed the pattern
+    is worth working: two of the three rows swept that day were mis-stated
+    rather than merely open - one prescribed a fix the .mpy format forbids while
+    missing a larger defect next to it.
 
 Notes:
 - The whole of EPIC-3 (firmware) runs in parallel with EPIC-1 and the spikes; it only feeds
