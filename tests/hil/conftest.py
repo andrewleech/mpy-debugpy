@@ -476,12 +476,18 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionfinish(session):
-    if not _RESULTS:
+    facts = getattr(session, "_hil_facts", None)
+    if not _RESULTS or facts is None:
+        # A record is provenance for a hardware run, and setup errors are
+        # results, so results alone no longer imply the board was ever opened -
+        # the tree gate and the missing-device skip both fire first. Without
+        # facts there is nothing to be provenance for, and writing anyway is
+        # self-perpetuating: the untracked record dirties the tree, which fails
+        # the gate on the next run, which writes the record again.
         return
-    facts = getattr(session, "_hil_facts", {})
-    # A run that got far enough to produce results got past the tree gate, so
-    # the state is present; recomputing here would describe the tree at the end
-    # of the run, which the run itself has already changed.
+    # A run that reached the board got past the tree gate, so the state is
+    # present; recomputing here would describe the tree at the end of the run,
+    # which the run itself has already changed.
     tree = getattr(session, "_hil_tree", None) or _tree_state(_TOP_DIR)
     board = str(facts.get("board", "unknown-board")).replace("/", "_")
     # A record names a run, and a run is a bench arrangement as much as a date
