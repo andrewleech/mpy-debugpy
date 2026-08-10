@@ -22,11 +22,14 @@ tree and records the top-repo commit and both submodule pins in its results.
 `MPY_DEBUG_HIL_ALLOW_DIRTY=1` overrides the refusal and lists the uncommitted
 paths in the record instead (see `tree_state.py`).
 
-The board needs `board_boot.py` in this directory installed as its `boot.py`
-(plus a `_secrets.py`) before any of this runs: the WiFi scenarios need an
-interface already up, and the serial-DAP ones need the second CDC already
-enumerated. Neither can be arranged from here, since both are decided before
-the first `mpremote` connection.
+The board needs one of the two boot scripts in this directory installed as its
+`boot.py` before any of this runs, and a reset after: `board_boot.py` (plus a
+`_secrets.py`) for the WiFi and second-CDC scenarios, which need an interface
+already up and the second CDC already enumerated, or
+`board_boot_single_vcp.py` for the single-UART ones, which need neither.
+Neither arrangement can be reached from here, since both are decided before
+the first `mpremote` connection, and a suite-wide run is always in one of them
+and skips the other.
 
 Only one process may hold the board's serial port, and `mpremote debug` needs
 it, so nothing here keeps a transport open across a debug run: `hil_serial` is
