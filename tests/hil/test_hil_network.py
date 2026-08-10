@@ -32,6 +32,7 @@ from debuggee import (
 PAUSE_SECONDS = int(os.environ.get("MPY_DEBUG_HIL_PAUSE_SECONDS", "60"))
 
 
+@pytest.mark.hil_direct_endpoint
 def test_hil_handshake_reports_a_reachable_lan_endpoint(hil_debug_session, hil_facts):
     """The reported endpoint is the board's own address, and it answers.
 
@@ -233,6 +234,7 @@ def test_hil_target_runs_to_completion_after_continue(hil_debug_session):
         assert not server.events_since("stopped", since), "stopped again after clearing"
 
 
+@pytest.mark.hil_direct_endpoint
 def test_hil_a_long_pause_does_not_drop_the_link(hil_debug_session):
     """A session held at a breakpoint stays usable, and so does the network.
 
@@ -268,6 +270,7 @@ def test_hil_a_long_pause_does_not_drop_the_link(hil_debug_session):
         assert hil_debug_session["device"].wait_for(COMPLETION_LINE, timeout=180)
 
 
+@pytest.mark.hil_direct_endpoint
 def test_hil_two_consecutive_sessions_each_run_clean(hil_debug_runner):
     """The board is left in a state a second run can use.
 

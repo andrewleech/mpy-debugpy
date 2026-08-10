@@ -63,6 +63,8 @@ DEVICE_ENV = "MPY_DEBUG_HIL_DEVICE"
 DAP_DEVICE_ENV = "MPY_DEBUG_HIL_DAP_DEVICE"
 BOARD_ENV = "MPY_DEBUG_HIL_BOARD"
 RESET_ENV = "MPY_DEBUG_HIL_RESET_CMD"
+DAP_LOG_ENV = "MPY_DEBUG_HIL_DAP_LOG"
+DIRECT_ENDPOINT_MARK = "hil_direct_endpoint"
 BAUDRATE = 115200
 
 DEBUGPY_SRC = _TOP_DIR / "micropython-lib" / "python-ecosys" / "debugpy" / "debugpy"
@@ -70,6 +72,10 @@ DEBUGPY_SRC = _TOP_DIR / "micropython-lib" / "python-ecosys" / "debugpy" / "debu
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "hil: needs a real board (see tests/hil/conftest.py)")
+    config.addinivalue_line(
+        "markers",
+        f"{DIRECT_ENDPOINT_MARK}: asserts about the board's own endpoint, so never proxied",
+    )
 
 
 def pytest_collection_modifyitems(items):
@@ -338,7 +344,7 @@ class DeviceOutput:
 
 
 @pytest.fixture()
-def hil_debug_runner(hil_device, hil_facts):
+def hil_debug_runner(request, hil_device, hil_facts, tmp_path):
     """Call to start a `mpremote debug` run; returns the handshake payload.
 
     No `resume` and no `--port`: the command's own soft reset is what clears
@@ -348,29 +354,63 @@ def hil_debug_runner(hil_device, hil_facts):
     Calling it again ends the previous run's output capture first. Two
     readers on one tty would each get an arbitrary half of the bytes, so only
     one run at a time may hold the port.
+
+    `MPY_DEBUG_HIL_DAP_LOG=1` adds `--dap-log`, which is the instrument for
+    the network intermittent in the risk register: it records the transcript
+    of the session the client saw go quiet. Off by default, and not merely to
+    save a hop - the log works by interposing a host-side proxy and reporting
+    *its* endpoint, so under it a run no longer reports the board's own
+    address, which is the thing three of these scenarios assert. Those carry
+    `hil_direct_endpoint` and stay unproxied whatever the environment says.
+    That is also the caveat on any hunt: the transport under the flag is not
+    the transport that produced the intermittent, so its absence there is not
+    evidence.
     """
+    dap_log = os.environ.get(DAP_LOG_ENV, "") not in ("", "0")
+    if request.node.get_closest_marker(DIRECT_ENDPOINT_MARK):
+        dap_log = False
     runs = []
+    live = []
 
     def _run():
         if runs:
             runs[-1]["device"].close()
-        proc = _spawn_debug(["debug", hil_device, f"{TARGET_MODULE}:main"])
+        args = ["debug", hil_device, f"{TARGET_MODULE}:main"]
+        log_path = None
+        if dap_log:
+            log_path = tmp_path / f"dap-{len(runs)}.jsonl"
+            args[1:1] = ["--dap-log", "--dap-log-file", str(log_path)]
+        proc = _spawn_debug(args)
         lines, matched = _read_until(proc, "MPDBG-READY ", timeout=60, at_line_start=True)
         if matched is None:
             proc.kill()
             proc.wait(timeout=5)
             pytest.fail(f"never saw MPDBG-READY; output:\n{''.join(lines)}")
-        proc.wait(timeout=30)  # the device path detaches once the endpoint is out
+        if log_path is None:
+            proc.wait(timeout=30)  # the device path detaches once the endpoint is out
+        else:
+            # The proxy is this process, so it has to outlive the handshake;
+            # it ends itself when the client session does.
+            live.append(proc)
 
         payload = json.loads(matched[matched.index("{") :])
         payload["command_output"] = "".join(lines)
         payload["device"] = DeviceOutput(hil_device)
+        payload["dap_log"] = log_path
         runs.append(payload)
         return payload
 
     try:
         yield _run
     finally:
+        for proc in live:
+            with contextlib.suppress(Exception):
+                proc.terminate()
+            try:
+                proc.wait(timeout=15)
+            except Exception:
+                proc.kill()
+                proc.wait(timeout=5)
         for payload in runs:
             payload["device"].close()
 

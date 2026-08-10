@@ -22,10 +22,32 @@ from dap import ThreadedServer
 class Recorder(ThreadedServer):
     """A DAP client that keeps every message and matches them by content."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, session=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.rcv_messages = []
         self._lock = threading.Lock()
+        self._session = session or {}
+
+    def silence_note(self):
+        """What the board itself has to say, for a wait that ended in silence.
+
+        A DAP timeout reports only that nothing came back, which is the same
+        text whether the board is wedged, rebooted, or raised inside the
+        handler. The board's own stdout separates them: a MicroPython
+        traceback goes to the stream `DeviceOutput` is already reading for
+        the length of the test, so asking costs nothing and it is the only
+        place the answer can be. A `--dap-log` run adds where the transcript
+        of the same session landed.
+        """
+        parts = []
+        device = self._session.get("device")
+        if device is not None:
+            printed = device.text().strip()
+            parts.append("--- board stdout during the session ---\n" + (printed or "(nothing)"))
+        log_path = self._session.get("dap_log")
+        if log_path is not None:
+            parts.append(f"--- DAP transcript ---\n{log_path}")
+        return ("\n" + "\n".join(parts)) if parts else ""
 
     def handle_message(self, message):
         with self._lock:
@@ -67,8 +89,8 @@ class Recorder(ThreadedServer):
         response = self.wait(lambda m: m.type == "response" and m.request_seq == seq, timeout, since)
         if response is None:
             raise AssertionError(
-                "no response to {} (seq {}) within {}s; received since: {}".format(
-                    command, seq, timeout, self.messages_since(since)
+                "no response to {} (seq {}) within {}s; received since: {}{}".format(
+                    command, seq, timeout, self.messages_since(since), self.silence_note()
                 )
             )
         return response
@@ -80,11 +102,21 @@ class Recorder(ThreadedServer):
 @contextlib.contextmanager
 def attached(session, name="hil", timeout=20):
     """Connect to the endpoint the board reported and complete `initialize`."""
-    server = Recorder(name, session["host"], session["port"], connect_timeout=timeout)
+    server = Recorder(
+        name,
+        session["host"],
+        session["port"],
+        connect_timeout=timeout,
+        session=session,
+    )
     server.start()  # sends `initialize`, as VS Code does
     try:
         if server.wait(lambda m: m.type == "response" and m.command == "initialize", timeout) is None:
-            raise AssertionError(f"no initialize response from {session['host']}:{session['port']}")
+            raise AssertionError(
+                "no initialize response from {}:{}{}".format(
+                    session["host"], session["port"], server.silence_note()
+                )
+            )
         yield server
     finally:
         server.stop()
@@ -122,5 +154,7 @@ def run_to_breakpoint(server, source_path, line, timeout=60):
     since = server.mark()
     server.request("configurationDone", {})
     stopped = server.wait_event("stopped", timeout=timeout, since=since)
-    assert stopped is not None, "target never stopped at {}:{}".format(source_path, line)
+    assert stopped is not None, "target never stopped at {}:{}{}".format(
+        source_path, line, server.silence_note()
+    )
     return stopped
