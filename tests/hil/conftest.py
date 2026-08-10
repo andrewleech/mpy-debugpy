@@ -476,15 +476,27 @@ def pytest_sessionfinish(session):
     # of the run, which the run itself has already changed.
     tree = getattr(session, "_hil_tree", None) or _tree_state(_TOP_DIR)
     board = str(facts.get("board", "unknown-board")).replace("/", "_")
-    path = _TOP_DIR / "planning" / "{}_hil_{}.md".format(time.strftime("%Y%m%d"), board)
+    # A record names a run, and a run is a bench arrangement as much as a date
+    # and a board. The serial-DAP scenarios need a board booted with two CDC
+    # interfaces and STORY-6.1's single-CDC scenario needs the same board
+    # booted with one, so both can be run on the same day and neither may
+    # overwrite the other - a partial record silently replacing a fuller one
+    # is worse than no record at all. Named by what the arrangement lacks, so
+    # a two-interface run keeps the name every existing record was written
+    # under.
+    dap_device = os.environ.get(DAP_DEVICE_ENV)
+    arrangement = "" if dap_device else "_no-dap-device"
+    path = _TOP_DIR / "planning" / "{}_hil_{}{}.md".format(time.strftime("%Y%m%d"), board, arrangement)
     lines = [
         f"# Hardware-in-loop run: {board}",
         "",
-        "Written by `tests/hil/` (STORY-6.4); a rerun overwrites it.",
+        "Written by `tests/hil/` (STORY-6.4); a rerun of the same bench arrangement",
+        "overwrites it.",
         "",
         f"- Date: {time.strftime('%Y-%m-%d')}",
         *_tree_record_lines(tree),
         f"- Device: `{facts.get('device', 'unknown')}`",
+        f"- Dedicated DAP interface: {f'`{dap_device}`' if dap_device else 'not supplied'}",
         f"- Machine: {facts.get('machine', 'unknown')}",
         f"- Firmware: {facts.get('firmware', 'unknown')}",
         f"- USB mode: {facts.get('usb_mode') or 'n/a'}",
@@ -493,8 +505,19 @@ def pytest_sessionfinish(session):
         "",
         "`serial_dap` is `False` above because these capabilities come from a plain",
         "REPL probe: the key reports which channel a session took, not what the",
-        "firmware can do. The serial-DAP scenarios below assert it is `True` in the",
-        "handshake of the stream session they start.",
+        "firmware can do.",
+        *(
+            [
+                "The serial-DAP scenarios below assert it is `True` in the",
+                "handshake of the stream session they start.",
+            ]
+            if dap_device
+            else [
+                "No run in this arrangement takes that channel: the scenarios that",
+                "would were skipped for want of a second interface, which is what",
+                "this arrangement is for.",
+            ]
+        ),
         "",
         "| scenario | result |",
         "| --- | --- |",
