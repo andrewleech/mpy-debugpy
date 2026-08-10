@@ -120,3 +120,17 @@ what the restart button will do.
 Whether `loop` should default to true for a device target. It is a behaviour
 change to sessions that work today, and the evidence for it is exactly the
 unverified restart-button question above.
+
+## Correction (2026-08-10)
+
+"the extension-host job has never run" above is wrong. The job had already run
+green on 2026-08-08 (run `31251545538`, job `93088575346`), including its two
+cold steps - the VS Code 1.132.0 download and the marketplace install of
+`ms-python.debugpy`. The containing run was cancelled, which is why the record
+here and the risk register both read it as never having executed; `gh run list`
+reports the run's conclusion, not the job's. Details in
+`20260810_ci-gates-that-never-ran.md`.
+
+The conclusion is unchanged. What the restart-button question needs is a
+scenario that drives the restart button, and none of that suite's ten does; the
+blocker is the missing scenario, not a missing runner.
