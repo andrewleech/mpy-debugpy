@@ -73,6 +73,14 @@ class DAPClient:
     def continue_(self, thread_id=1):
         return self.send_request("continue", {"threadId": thread_id})
 
+    def pause(self, thread_id=1):
+        """Ask a running target to stop.
+
+        The response only acknowledges the request; the `stopped` event that
+        follows is what says the target actually stopped.
+        """
+        return self.send_request("pause", {"threadId": thread_id})
+
     def configuration_done(self):
         return self.send_request("configurationDone", {})
 

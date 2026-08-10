@@ -368,9 +368,12 @@ per-port build commands, and how each artifact's claims were checked.
 Measured behaviour, not speculation. Each is worth knowing before you conclude
 your program is at fault.
 
-- **The `pause` request does nothing.** A pause is answered with success and the
-  program keeps running, so the client's UI shows a stopped session that is not
-  stopped. Use a breakpoint instead.
+- **A pause only lands where Python is running.** The trace hook is the one
+  thing that can interrupt the target, so a pause takes effect at the next line
+  of Python the program executes. If it is asleep, waiting on a socket, or
+  inside a long-running C function, nothing stops until it comes back - the
+  request stays pending rather than being lost. Pausing a program whose work is
+  one long `time.sleep` will look like the pause did nothing.
 - **A breakpoint inside a loop body stops one more time than the body runs, and
   the first stop happens before the body has run at all** - so a variable the
   body assigns still reads its pre-loop value at that first stop. MicroPython
