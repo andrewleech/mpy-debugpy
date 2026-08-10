@@ -50,21 +50,26 @@ def single_cdc_board(hil_device, hil_facts):
     a single VCP. `hil_facts` reads both over the REPL, independently of any
     debug session.
 
-    `MPY_DEBUG_HIL_DAP_DEVICE` being set is a contradiction rather than a
-    second gate - it asserts the bench condition this scenario needs the
-    absence of - so it fails rather than skipping.
+    What the board enumerated decides, not the environment. The two bench
+    arrangements are mutually exclusive by construction, so a suite-wide run
+    always has one set of scenarios that cannot apply, and being in the other
+    arrangement is a skip. `MPY_DEBUG_HIL_DAP_DEVICE` set against a board that
+    came up single-VCP is the one real contradiction: the variable names a node
+    the board did not enumerate, so every scenario keyed to it is testing
+    something that is not there.
     """
-    if os.environ.get(DAP_DEVICE_ENV):
-        pytest.fail(
-            f"{DAP_DEVICE_ENV} is set, so the bench is arranged for the two-interface "
-            "scenarios; this one needs a board booted with a single CDC interface"
-        )
     usb_mode = hil_facts["usb_mode"]
     if usb_mode and "xVCP" in usb_mode:
         pytest.skip(
             f"the board enumerated a second CDC interface (usb_mode {usb_mode!r}); "
             "this scenario needs a boot with one, which is the stm32 default when "
             "boot.py calls no pyb.usb_mode()"
+        )
+    if os.environ.get(DAP_DEVICE_ENV):
+        pytest.fail(
+            f"{DAP_DEVICE_ENV} is set, but the board came up with a single VCP "
+            f"(usb_mode {usb_mode!r}); the variable names a node this boot cannot "
+            "have enumerated, so the two-interface scenarios are testing nothing"
         )
     return hil_device
 

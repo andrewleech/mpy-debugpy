@@ -462,9 +462,17 @@ _MEASUREMENTS = {}
 def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
-    if report.when == "call" and "hil" in item.keywords:
+    if "hil" not in item.keywords:
+        return
+    if report.when == "call":
         _RESULTS[item.nodeid] = report.outcome
         _MEASUREMENTS.update(report.user_properties)
+    elif report.failed:
+        # A scenario that broke in setup or teardown never reaches "call", and
+        # a record that lists only what ran reads as a full pass. Skips are a
+        # different thing and stay out: the prose above the table says which
+        # scenarios the arrangement excluded, and why.
+        _RESULTS[item.nodeid] = "error"
 
 
 def pytest_sessionfinish(session):
