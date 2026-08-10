@@ -14,6 +14,11 @@ one CDC interface can still run everything else here.
 Set `MPY_DEBUG_HIL_BOARD` to name the board in the results record; without it
 the record uses the board name the firmware reports for itself.
 
+A run must be attributable to a commit, so it refuses to start from a dirty
+tree and records the top-repo commit and both submodule pins in its results.
+`MPY_DEBUG_HIL_ALLOW_DIRTY=1` overrides the refusal and lists the uncommitted
+paths in the record instead (see `tree_state.py`).
+
 The board needs `board_boot.py` in this directory installed as its `boot.py`
 (plus a `_secrets.py`) before any of this runs: the WiFi scenarios need an
 interface already up, and the serial-DAP ones need the second CDC already
@@ -36,6 +41,11 @@ from pathlib import Path
 
 import pytest
 from debuggee import TARGET_MODULE, TARGET_SRC
+from tree_state import (
+    dirty_tree_refusal as _dirty_tree_refusal,
+    record_lines as _tree_record_lines,
+    tree_state as _tree_state,
+)
 from mpremote_debug import (
     SUBMODULE_DIR as _SUBMODULE_DIR,
     TOP_DIR as _TOP_DIR,
@@ -68,7 +78,18 @@ def pytest_collection_modifyitems(items):
 
 
 @pytest.fixture(scope="session")
-def hil_device():
+def hil_tree(request):
+    """The checkout this run is attributable to, or a refusal."""
+    state = _tree_state(_TOP_DIR)
+    refusal = _dirty_tree_refusal(state)
+    if refusal:
+        pytest.fail(refusal)
+    request.session._hil_tree = state
+    return state
+
+
+@pytest.fixture(scope="session")
+def hil_device(request):
     """The board's stable by-id path, or a skip."""
     device = os.environ.get(DEVICE_ENV)
     if not device:
@@ -80,6 +101,9 @@ def hil_device():
         pytest.fail(f"{DEVICE_ENV} must be a /dev/serial/by-id/... path, got {device}")
     if not Path(device).exists():
         pytest.skip(f"{DEVICE_ENV}={device} is not present")
+    # After the device gate, never before it: a checkout with no board present
+    # is a host-only `make test` run, which has no results to attribute.
+    request.getfixturevalue("hil_tree")
     return device
 
 
@@ -423,6 +447,10 @@ def pytest_sessionfinish(session):
     if not _RESULTS:
         return
     facts = getattr(session, "_hil_facts", {})
+    # A run that got far enough to produce results got past the tree gate, so
+    # the state is present; recomputing here would describe the tree at the end
+    # of the run, which the run itself has already changed.
+    tree = getattr(session, "_hil_tree", None) or _tree_state(_TOP_DIR)
     board = str(facts.get("board", "unknown-board")).replace("/", "_")
     path = _TOP_DIR / "planning" / "{}_hil_{}.md".format(time.strftime("%Y%m%d"), board)
     lines = [
@@ -431,6 +459,7 @@ def pytest_sessionfinish(session):
         "Written by `tests/hil/` (STORY-6.4); a rerun overwrites it.",
         "",
         f"- Date: {time.strftime('%Y-%m-%d')}",
+        *_tree_record_lines(tree),
         f"- Device: `{facts.get('device', 'unknown')}`",
         f"- Machine: {facts.get('machine', 'unknown')}",
         f"- Firmware: {facts.get('firmware', 'unknown')}",
