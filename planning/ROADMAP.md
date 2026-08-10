@@ -1478,6 +1478,26 @@ end-to-end; a device on WiFi reports its own address; serial devices need no IP.
     `dupterm` variant that replaces - which moves that part of the story into
     `micropython`. Dated correction in
     `20260810_single-uart-dap-framing.md`.
+  - **Amended again 2026-08-10, and the amendment above is wrong for the bench
+    board:** `os.dupterm` diverts on stm32 with the legacy STM USB stack,
+    because the USB REPL there is not a destination beside dupterm - it *is*
+    dupterm slot 1 (`ports/stm32/usb.c:653-654`), and the CDC block in
+    `mp_hal_stdout_tx_strn` the amendment cites is guarded by
+    `MICROPY_HW_TINYUSB_STACK`, which PYBD_SF6 does not build. Measured on the
+    bench with an `io.IOBase` wrapper in slot 1: 17/15/101 bytes seen for a
+    print, a second print and a `sys.print_exception` - so a traceback goes
+    through the slot too, which is what the amendment above ruled the approach
+    out on - and 33 bytes written with the wrapper swallowing reached the host
+    as nothing. `io.IOBase` is not optional: `os.dupterm` demands the native
+    stream protocol (`extmod/os_dupterm.c:231`) and a plain class raises
+    `OSError: stream operation not supported`. Both options are therefore
+    available in Python on this board class, since the wrapper sees every
+    stdout byte before the VCP does. The C hook is still the general answer -
+    dupterm is genuinely additive on rp2, on esp32 and on a TinyUSB-stack
+    stm32 - but it becomes the port-expansion step rather than the
+    precondition, and the story starts in `micropython-lib` where it can be
+    measured end to end on the bench. Third dated correction in
+    `20260810_single-uart-dap-framing.md`.
   - type: implementation
   - description: the no-network answer for boards with one UART, which is most
     of them. `mpremote mount` already interleaves a request/response protocol
@@ -1486,7 +1506,8 @@ end-to-end; a device on WiFi reports its own address; serial devices need no IP.
     solve have to be designed: DAP requests arrive from the host at arbitrary
     times, where fs-hook exchanges are only ever device-initiated, and the
     program's own stdout shares the stream with an unescaped marker byte -
-    escape it, or divert stdout in C, per the amendment above.
+    escape it, or divert it, both of which reach every stdout byte through a
+    dupterm slot on the bench board, per the second amendment above.
   - acceptance criteria:
     - [ ] a board with one UART reaches a breakpoint over that UART, with no
       network configured and no second interface enumerated.
@@ -1495,9 +1516,9 @@ end-to-end; a device on WiFi reports its own address; serial devices need no IP.
     - [ ] the host distinguishes program output from DAP frames without a
       heuristic on content.
     - [ ] throughput measured on hardware and recorded, as STORY-6.1's was.
-    - [ ] whichever of escaping / diverting stdout in C is chosen, the
-      trade-off it makes to the REPL during a session is stated in
-      `docs/debugging.md`.
+    - [ ] whichever of escaping / diverting stdout is chosen, the trade-off it
+      makes to the REPL during a session is stated in `docs/debugging.md`,
+      along with which ports the chosen mechanism reaches.
   - dependencies: STORY-6.1, STORY-6.2
   - component: debugpy · mpremote · effort: L · risk: high · model: sonnet
   - not scheduled against `micropython/micropython#16459` (USB NCM): if that

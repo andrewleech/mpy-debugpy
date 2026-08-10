@@ -164,3 +164,65 @@ interface, and no second chip is needed to ask the criterion's question. See
 `tickets/s6.1_serial-transport.md` and
 `20260810_hil_PYBD_SF6_no-dap-device.md`. The rest of that section stands: no
 framing layer, no prototype, no measurement.
+
+## Correction, 2026-08-10: on stm32 with the legacy USB stack, `os.dupterm` does divert
+
+Measured at top-repo HEAD `3139524b74` (micropython `19410568d6`, micropython-lib
+`b829073c39`) on the bench PYBD_SF6. The correction above concludes that
+`os.dupterm` "duplicates rather than diverts" and therefore that the divert has
+to be made in C. That is right for the code path it cites and wrong for this
+board, which does not compile that path.
+
+`mp_hal_stdout_tx_strn` (`ports/stm32/mphalport.c:81-103`) has three
+destinations: `pyb_stdio_uart`, a USB CDC block guarded by
+`#if MICROPY_HW_USB_CDC && MICROPY_HW_TINYUSB_STACK`, and dupterm. PYBD_SF6
+builds the legacy STM USB stack, so the middle block is not compiled at all,
+and `ports/stm32/usb.c:653-654` puts `USB_VCP(0)` **into dupterm slot 1** -
+"Activate USB_VCP(0) on dupterm slot 1 for the REPL". The USB REPL on this
+board is not a destination beside dupterm; it *is* a dupterm slot. With
+`pyb.repl_uart()` reporting `None` (measured), that slot is the whole stdout
+path, and `os.dupterm(obj, 1)` replaces it and hands back what was there.
+
+Measured with a wrapper in slot 1 that counts bytes and can either forward to
+the displaced `USB_VCP` or swallow:
+
+| what was written | bytes the slot saw | reached the host |
+| --- | --- | --- |
+| `print("PROBE-FORWARDED")` | 17 | yes |
+| `print("PROBE-COUNTED")` | 15 | yes |
+| `sys.print_exception(ValueError(...))` | 101 | yes |
+| `print(...)` with the wrapper swallowing | 33 | **no** |
+
+The third row is the one that decides it. The correction above rules out
+rebinding `print` because "a traceback and any direct `sys.stdout.write` still
+go out in band"; a traceback goes through `mp_hal_stdout_tx_strn` like anything
+else, so the slot sees it. The fourth row is the divert itself: 33 bytes
+written, nothing on the wire. The displaced object came back as `USB_VCP`, was
+restored, and the REPL survived.
+
+One implementation detail, and it is why the first attempt failed:
+`os.dupterm` calls `mp_get_stream_raise(obj, READ|WRITE|IOCTL)`
+(`extmod/os_dupterm.c:231`), so the object needs the native stream protocol. A
+plain class raises `OSError: stream operation not supported`; subclassing
+`io.IOBase` is what gives a Python class that protocol, and is how WebREPL has
+always sat in a dupterm slot.
+
+So the choice STORY-6.7 inherits is wider again, not narrower, and the two
+options are the same mechanism rather than two:
+
+- **Escape**, in Python. The wrapper sees every stdout byte before the VCP
+  does, so escaping a marker in program output needs no C.
+- **Divert**, in Python. The wrapper swallows program output and the DAP
+  `output` event carries it, per the fourth row.
+
+Scope, because this is a property of one port and one USB stack rather than of
+MicroPython. It holds on stm32 boards built with the legacy STM USB stack and
+no stdio UART. It does **not** hold on rp2 (`ports/rp2/mphalport.c:112-118`,
+`mp_usbd_cdc_tx_strn` unconditional under `MICROPY_HW_USB_CDC`), on esp32
+(`ports/esp32/mphalport.c:166-173`, USB-JTAG and UART unconditional), or on an
+stm32 built with the TinyUSB stack - on all of those dupterm is genuinely
+additive and the C hook the correction above describes is still the general
+answer. What changes is that the story no longer *starts* in `micropython`: it
+can be built and measured end to end on the bench board in
+`micropython-lib`, and the C hook becomes the port-expansion step rather than
+the precondition.
