@@ -23,8 +23,20 @@ class _Link:
 
     def __init__(self):
         self.up = False
+        self._drop_at = None
+
+    def drop_after_ms(self, ms):
+        """Drop the line `ms` from now, from inside whatever asks next.
+
+        The only way to change the signal underneath a call that is blocking
+        on it, which is the case that matters: a transport waiting with no
+        timeout has nothing but this line to end the wait.
+        """
+        self._drop_at = time.ticks_add(time.ticks_ms(), ms)
 
     def is_up(self):
+        if self._drop_at is not None and time.ticks_diff(time.ticks_ms(), self._drop_at) >= 0:
+            self.up = False
         return self.up
 
 
@@ -119,6 +131,29 @@ def _run():
         print("FAIL:no-signal-read-as-gone")
         return
     print("OK:no-signal-no-eof")
+
+    # A channel whose host was already holding it when the transport was
+    # built: DAP sharing the stream the host is driving the board over. No
+    # byte ever crosses it, so nothing arms the signal the way traffic does
+    # above, and the wait is the unbounded one the accept/initialize step
+    # does - the host leaves without the client it launched ever attaching.
+    # Getting this wrong on a shared stream costs the console: the wait never
+    # ends, so the stream is never given back.
+    held = _Link()
+    held.up = True
+    shared = StreamTransport(reader, writer, held.is_up)
+    shared.settimeout(None)
+    held.drop_after_ms(300)
+    start = time.ticks_ms()
+    eof = shared.recv(16)
+    elapsed = time.ticks_diff(time.ticks_ms(), start)
+    if eof != b"":
+        print("FAIL:held-not-eof:{!r}".format(eof))
+        return
+    if elapsed > 3000:
+        print("FAIL:held-waited:{}".format(elapsed))
+        return
+    print("OK:held-before-traffic:{}".format(elapsed))
 
 
 if __name__ == "__main__":

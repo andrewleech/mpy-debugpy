@@ -288,11 +288,17 @@ interrupt character being scanned - so Ctrl-C arrives at the target as ordinary
 data. Use the client's pause button instead. mpremote puts the slot back on
 every exit path, including a failed one.
 
+Measured on a PYBD_SF6: 81.5-81.7 kB/s, against 81.7-108.8 kB/s for the same
+payload over a second interface. Five runs land within 0.2% of each other, at
+the bottom of the range the dedicated interface spans.
+
 That mechanism is also the port scope: **stm32 boards on the legacy USB stack**,
 where the REPL is the object in `dupterm` slot 1. rp2 and esp32 build one slot
 and the REPL is not in it, and the unix port has no `dupterm` at all; on those
 the session refuses to start rather than handing back a stream that would carry
-nothing.
+nothing. So is a REPL stream that cannot report the host letting go of it: this
+is the one channel where a session that waits forever costs the console it is
+reached by, so a stream with no `isconnected` is refused up front.
 
 `--source` is refused alongside `--dap-repl`: a mount frames the same stream
 with the same marker, and the two cannot share it. Put the program on the

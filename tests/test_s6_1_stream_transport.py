@@ -20,8 +20,10 @@ Two tiers, both against the real unix firmware (no hardware, no mocks):
   the transport has no EOF to find, and checks when the caller-supplied
   host-present signal is allowed to stand in for one: not before the channel
   has carried a byte, not while a connected peer is merely idle, promptly
-  once a peer that was talking goes away, and never at all for a stream that
-  supplies no signal.
+  once a peer that was talking goes away, never at all for a stream that
+  supplies no signal, and - for a channel whose host was already holding it
+  when the transport was built, which is DAP sharing the REPL's own stream -
+  promptly on the signal alone, from inside a wait that was given no timeout.
 - `test_reaches_breakpoint_over_stream_transport` promotes the former
   `s6_1_stream_transport_proof.py` script into a collected test: a real
   `debugpy` session run over `listen_stream()` on a pty pair, with no socket
@@ -290,6 +292,7 @@ def test_stream_transport_peer_gone_signal():
             "OK:peer-gone",
             "OK:peer-gone-sticky",
             "OK:no-signal-no-eof",
+            "OK:held-before-traffic",
         ):
             stdout.wait_for(lambda ln, s=step: ln.startswith(s), deadline)
 

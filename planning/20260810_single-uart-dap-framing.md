@@ -226,3 +226,33 @@ answer. What changes is that the story no longer *starts* in `micropython`: it
 can be built and measured end to end on the bench board in
 `micropython-lib`, and the C hook becomes the port-expansion step rather than
 the precondition.
+
+## Closing note (2026-08-11): what this note got right, and the one thing it did not ask
+
+Top repo HEAD at the time of writing this section: 9b9bda5ed7e57dc5dc9e4e6bc089c26dd3085e3e
+(micropython 956bef49ec, micropython-lib 5c613c272b).
+
+STORY-6.7 landed on the bench PYBD_SF6 booted single-VCP: a breakpoint over the
+one UART, an adversarial marker in program output, and 81.5-81.7 kB/s. The
+framing this note specified needed no revision - one marker namespace, fs-hook
+codes untouched, escaping chosen over diverting - and the third correction's
+measurement (the dupterm slot really does see every stdout byte on this board
+class) held.
+
+What the note did not ask is how the session *ends*, and that is where the only
+defect was. It reasoned carefully about which bytes go which way and not at all
+about who takes the stream back, so the first hardware run left the framing
+wrapper installed in `dupterm` slot 1 after a session that ended before any
+client attached - a board answering every later REPL in framed bytes, with the
+interface detached from the REPL so Ctrl-C could not break out. The cause was
+in `StreamTransport` rather than in anything this note designed: its
+host-has-gone signal armed only once the channel had carried a byte, which is
+correct for a dedicated interface nobody holds until the client connects and
+wrong for a stream the host has been driving the board over all along, and a
+`recv` with no timeout sat in one `poll` forever, so the signal was never
+re-read. Both are fixed, and a REPL stream that cannot report the host letting
+go is now refused rather than taken.
+
+The generalisable form, for the next channel: a note that specifies a wire
+should also specify what ends a session on it, because a shared stream makes
+"waits forever" a different failure from the one it is on a dedicated one.
