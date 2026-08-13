@@ -522,6 +522,13 @@ attach straight past the log. With `--dap-log`, `--port` pins the proxy's port -
 the one a `launch.json` might have hardcoded - and the device gets a freshly
 reserved port of its own.
 
+A run that stays attached - `--dap-log`, or a target with a `dap_device` -
+prints the board's own console output as it arrives. On a `dap_device` target
+that is the only place your program's `print` output can appear, since the DAP
+channel is a separate interface. Reading it is not only for your benefit: a
+console this process holds open and never empties stops the board
+(`planning/20260813_console_backpressure.md` measures where).
+
 **Breakpoints never bind under `--source`** - check that the handshake reported
 `pathMappings`. Absent means nothing was mounted, so the program is running a
 copy on the device rather than your source.

@@ -57,7 +57,7 @@ from mpremote.main import State  # noqa: E402
 from mpremote.mpdebug_config import Target  # noqa: E402
 from mpremote.transport_serial import SerialTransport  # noqa: E402
 
-from helpers import PerfServer, debug_args, set_breakpoints, wait_for_msg  # noqa: E402
+from helpers import PerfServer, debug_args, set_breakpoints, take_msg, wait_for_msg  # noqa: E402
 from pty_device import PtyDevice  # noqa: E402
 
 _MICROPYTHON = Path(
@@ -781,11 +781,20 @@ class TestDoDebugSerialDapBridgeRealSession:
         finally:
             self._cleanup(control_device, device_slave_fd, transport)
 
-    def test_killing_the_bridge_while_stopped_leaves_the_device_usable(self, monkeypatch):
+    def test_killing_the_bridge_while_stopped_leaves_the_device_usable(
+        self, monkeypatch, capsys
+    ):
         """Killing the bridge while the device is stopped at a breakpoint
         must leave the device recoverable (trace uninstalled or the session
         cleanly closed, per the ticket) - not spinning forever unable to
         ever resume.
+
+        The device's own completion print is the evidence, and it is read
+        from `do_debug`'s stdout rather than from the port: killing the
+        bridge this way leaves nothing to tell the proxy its session ended,
+        so `do_debug` stays attached, and while it does its console pump owns
+        that port. A second reader here would take an arbitrary share of the
+        bytes and split the line it is looking for.
         """
         future, reported_holder, control_device, transport, bridge_holder, device_slave_fd = (
             self._spawn_stream_session(monkeypatch)
@@ -820,15 +829,74 @@ class TestDoDebugSerialDapBridgeRealSession:
                 bridge_proxy._client.close()
 
                 # If the device recovers, its own completion print appears
-                # on the control channel within a bounded time; if it is
-                # wedged (the bug above), this never arrives.
-                out = transport.read_until(
-                    1, b"Target completed successfully!", timeout=0.5, timeout_overall=15
-                )
-                assert b"Target completed successfully!" in out, (
-                    f"device never recovered after the bridge was killed while stopped: {out!r}"
+                # within a bounded time; if it is wedged (the bug above),
+                # this never arrives.
+                marker = "Target completed successfully!"
+                echoed = ""
+                deadline = time.monotonic() + 15
+                while marker not in echoed and time.monotonic() < deadline:
+                    echoed += capsys.readouterr().out
+                    time.sleep(0.1)
+                assert marker in echoed, (
+                    "device never recovered after the bridge was killed while "
+                    f"stopped: {echoed!r}"
                 )
             finally:
                 server.stop()
+        finally:
+            self._cleanup(control_device, device_slave_fd, transport)
+
+    def test_a_talkative_target_does_not_wedge_on_the_console_nobody_reads(
+        self, monkeypatch, capsys
+    ):
+        """A session that stays attached keeps the board's console emptied.
+
+        The console is a second connection here, not the one DAP rides, and
+        for as long as `do_debug` stays attached it is the only process
+        holding it. Held open and never read, it back-pressures into the
+        device - the tty stops accepting, the device's own buffer fills
+        behind it, and the next `print` waits for room that is not coming.
+        The program stops, so the DAP channel stops answering, and it reads
+        as a link that went quiet rather than as a full console.
+
+        Driven through `evaluate`, because what the target prints of its own
+        accord is bounded and this needs to cross the tty's buffer: each one
+        prints a line and is answered, so an unanswered one is the device
+        having stopped, and how many had gone through by then says how far it
+        got.
+        """
+        future, reported_holder, control_device, transport, _bridge_holder, device_slave_fd = (
+            self._spawn_stream_session(monkeypatch)
+        )
+        try:
+            reported = self._wait_for_report(reported_holder)
+            server = PerfServer("test-client", reported["host"], reported["port"])
+            try:
+                server.start()
+                wait_for_msg(server, response="initialize", timeout=10)
+                set_breakpoints(server, _TARGET_PY, [_BREAKPOINT_LINE])
+                wait_for_msg(server, response="setBreakpoints", timeout=10)
+                server.client.configuration_done()
+                stopped = wait_for_msg(server, event="stopped", timeout=15)
+                assert stopped is not None and stopped.body.get("reason") == "breakpoint"
+
+                # A kilobyte at a time, past 100 kB in total: a tty will
+                # absorb tens of kilobytes into its own buffers before the
+                # writer feels anything, so crossing that is what makes a
+                # console nobody empties stop the device rather than merely
+                # slow it down.
+                printed = 0
+                for _ in range(100):
+                    server.client.evaluate('print("P" * 1000)', frame_id=0, context="repl")
+                    answered = take_msg(server, response="evaluate", timeout=10)
+                    assert answered is not None, (
+                        f"the device stopped answering after printing {printed} bytes; "
+                        "a console this session holds open is not being read"
+                    )
+                    printed += 1001
+                assert printed > 65536, printed
+            finally:
+                server.stop()
+            future.result(timeout=15)
         finally:
             self._cleanup(control_device, device_slave_fd, transport)

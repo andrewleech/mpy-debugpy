@@ -64,3 +64,15 @@ The `settimeout(0.001)` / `settimeout(None)` alternation is the one thing the DA
 ## What this does not change
 
 The network transport still works: sessions that get past `setBreakpoints` run to completion, and the rest of the network suite passes in the same runs. The stall is at the first request after `initialize` on a connection whose reply follows the previous send closely.
+
+## Correction (2026-08-13): the prescribed step was taken, and two of the claims above are wrong
+
+See `20260813_console_backpressure.md` for the work and the measurements.
+
+1. **The `settimeout` alternation is not it.** The minimal reproduction "What to do next" asks for was built - a device script with no `debugpy` in it, pumping at 80 Hz with the same alternation, answering the same two-send-then-one-send shape. Five trials, 5/5 answered, second reply in 6-16 ms. Removing the alternation changes nothing measurable.
+
+2. **"A lock held across the receive wait" was not ruled out.** The reason given - that `MICROPY_PY_LWIP_ENTER`/`EXIT` are empty on this port - reads the fallback definitions at `extmod/modlwip.c:92-95` as the effective ones. stm32 defines them, at `ports/stm32/mphalport.h:66`, raising the interrupt priority to PENDSV so the lwIP background task cannot run. It is still not the cause, but nothing here tested it.
+
+The same work found a different defect with a mechanism that accounts for every symptom recorded above - a send the application makes that never leaves the board, a receive window that never reopens although the request was handled, ICMP answered throughout, the board's own 30 s timeout eventually printed. A console a host holds open and never reads stops MicroPython in `print` (up to 500 ms per byte on a stm32 CDC) while interrupts, and so lwIP, keep running; `mpremote debug` was holding one open on every path that stays attached without a mount.
+
+That does **not** retire this note. The HIL harness drains the board's console for the whole of every run, so the scenario measured here at 4 failures in 5 is not exposed to that defect, and it now passes 5/5 in both `--dap-log` modes. What the two notes together say is that the signature described here has at least one cause that is fully understood, and that this particular sighting is not yet attributed to it.
