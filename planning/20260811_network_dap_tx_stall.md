@@ -75,4 +75,10 @@ See `20260813_console_backpressure.md` for the work and the measurements.
 
 The same work found a different defect with a mechanism that accounts for every symptom recorded above - a send the application makes that never leaves the board, a receive window that never reopens although the request was handled, ICMP answered throughout, the board's own 30 s timeout eventually printed. A console a host holds open and never reads stops MicroPython in `print` (up to 500 ms per byte on a stm32 CDC) while interrupts, and so lwIP, keep running; `mpremote debug` was holding one open on every path that stays attached without a mount.
 
+## Correction (2026-08-13, second): the signature reproduces with no debugpy in it, and power save governs it
+
+See `20260813_wifi_powersave_tcp_stall.md`. A 120-line MicroPython script replaying this session's wire shape wedges the same way, so nothing in `debugpy` is involved. WiFi power-save mode is the variable: cyw43 PM1 (`network.WLAN.PM_POWERSAVE`) wedges 6 times out of 6, the bench default PM2 is clean 120 times out of 120, and `PM_NONE` is clean.
+
+Two claims above are superseded by it. The `settimeout` alternation is ruled out from both directions (the wedge happens without it, and does not happen with it at PM2). And "its advertised window shrank from 6195 to 5989 and never reopened, although Python had read those bytes out" does not show what it was read as showing: lwIP only announces a window increase once it reaches `LWIP_MIN(TCP_WND/2, mss)`, 800 bytes here, so a consumed 206-byte request leaves the advertised window exactly where it was.
+
 That does **not** retire this note. The HIL harness drains the board's console for the whole of every run, so the scenario measured here at 4 failures in 5 is not exposed to that defect, and it now passes 5/5 in both `--dap-log` modes. What the two notes together say is that the signature described here has at least one cause that is fully understood, and that this particular sighting is not yet attributed to it.

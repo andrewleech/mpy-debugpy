@@ -214,6 +214,19 @@ plane rather than handing a client an unconnectable address.
 The board needs to be on the network before the debug server starts - put the
 connection in `boot.py`, or in the program before it imports `debugpy`.
 
+**Turn WiFi power save off for a debug session.** On a PYBD-SF6W in
+`network.WLAN.PM_POWERSAVE`, a session stops getting answers a few requests in
+and never recovers, every time, while the board still answers pings: measured
+in `planning/20260813_wifi_powersave_tcp_stall.md`, with a reproduction that
+has no debugger in it. The default (`PM_PERFORMANCE`) does not show it in 120
+runs, but it does add tens of milliseconds to every round trip, and the HIL
+suite has seen rare stalls of the same shape on it. Debugging is interactive
+and short-lived, so:
+
+```python
+wlan.config(pm=network.WLAN.PM_NONE)   # after the connection is up
+```
+
 ### serial
 
 ```bash
