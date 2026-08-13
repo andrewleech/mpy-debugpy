@@ -18,9 +18,18 @@ working. Nothing in this repo's code is involved: the reproduction is a 120-line
 MicroPython script that echoes fixed-size replies.
 
 The HIL network intermittent in the risk register has that signature. It is not
-proven to be the same fault - the bench default is PM2, where the reproduction
-is clean 120 times out of 120 - but power-save mode is now a measured variable
-that governs it, which nothing before this identified.
+proven to be the same fault, and the reason to be careful is that **every
+sighting in that row happened at PM2**: the bench boot script sets no `pm`, so
+it runs the default `PM_PERFORMANCE` (0xa11142), which is cyw43 PM2 and still a
+sleeping mode. PM1 is therefore an amplifier - it turns a fault seen about once
+in twenty runs into one that happens every time, which is what made it possible
+to strip the session down to this script - not the condition for the fault.
+
+What links the two is a signature, a board and a transport. What does not yet
+link them is a measurement: the capture and the device probe below both come
+from PM1 runs, and 2026-08-11's capture points the other way on direction
+(nothing left the board there; every PM1 wedge is inbound). A long soak of this
+reproduction at PM2 is what would settle it.
 
 ## Measurements
 
