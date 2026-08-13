@@ -43,9 +43,14 @@ def read_exactly(sock, count, timeout_s):
     return bytes(got)
 
 
-def trial(addr, cfg, timeout_s, gaps):
+def trial(addr, cfg, timeout_s, gaps, pre_gap=0.0):
     sock = socket.create_connection(addr, timeout=10)
     try:
+        # Nothing is sent for `pre_gap` seconds, so the device's accept()
+        # has long returned before any byte arrives: the window where lwIP
+        # refuses data on a not-yet-accepted pcb is stepped over entirely.
+        if pre_gap:
+            time.sleep(pre_gap)
         sock.sendall(json.dumps(cfg).encode() + b"\n")
         for index, (req, replies) in enumerate(EXCHANGE):
             if index:
@@ -71,6 +76,7 @@ def main():
     ap.add_argument("--gap", type=float, default=0.05)
     ap.add_argument("--label", default="")
     ap.add_argument("--no-alternate", action="store_true")
+    ap.add_argument("--pre-gap", type=float, default=0.0)
     ap.add_argument("--uniform", type=int, default=0, help="N identical 83/120 exchanges instead")
     ap.add_argument("--pm", type=lambda v: int(v, 0), default=None)
     args = ap.parse_args()
@@ -87,7 +93,7 @@ def main():
         cfg["pm"] = args.pm
     stalls = 0
     for i in range(args.trials):
-        r = trial(addr, cfg, args.timeout, args.gap)
+        r = trial(addr, cfg, args.timeout, args.gap, args.pre_gap)
         if r["stalled_at"]:
             stalls += 1
             print(

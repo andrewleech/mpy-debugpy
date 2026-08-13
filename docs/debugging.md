@@ -214,18 +214,24 @@ plane rather than handing a client an unconnectable address.
 The board needs to be on the network before the debug server starts - put the
 connection in `boot.py`, or in the program before it imports `debugpy`.
 
-**Turn WiFi power save off for a debug session.** On a PYBD-SF6W in
-`network.WLAN.PM_POWERSAVE`, a session stops getting answers a few requests in
-and never recovers, every time, while the board still answers pings: measured
-in `planning/20260813_wifi_powersave_tcp_stall.md`, with a reproduction that
-has no debugger in it. The default (`PM_PERFORMANCE`) does not show it in 120
-runs, but it does add tens of milliseconds to every round trip, and the HIL
-suite has seen rare stalls of the same shape on it. Debugging is interactive
-and short-lived, so:
+**Do not debug over WiFi in `network.WLAN.PM_POWERSAVE`.** On a PYBD-SF6W in
+that mode a session stops getting answers a few requests in and never recovers,
+every time, while the board still answers pings - measured in
+`planning/20260813_wifi_powersave_tcp_stall.md`, with a reproduction that has no
+debugger in it. The default (`PM_PERFORMANCE`) survived 120 runs of that
+reproduction, so it is the better of the two, but it is not clean: the hardware
+suite has seen rare stalls of the same shape on it, roughly one run in twenty.
+
+`PM_NONE` is the conservative choice and is what the bench uses when it wants a
+quiet link:
 
 ```python
 wlan.config(pm=network.WLAN.PM_NONE)   # after the connection is up
 ```
+
+Be aware that this is not known to remove the rare stall. It has only been
+measured over a handful of runs, which is nowhere near enough to see a
+one-in-twenty fault, and the underlying cause is still open.
 
 ### serial
 

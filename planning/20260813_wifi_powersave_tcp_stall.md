@@ -120,6 +120,11 @@ application is polling correctly and the data is not reaching the socket layer.
 
 ## Where the drop is, and what is not yet known
 
+**Superseded by the 2026-08-14 addendum below: measured with lwIP's own
+counters, the wedge involves no lwIP drop at all. The reasoning here is kept
+for the enumeration of `tcp_input`'s silent-drop paths, which is what made the
+counters worth reading, not for its conclusion.**
+
 In `tcp_input` the only silent drop of in-window data on an established pcb is
 the refused-data path (`lib/lwip/src/core/tcp_in.c:422-435`): if
 `pcb->refused_data` is still set and the new segment carries data, the segment
@@ -154,3 +159,83 @@ the reproduction is small enough to hand over as-is.
 - **The bench keeps the default.** `tests/hil/board_boot.py` is deliberately not
   changed to disable power save. The risk row exists to catch this intermittent,
   and a bench configured to avoid it stops being able to.
+
+## Addendum (2026-08-14): where the frames die, measured with lwIP's own counters
+
+The board was flashed with an instrumented build of the current pin -
+`LWIP_STATS`/`LWIP_STATS_DISPLAY` turned on in
+`extmod/lwip-include/lwipopts_common.h`, plus a `lwip.print_stats()` in
+`extmod/modlwip.c` returning the proto counters as a dict. lwIP's own
+`stats_display()` is no use here: it formats every counter with `"%hu"` and
+MicroPython's printf does not implement the length modifier, so it prints the
+format string. The bench firmware was backed up first and restored afterwards;
+both patches are reverted.
+
+`repro/20260813_wifi_powersave/` gained the outbound variant used below:
+`device_outbound.py` dials out to `client_outbound.py`, so no connection is ever
+accepted on the board.
+
+### The wedge involves no lwIP drop at all
+
+Outbound arm, wedged, with pings running throughout:
+
+| counter | before | after |
+|---|---|---|
+| `tcp.recv` | 19 | 26 |
+| `tcp.drop` | 8 | **8** |
+| `icmp.recv` | 32 | 54 |
+| `icmp.xmit` | 32 | 54 |
+
+Every one of the 22 pings sent during the stall was received and answered, and
+lwIP dropped nothing. `tcp.chkerr`, `tcp.lenerr`, `tcp.proterr` and `tcp.err`
+are zero for the whole session, as are the IP ones.
+
+The accept arm does show `tcp.drop` moving (+6 across one wedge), and with the
+other TCP error counters at zero the only line that can be is
+`tcp_in.c:432`, the refused-data drop. That is not the wedge: the outbound arm
+wedges identically with the counter untouched. The likeliest reading is stale
+pcbs - the harness serves one connection at a time, so a client connecting while
+it is busy is queued with `_lwip_tcp_recv_unaccepted` installed, has its first
+bytes refused, and is never accepted.
+
+### The wire says the board never receives the segment
+
+An outbound wedge, captured:
+
+```
++0.449  board > host   P. 209   reply 2b, ack 420
++0.499  host  > board  P.  87   request 3, seq 420:507
++0.767  host  > board  P.  87   retransmit
++1.295  host  > board  P.  87   retransmit
++2.383  host  > board  P.  87   retransmit
++4.495  host  > board  P.  87   retransmit
++8.784  host  > board  P.  87   retransmit
++17.49  host  > board  P.  87   retransmit
++34.38  host  > board  P.  87   retransmit
+        the board never acknowledges 507
+```
+
+The board's last acknowledgement is 420. Eight deliveries of `420:507` over 34
+seconds produce no ACK, no RST and no counter movement, while unicast ICMP to
+the same station in the same window is answered without loss.
+
+So the frames are lost between the access point and lwIP's input. Everything
+above that is now excluded by measurement: not `debugpy`, not lwIP's TCP, not
+MicroPython's accept path, not the socket-timeout alternation. It is
+per-connection rather than per-station - a fresh connection gets through two
+exchanges again while the wedged one is still being retransmitted into.
+
+### What is left to try
+
+- **cyw43 driver logging.** The only remaining instrument on this side is
+  `CYW43_VERBOSE_DEBUG`, which would say whether the driver is handed the frame
+  and discards it or never sees it. Note the trap: that output goes to the
+  console, and an undrained console stops the board (see
+  `20260813_console_backpressure.md`), so it has to be read while it runs.
+- **A monitor-mode capture of the air**, which would separate "the AP never
+  sent it" from "the chip never delivered it". Needs an adapter that can do it.
+- **A second access point.** The upstream reports of this signature
+  ([pico-sdk#1079](https://github.com/raspberrypi/pico-sdk/issues/1079) and the
+  Raspberry Pi forum threads on `[CYW43] STALL`) include one where the fault
+  disappeared on a different AP, and interop with the AP's power-save buffering
+  is exactly what is in question here.
