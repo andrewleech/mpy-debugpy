@@ -7,6 +7,10 @@ micropython-lib: 2a9bad0971b7700349d233ea82e1669b42e99eb5 (mpy-debugpy)
 
 Bench: PYBD-SF6W, firmware `v1.29.0-preview.717.g4eaafbc5bc`, RSSI -58 to -60, board 192.168.0.114, host 192.168.0.8.
 
+Working manual for anyone picking this up: `20260814_wifi_stall_investigation_handover.md` -
+every measurement, every hypothesis and how it died, the instrumentation recipes, and the
+traps. This note is the evidence record; that one is how to carry on.
+
 Reproduction: `repro/20260813_wifi_powersave/` - `device.py` on the board, `client.py` on the host. No `debugpy`, no `sys.settrace`, no mpremote.
 
 ## The claim
