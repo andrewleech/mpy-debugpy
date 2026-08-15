@@ -347,19 +347,35 @@ def _publish_facts(request):
 
 
 class DeviceOutput:
-    """Everything the board printed since a debug session detached.
+    """Everything the board printed for the length of a debug session.
 
-    `mpremote debug` returns once it has reported the endpoint, leaving the
-    board running the target with nobody reading its stdout. The target's own
-    completion line is the only signal that it ran to the end - the DAP
-    protocol has no event for it here - so the port is read in the background
-    for the length of the session.
+    Where that arrives depends on whether the run detaches. A plain network
+    run returns once it has reported the endpoint, leaving the board running
+    the target with nobody holding its port, so this opens the port itself. A
+    run that stays attached - `--dap-log`, or a `dap_device` target - keeps
+    the port and drains it, echoing the board's output to its own stdout
+    (`_pump_console` in mpremote's commands.py); opening the port as well
+    would put two readers on one tty, each taking an arbitrary share of the
+    bytes, so this consumes the command's stdout instead.
+
+    Reading that stdout is not optional for such a run: mpremote's console
+    pump writes into it, and a pipe nobody empties stalls the pump, which
+    stops the board (`planning/20260813_console_backpressure.md`). Its
+    bounded buffer makes that lossy rather than fatal now, but the loss is
+    still this suite's evidence going missing.
+
+    The target's own completion line is the only signal that it ran to the
+    end - the DAP protocol has no event for it here.
     """
 
-    def __init__(self, device):
-        import serial
+    def __init__(self, device=None, stream=None):
+        assert (device is None) != (stream is None), "exactly one source"
+        self._port = None
+        self._stream = stream
+        if device is not None:
+            import serial
 
-        self._port = serial.Serial(device, BAUDRATE, timeout=0.2)
+            self._port = serial.Serial(device, BAUDRATE, timeout=0.2)
         self._chunks = []
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._pump, daemon=True)
@@ -368,7 +384,16 @@ class DeviceOutput:
     def _pump(self):
         while not self._stop.is_set():
             try:
-                data = self._port.read(4096)
+                if self._port is not None:
+                    data = self._port.read(4096)
+                else:
+                    # A blocking read of whatever has arrived: the stream is a
+                    # pipe from a process that is still running, so read1()
+                    # returns as soon as there is anything rather than waiting
+                    # for a full buffer, and b"" only at EOF.
+                    data = self._stream.read1(4096)
+                    if not data:
+                        return
             except Exception:
                 return
             if data:
@@ -386,8 +411,9 @@ class DeviceOutput:
     def close(self):
         self._stop.set()
         self._thread.join(timeout=2)
-        with contextlib.suppress(Exception):
-            self._port.close()
+        if self._port is not None:
+            with contextlib.suppress(Exception):
+                self._port.close()
 
 
 @pytest.fixture()
@@ -442,7 +468,12 @@ def hil_debug_runner(request, hil_device, hil_facts, tmp_path):
 
         payload = json.loads(matched[matched.index("{") :])
         payload["command_output"] = "".join(lines)
-        payload["device"] = DeviceOutput(hil_device)
+        # Whichever end of the board's console this run leaves readable; see
+        # DeviceOutput. Under --dap-log the command is still holding the port,
+        # so its stdout is the only place the board's output now appears.
+        payload["device"] = (
+            DeviceOutput(stream=proc.stdout) if log_path else DeviceOutput(device=hil_device)
+        )
         payload["dap_log"] = log_path
         runs.append(payload)
         return payload
@@ -498,6 +529,7 @@ def hil_serial_dap_runner(hil_device, hil_dap_device, hil_facts, tmp_path):
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(_SUBMODULE_DIR), env.get("PYTHONPATH")]))
     procs = []
+    outputs = []
 
     def _run(timeout=60):
         proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
@@ -508,11 +540,22 @@ def hil_serial_dap_runner(hil_device, hil_dap_device, hil_facts, tmp_path):
         payload = json.loads(matched[matched.index("{") :])
         payload["command_output"] = "".join(lines)
         payload["process"] = proc
+        # This path never detaches, so mpremote holds the board's console for
+        # the whole session and echoes it here. Nothing in these scenarios
+        # reads the board's output, but the pipe still has to be emptied: see
+        # DeviceOutput.
+        payload["device"] = DeviceOutput(stream=proc.stdout)
+        outputs.append(payload["device"])
         return payload
 
     try:
         yield _run
     finally:
+        # Console readers first: each holds the command's stdout pipe, and a
+        # terminate() that leaves one reading gets an EOF it treats as a
+        # device problem rather than as teardown.
+        for output in outputs:
+            output.close()
         # A finished client session ends the bridge and the command with it,
         # so a live process here means the test left one open; either way the
         # board's ports must be free before the next test spawns a run.

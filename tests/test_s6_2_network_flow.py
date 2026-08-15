@@ -61,7 +61,11 @@ def _run_against_pty(port, env):
         close_fds=True,
     )
     os.close(master_fd)
-    os.close(slave_fd)
+    # `slave_fd` is held for the whole run, not closed here: a pty with no open
+    # slave makes the device's next read on the master fail EIO, and the unix
+    # port treats a failed stdin read as end of input, so the interpreter exits
+    # before `mpremote` gets a chance to open the path. See `tests/pty_device.py`,
+    # which holds one for the same reason.
     proc = None
     try:
         time.sleep(0.3)  # let the interpreter reach its REPL before talking to it
@@ -79,6 +83,7 @@ def _run_against_pty(port, env):
         if device.poll() is None:
             device.kill()
             device.wait(timeout=5)
+        os.close(slave_fd)
 
 
 @requires_settrace_firmware

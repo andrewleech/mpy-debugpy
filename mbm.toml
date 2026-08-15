@@ -59,6 +59,11 @@ pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debugpy_insta
 title = "tools/mpremote: Add cached, cross-compiled debugpy package installer"
 
 [[submodules.branches]]
+name = "unix_stdin_read_error"
+pr_url = "https://github.com/andrewleech/micropython/tree/unix_stdin_read_error"
+title = "unix/unix_mphal: Report a failed stdin read as end of input"
+
+[[submodules.branches]]
 name = "mpremote_debug"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug"
 title = "tools/mpremote: Add the debug command (targets, handshake, unix flow, --dap-log)"

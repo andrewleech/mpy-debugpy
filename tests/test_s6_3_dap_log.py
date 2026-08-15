@@ -896,7 +896,10 @@ def test_s6_3_dap_log_over_pty_network_transport(free_tcp_port, tmp_path):
         close_fds=True,
     )
     os.close(master_fd)
-    os.close(slave_fd)
+    # `slave_fd` is held for the whole run: a pty with no open slave makes the
+    # device's next read on the master fail EIO, and the unix port treats a
+    # failed stdin read as end of input, so the interpreter exits before
+    # `mpremote` gets a chance to open the path. See `tests/pty_device.py`.
 
     log_file = tmp_path / "dap.jsonl"
     server = None
@@ -985,3 +988,4 @@ def test_s6_3_dap_log_over_pty_network_transport(free_tcp_port, tmp_path):
         except subprocess.TimeoutExpired:
             device_proc.kill()
             device_proc.wait(timeout=2)
+        os.close(slave_fd)

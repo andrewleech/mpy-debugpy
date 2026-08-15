@@ -530,7 +530,10 @@ def test_s5_5_mpremote_debug_serial_pty_leg(free_tcp_port):
         [str(_MICROPYTHON)], stdin=master_fd, stdout=master_fd, stderr=master_fd, env=env, close_fds=True
     )
     os.close(master_fd)
-    os.close(slave_fd)
+    # `slave_fd` is held for the whole run: a pty with no open slave makes the
+    # device's next read on the master fail EIO, and the unix port treats a
+    # failed stdin read as end of input, so the interpreter exits before
+    # `mpremote` gets a chance to open the path. See `tests/pty_device.py`.
     try:
         time.sleep(0.3)  # let the interpreter start its REPL before talking to it
 
@@ -571,6 +574,7 @@ def test_s5_5_mpremote_debug_serial_pty_leg(free_tcp_port):
         except subprocess.TimeoutExpired:
             device.kill()
             device.wait(timeout=5)
+        os.close(slave_fd)
 
 
 _QEMU_BINARY = shutil.which("qemu-system-arm")
