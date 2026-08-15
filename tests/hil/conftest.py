@@ -82,11 +82,18 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(items):
-    """Everything under `tests/hil/` is a hardware test, by definition."""
+    """Everything under `tests/hil/` is a hardware test, by definition.
+
+    Hardware scenarios also get one retry, and only against the failure text of
+    the parked WiFi fault - see `_PARKED_STALL_SIGNATURES`. Applied as a marker
+    rather than as `--reruns` on the command line so it cannot leak into the
+    host-only suite, and so the restriction travels with the reason for it.
+    """
     here = Path(__file__).parent
     for item in items:
         if here in Path(str(item.fspath)).parents:
             item.add_marker("hil")
+            item.add_marker(pytest.mark.flaky(reruns=1, only_rerun=_PARKED_STALL_SIGNATURES))
 
 
 @pytest.fixture(scope="session")
@@ -536,6 +543,19 @@ def hil_serial_dap_session(hil_serial_dap_runner):
 
 _RESULTS = {}
 _MEASUREMENTS = {}
+_RETRIES = {}
+
+# The one failure text a scenario is retried on: a board that answered earlier
+# requests on a connection and then stopped answering. That is the parked WiFi
+# fault (`20260814_wifi_stall_investigation_handover.md`), which lives below
+# MicroPython and is not this project's to fix. Nothing else is retried - a
+# scenario that fails any other way still fails the run on its first attempt,
+# and a retried scenario is reported as retried, so the rate the risk register
+# tracks stays visible rather than being converted into a slower green run.
+_PARKED_STALL_SIGNATURES = [
+    r"no response to \w+ \(seq \d+\) within",
+    r"no initialize response from",
+]
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -543,6 +563,9 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
     if "hil" not in item.keywords:
+        return
+    if report.outcome == "rerun":
+        _RETRIES[item.nodeid] = _RETRIES.get(item.nodeid, 0) + 1
         return
     if report.when == "call":
         _RESULTS[item.nodeid] = report.outcome
@@ -624,8 +647,18 @@ def pytest_sessionfinish(session):
         "| --- | --- |",
     ]
     for nodeid, outcome in sorted(_RESULTS.items()):
-        lines.append("| `{}` | {} |".format(nodeid.split("::")[-1], outcome))
+        retries = _RETRIES.get(nodeid, 0)
+        note = " (after {} retr{})".format(retries, "y" if retries == 1 else "ies") if retries else ""
+        lines.append("| `{}` | {}{} |".format(nodeid.split("::")[-1], outcome, note))
     lines.append("")
+    if _RETRIES:
+        lines += [
+            "A retry means the board answered earlier requests on a connection and",
+            "then stopped answering, which is the parked fault in",
+            "`20260814_wifi_stall_investigation_handover.md`. It is retried once and",
+            "recorded here so the rate stays visible; nothing else is retried.",
+            "",
+        ]
     if _MEASUREMENTS:
         lines += ["## Measurements", "", "| name | value |", "| --- | --- |"]
         lines += ["| `{}` | {} |".format(k, v) for k, v in sorted(_MEASUREMENTS.items())]

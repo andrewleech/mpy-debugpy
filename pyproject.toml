@@ -10,7 +10,18 @@ requires-python = ">=3.10"
 # (test_s4_1_debugpy_install.py, test_s5_1_mpremote_debug.py).
 # pyyaml: tools/check_submodule_ci.py parses upstream workflow files, and its
 # tests import it rather than paying a uv resolution per case.
-test = ["pytest", "anyio", "debugpy", "pyserial", "platformdirs", "pyyaml"]
+# pytest-rerunfailures: the hardware network scenarios retry once, and only on
+# the one failure signature belonging to a parked fault - see
+# `tests/hil/conftest.py`. Unused by the host-only suite.
+test = [
+    "pytest",
+    "anyio",
+    "debugpy",
+    "pyserial",
+    "platformdirs",
+    "pyyaml",
+    "pytest-rerunfailures",
+]
 
 [dependency-groups]
 # Declared and pinned so `make lint` resolves ruff from uv.lock instead of
