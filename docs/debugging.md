@@ -250,7 +250,12 @@ things have to be true, and both are checked rather than assumed:
 
 Measured on a PYBD_SF6: 81.7-108.8 kB/s.
 
-This is the narrowest of the three paths, not a shortcut around the network one.
+**Do not reach for this first, and do not build a firmware for it.** It is the
+narrowest of the paths, not a shortcut around the network one, and if you are
+compiling your own firmware to get a debugger onto a board with no network, the
+route to build in is USB networking, not a second CDC - see
+[custom builds](#custom-builds-use-usb-networking) below.
+
 It needs both a build with a second USB CDC interface and a boot that enumerates
 it, and the second part is not the default anywhere: stm32 brings up a single
 VCP unless `boot.py` says otherwise (`ports/stm32/main.c`), and no board in this
@@ -274,6 +279,41 @@ run. `second_cdc` in the handshake is the build's maximum, read from
 boot has one. `pyb.usb_mode()` says what boot actually enumerated, which is what
 decides whether a session can run. `USB_VCP.isconnected()` says whether a host
 is currently holding the interface open. A variant name answers none of them.
+
+### Custom builds: use USB networking
+
+If you are compiling firmware anyway and the board has no network, build in USB
+NCM rather than a second CDC interface. `network.USBD_NCM` is in MicroPython
+master (`extmod/network_usbd_ncm.c`): the host sees an ordinary USB Ethernet
+adapter, the device serves it an address over DHCP, and the board is then on a
+network reachable down the cable.
+
+Nothing in this project changes for it. The [network](#network) transport above
+is the mainline path, and it does not care whether the address arrived over
+WiFi, Ethernet or a USB cable:
+
+```python
+import network
+
+nic = network.USBD_NCM()
+nic.active(True)
+while not nic.isconnected():
+    pass
+print(nic.ipconfig("addr4"))
+```
+
+That is a better trade than a second CDC on every axis except availability. The
+serial path costs a custom build *and* a `boot.py` edit *and* a re-enumeration,
+exists only on stm32's legacy USB stack, and gets you a transport this project
+has to bridge and frame for you. NCM costs a custom build and gets you the
+transport that was already there.
+
+The availability caveat is real, so check before planning around it: NCM is off
+by default (`MICROPY_PY_NETWORK_USBD_NCM`) and, as of writing, no board in
+upstream enables it, so this is a build-it-yourself option and not something a
+released firmware will have. It also needs a port on the TinyUSB stack - on
+stm32 `MICROPY_HW_TINYUSB_STACK` defaults to 0, so a PYBD is on the legacy stack
+and cannot take NCM without moving off it.
 
 ### one UART
 

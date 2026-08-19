@@ -270,6 +270,12 @@ The manifest's probe keys, and what they mean for the debugger UX:
   — it is a property of the build rather than of one session, which is why
   it can be advertised here and `serial_dap` cannot.
 
+  Reported, not recommended. A build made to get a debugger onto a board with
+  no network should build in USB networking (`network.USBD_NCM`) instead: it
+  puts the board on the mainline network transport down a cable, where a
+  second CDC additionally needs a `boot.py` edit and a re-enumeration and only
+  exists on stm32's legacy USB stack. See `docs/debugging.md`.
+
 The macros that back `settrace`/`save_names`:
 `MICROPY_PY_SYS_SETTRACE` and `MICROPY_PY_SYS_SETTRACE_LOCALNAMES`
 (`py/mpconfig.h`, off by default; on for all four variants above). Readers
