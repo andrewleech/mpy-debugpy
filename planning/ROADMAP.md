@@ -698,13 +698,24 @@ foundations, because each can remove a whole epic's worth of work.
   as likelier for most boards while it was still an open PR. The host sees a USB Ethernet
   adapter and the device serves it DHCP, so the mainline network transport works down a
   cable and nothing in this repo changes. Serial DAP is not to be presented as a default
-  or built for: it costs a custom build *and* a `boot.py` edit *and* a re-enumeration,
-  exists only on stm32's legacy USB stack, and yields a transport this project has to
-  bridge and frame, where NCM costs a custom build and yields the one already there.
-  Caveats to carry rather than bury: NCM is off by default (`MICROPY_PY_NETWORK_USBD_NCM`)
-  and no upstream port enables it yet, and it needs a TinyUSB port - stm32 defaults
-  `MICROPY_HW_TINYUSB_STACK` to 0, so the bench PYBD cannot take it without moving stacks.
-  `docs/debugging.md` now says so, and demotes the serial section accordingly.
+  or built for, and the guidance is two routes rather than three: **use the REPL
+  stream, or put the board on a network** - whichever kind, WiFi, Ethernet, or USB
+  NCM compiled in. **Both a second CDC and NCM start from a firmware you compiled
+  yourself** (user correction, 2026-08-20; the first cut of this decision was wrong to
+  imply the second CDC had an availability edge). Upstream sets
+  `MICROPY_HW_USB_CDC_NUM (2)` for exactly one board, the STM32H7B3I_DK, so nothing in
+  this project's board set can do serial DAP on a downloadable firmware - the bench
+  PYBD_SF6 has the interface only because `debug_board_flags` (`435602aedd`) patches it
+  in. From that common starting point the second CDC additionally costs a `boot.py`
+  edit and a re-enumeration and yields a transport this project has to bridge and
+  frame, where NCM costs nothing further and yields the one already there. What limits
+  NCM is which boards can take it, not effort: it is off by default
+  (`MICROPY_PY_NETWORK_USBD_NCM`), no upstream port enables it yet, and it needs a
+  TinyUSB port - stm32 defaults `MICROPY_HW_TINYUSB_STACK` to 0, so the bench PYBD
+  cannot take it without moving stacks. That legacy-stack coverage is the one thing the
+  second CDC still has, which is why the path stays supported and tested while ceasing
+  to be advice. `docs/debugging.md` leads with the two routes and demotes the serial
+  section accordingly.
 - **D7 (2026-08-10, user) — the no-network path is in-band framing on the REPL
   UART, and USB NCM in the medium term; not the second CDC.** Serial DAP over a
   dedicated interface (STORY-6.1) stays what D3 made it, a probed board subset,

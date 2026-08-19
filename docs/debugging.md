@@ -180,6 +180,28 @@ The four differ only in what the control plane is and where the data plane ends
 up. Everything after the handshake is identical, and a DAP client cannot tell
 them apart.
 
+**There are two routes worth planning around, and picking between them takes one
+question: is the board on a network?**
+
+- **No, and you want to start now.** Use the REPL stream: `mpremote debug
+  --dap-repl <target> app:main`. DAP is framed into the connection you already
+  have, so there is no build to make, no `boot.py` to edit and no second cable.
+  This works on any board, and it is the right answer for a board as it ships.
+  See [one UART](#one-uart).
+- **No, and you are willing to compile.** Put the board on a network rather than
+  reaching for another serial interface - WiFi or Ethernet if the hardware has
+  it, otherwise USB networking built into the firmware, which makes an ordinary
+  network of the cable already plugged in. See
+  [custom builds](#custom-builds-use-networking).
+- **Yes.** Use [network](#network). It is the mainline path and does not care how
+  the address arrived.
+
+DAP on a *second* USB CDC interface also exists and is tested, but it is not one
+of the two: it needs the same custom firmware as USB networking and then a
+`boot.py` edit and a re-enumeration on top, for a transport this project has to
+bridge and frame. It is documented under [serial](#serial) for the boards
+already carrying it, not offered as a route to take.
+
 ### unix
 
 ```bash
@@ -254,13 +276,16 @@ Measured on a PYBD_SF6: 81.7-108.8 kB/s.
 narrowest of the paths, not a shortcut around the network one, and if you are
 compiling your own firmware to get a debugger onto a board with no network, the
 route to build in is USB networking, not a second CDC - see
-[custom builds](#custom-builds-use-usb-networking) below.
+[custom builds](#custom-builds-use-networking) below.
 
 It needs both a build with a second USB CDC interface and a boot that enumerates
-it, and the second part is not the default anywhere: stm32 brings up a single
-VCP unless `boot.py` says otherwise (`ports/stm32/main.c`), and no board in this
-project's set ships a `boot.py` that does. So a board that has the interface
-still needs
+it, and **neither part comes with any firmware you can download for the boards
+here**. Upstream sets `MICROPY_HW_USB_CDC_NUM (2)` for one board only, the
+STM32H7B3I_DK; the PYBD_SF6 on this project's bench has it because this
+project's own build patches it in. Then the enumeration is a second, separate
+step: stm32 brings up a single VCP unless `boot.py` says otherwise
+(`ports/stm32/main.c`), and no board in this project's set ships a `boot.py`
+that does. So a board that has the interface still needs
 
 ```python
 import pyb
@@ -280,13 +305,18 @@ boot has one. `pyb.usb_mode()` says what boot actually enumerated, which is what
 decides whether a session can run. `USB_VCP.isconnected()` says whether a host
 is currently holding the interface open. A variant name answers none of them.
 
-### Custom builds: use USB networking
+### Custom builds: use networking
 
-If you are compiling firmware anyway and the board has no network, build in USB
-NCM rather than a second CDC interface. `network.USBD_NCM` is in MicroPython
-master (`extmod/network_usbd_ncm.c`): the host sees an ordinary USB Ethernet
-adapter, the device serves it an address over DHCP, and the board is then on a
-network reachable down the cable.
+If you are compiling firmware to get a debugger onto a board with no network,
+the thing to build in is a network - not a second serial interface. Any kind
+will do, because the [network](#network) transport only wants an address:
+Ethernet on a board with a MAC, WiFi on one with a radio, or USB networking on a
+board with neither.
+
+USB networking is the one that needs no hardware you do not already have.
+`network.USBD_NCM` is in MicroPython master (`extmod/network_usbd_ncm.c`): the
+host sees an ordinary USB Ethernet adapter, the device serves it an address over
+DHCP, and the board is on a network down the cable that was already plugged in.
 
 Nothing in this project changes for it. The [network](#network) transport above
 is the mainline path, and it does not care whether the address arrived over
@@ -302,18 +332,24 @@ while not nic.isconnected():
 print(nic.ipconfig("addr4"))
 ```
 
-That is a better trade than a second CDC on every axis except availability. The
-serial path costs a custom build *and* a `boot.py` edit *and* a re-enumeration,
-exists only on stm32's legacy USB stack, and gets you a transport this project
-has to bridge and frame for you. NCM costs a custom build and gets you the
-transport that was already there.
+That is a better trade than a second CDC, and not because one is easier to
+obtain than the other: **both need a firmware you compiled yourself.** Upstream
+sets `MICROPY_HW_USB_CDC_NUM (2)` for exactly one board, the STM32H7B3I_DK, so
+no board this project targets can run DAP on a second interface without a build
+that raises that ceiling - the PYBD_SF6 used on the bench here gets it from a
+patch in this project's own composition, not from anything you can download.
 
-The availability caveat is real, so check before planning around it: NCM is off
-by default (`MICROPY_PY_NETWORK_USBD_NCM`) and, as of writing, no board in
-upstream enables it, so this is a build-it-yourself option and not something a
-released firmware will have. It also needs a port on the TinyUSB stack - on
+Given that both start from a custom build, the second CDC then additionally
+costs a `boot.py` edit and a re-enumeration, and gets you a transport this
+project has to bridge and frame for you. NCM costs nothing further and gets you
+the transport that was already there.
+
+Two things do limit NCM, and they are about which boards can take it rather
+than about effort. It is off by default (`MICROPY_PY_NETWORK_USBD_NCM`) and no
+upstream port enables it yet. And it needs a port on the TinyUSB stack - on
 stm32 `MICROPY_HW_TINYUSB_STACK` defaults to 0, so a PYBD is on the legacy stack
-and cannot take NCM without moving off it.
+and cannot take NCM without moving off it. That is the one thing the second CDC
+still has: it works on the legacy stack, where NCM does not.
 
 ### one UART
 
