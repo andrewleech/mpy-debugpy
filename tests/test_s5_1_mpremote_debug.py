@@ -332,8 +332,8 @@ def test_debug_argv_round_trips_through_the_launchers_own_parser():
         ({"port": 5678}, ["mod", "main", 5678, None, False]),
         ({"loop": True}, ["mod", "main", None, None, True]),
         ({"port": 5678, "loop": True}, ["mod", "main", 5678, None, True]),
-        ({"dap_stream": "board"}, ["mod", "main", None, "board", False]),
-        ({"dap_stream": "board", "loop": True}, ["mod", "main", None, "board", True]),
+        ({"dap_stream": "repl"}, ["mod", "main", None, "repl", False]),
+        ({"dap_stream": "repl", "loop": True}, ["mod", "main", None, "repl", True]),
         (
             {"port": 5678, "dap_stream": "/dev/ttyACM1", "loop": True},
             ["mod", "main", 5678, "/dev/ttyACM1", True],

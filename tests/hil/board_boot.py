@@ -6,10 +6,7 @@
 # settled before the first `mpremote` connection: WiFi. STORY-6.2's boot script
 # only reports the address it finds, so the interface has to be up already. The
 # single-UART scenarios ignore it and run on the same boot, so there is one
-# bench arrangement rather than two.
-#
-# No `pyb.usb_mode()` call: the default single VCP is what every board ships
-# with, and nothing here wants a second interface any more.
+# bench arrangement.
 import time
 
 import network

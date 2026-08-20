@@ -61,21 +61,17 @@ def test_hil_handshake_caps_match_a_live_probe(hil_debug_session, hil_facts):
     from the interpreter, so an independent probe over the serial control
     plane has to agree with the one the launcher reported.
 
-    `serial_dap` and `repl_dap` are excluded because neither is a firmware
-    property - each records whether the *session* took that channel, and
-    this session took TCP, which is asserted directly. A probe run over the
-    REPL took no channel at all, so it reports both false and would disagree
-    with a handshake from a session that did.
+    `repl_dap` is excluded because it is not a firmware property - it records
+    whether the *session* took that channel, and this session took TCP, which
+    is asserted directly. A probe run over the REPL took no channel at all, so
+    it reports false and would disagree with a handshake from a session that
+    did.
     """
-    channel_keys = ("serial_dap", "repl_dap")
-
     claimed = dict(hil_debug_session["caps"])
-    for key in channel_keys:
-        assert claimed.pop(key, False) is False, hil_debug_session
+    assert claimed.pop("repl_dap", False) is False, hil_debug_session
 
     probed = dict(hil_facts["capabilities"])
-    for key in channel_keys:
-        probed.pop(key, None)
+    probed.pop("repl_dap", None)
     assert claimed == probed
 
 

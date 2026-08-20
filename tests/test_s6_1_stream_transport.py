@@ -54,8 +54,8 @@ _MICROPYPATH = "{}:{}:{}".format(
 )
 _PROBE_SCRIPT = _TOP_DIR / "tests" / "fixtures" / "stream_transport_probe.py"
 _LIVENESS_PROBE = _TOP_DIR / "tests" / "fixtures" / "stream_liveness_probe.py"
-# The shipped boot script, not a stand-in: given a `dap_device` it runs the
-# DAP channel over that stream, which is the product path under test here.
+# The shipped boot script, not a stand-in: given a `dap_stream` path it runs
+# the DAP channel over that stream, which is the product path under test.
 _BOOT_SCRIPT = _TOP_DIR / "launcher" / "mpy_launch_debugpy.py"
 _TARGET_PY = str(_TOP_DIR / "src" / "target.py")
 _BREAKPOINT_LINE = 80  # src/target.py, main(): the `for` loop calling inspect_local_variables()

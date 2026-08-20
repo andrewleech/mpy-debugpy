@@ -134,7 +134,7 @@ class FakeProc:
 # exists (`mpdebug_handshake.read_handshake` raises it, `read_until` reads it).
 _ABSENCE = (
     "mpremote: device exited before printing a 'MPDBG-READY ' line; "
-    "last output: 'Error: no dedicated DAP interface on this board'\n"
+    "last output: 'Error: the REPL stream cannot report the host letting go of it'\n"
 )
 _HANDSHAKE = 'MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {"settrace": true}}\n'
 

@@ -13,7 +13,6 @@ import stat
 import sys
 from pathlib import Path
 
-import pytest
 
 _SCRIPTS_DIR = str(Path(__file__).resolve().parents[1] / ".github" / "scripts")
 if _SCRIPTS_DIR not in sys.path:
@@ -125,72 +124,3 @@ def test_main_requires_source_with_compile_commands(tmp_path):
         ["--compile-commands", str(cc_file), "--expect", "MICROPY_PY_SYS_SETTRACE=1"]
     )
     assert rc == 2
-
-
-# --- main: --report ---------------------------------------------------------
-#
-# `second_cdc` (Q12) is the case these exist for: its evidence is a count,
-# `MICROPY_HW_USB_CDC_NUM`, so the boolean the manifest wants is a threshold
-# on it rather than the macro's own truthiness. A build with one interface
-# defines the macro as 1, which is truthy and means the opposite of what the
-# capability claims.
-
-
-def _report(tmp_path, pp_text, spec="second_cdc=MICROPY_HW_USB_CDC_NUM>=2"):
-    pp = tmp_path / "modsys.pp"
-    pp.write_text("#define MICROPY_PY_SYS_SETTRACE (1)\n" + pp_text)
-    rc = verify_capabilities.main(
-        ["--pp-file", str(pp), "--expect", "MICROPY_PY_SYS_SETTRACE=1", "--report", spec]
-    )
-    return rc
-
-
-def test_report_is_true_when_the_count_reaches_the_threshold(tmp_path, capsys):
-    assert _report(tmp_path, "#define MICROPY_HW_USB_CDC_NUM (2)\n") == 0
-    assert "second_cdc=true" in capsys.readouterr().out
-
-
-def test_report_is_false_for_a_count_that_is_truthy_but_below_the_threshold(tmp_path, capsys):
-    """The whole reason this is not spelled `--expect MICROPY_HW_USB_CDC_NUM=1`."""
-    assert _report(tmp_path, "#define MICROPY_HW_USB_CDC_NUM (1)\n") == 0
-    assert "second_cdc=false" in capsys.readouterr().out
-
-
-def test_report_is_false_when_the_macro_is_undefined(tmp_path, capsys):
-    """rp2, esp32 and unix never define it, and false is their real answer.
-
-    Unlike `--expect`, where an undefined macro means the evidence is missing
-    and the build is not allowed to claim anything.
-    """
-    assert _report(tmp_path, "") == 0
-    assert "second_cdc=false" in capsys.readouterr().out
-
-
-def test_report_is_not_printed_when_an_expectation_failed(tmp_path, capsys):
-    """A failed build reports the failure, not a capability derived beside it."""
-    pp = tmp_path / "modsys.pp"
-    pp.write_text("#define MICROPY_PY_SYS_SETTRACE (0)\n#define MICROPY_HW_USB_CDC_NUM (2)\n")
-    rc = verify_capabilities.main(
-        [
-            "--pp-file",
-            str(pp),
-            "--expect",
-            "MICROPY_PY_SYS_SETTRACE=1",
-            "--report",
-            "second_cdc=MICROPY_HW_USB_CDC_NUM>=2",
-        ]
-    )
-    assert rc == 1
-    assert "second_cdc" not in capsys.readouterr().out
-
-
-@pytest.mark.parametrize("spec", ["second_cdc", "second_cdc=MICROPY_HW_USB_CDC_NUM", "=X>=2"])
-def test_a_report_spec_that_is_not_name_macro_threshold_is_refused(tmp_path, spec):
-    with pytest.raises(SystemExit, match="only >= is supported"):
-        _report(tmp_path, "#define MICROPY_HW_USB_CDC_NUM (2)\n", spec=spec)
-
-
-def test_a_macro_that_is_not_an_integer_is_an_error_rather_than_a_false(tmp_path):
-    """A value this cannot read is not evidence of absence."""
-    with pytest.raises(SystemExit, match="not a plain integer"):
-        _report(tmp_path, "#define MICROPY_HW_USB_CDC_NUM (SOME_OTHER_MACRO)\n")

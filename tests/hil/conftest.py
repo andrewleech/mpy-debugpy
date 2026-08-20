@@ -17,9 +17,8 @@ paths in the record instead (see `tree_state.py`).
 
 The board needs `board_boot.py` from this directory installed as its `boot.py`
 before any of this runs, and a reset after. It brings up WiFi, which the
-network scenarios need and the single-UART ones ignore; a board with no
-network runs the rest. That cannot be reached from here, since it is decided
-before the first `mpremote` connection.
+network scenarios need and the REPL-stream ones ignore. None of that can be
+arranged from here: it is settled before the first `mpremote` connection.
 
 Only one process may hold the board's serial port, and `mpremote debug` needs
 it, so nothing here keeps a transport open across a debug run: `hil_serial` is
@@ -53,7 +52,6 @@ if str(_SUBMODULE_DIR) not in sys.path:
 
 DEVICE_ENV = "MPY_DEBUG_HIL_DEVICE"
 BOARD_ENV = "MPY_DEBUG_HIL_BOARD"
-RESET_ENV = "MPY_DEBUG_HIL_RESET_CMD"
 DAP_LOG_ENV = "MPY_DEBUG_HIL_DAP_LOG"
 DIRECT_ENDPOINT_MARK = "hil_direct_endpoint"
 BAUDRATE = 115200
@@ -196,37 +194,66 @@ def _publish_facts(request):
         request.session._hil_facts = request.getfixturevalue("hil_facts")
 
 
+def serial_source(device):
+    """A read function over the board's own port, and the closer for it."""
+    import serial
+
+    port = serial.Serial(device, BAUDRATE, timeout=0.2)
+
+    def read():
+        return port.read(4096)
+
+    def close():
+        with contextlib.suppress(Exception):
+            port.close()
+
+    return read, close
+
+
+def pipe_source(stream):
+    """A read function over a live process's stdout pipe.
+
+    The raw fd, never the buffered reader wrapped around it: a buffered read
+    can strand already-flushed output in Python-land where nothing sees it,
+    which is the same trap `read_until` documents at length.
+    """
+    fd = stream.fileno()
+
+    def read():
+        chunk = os.read(fd, 4096)
+        if chunk == b"":
+            raise EOFError
+        return chunk
+
+    return read, lambda: None
+
+
 class DeviceOutput:
     """Everything the board printed for the length of a debug session.
 
-    Where that arrives depends on whether the run detaches. A plain network
-    run returns once it has reported the endpoint, leaving the board running
-    the target with nobody holding its port, so this opens the port itself. A
-    run that stays attached - `--dap-log`, or `--dap-repl` - keeps
-    the port and drains it, echoing the board's output to its own stdout
-    (`_pump_console` in mpremote's commands.py); opening the port as well
-    would put two readers on one tty, each taking an arbitrary share of the
-    bytes, so this consumes the command's stdout instead.
+    Takes an already-open source, because which one it is follows from a
+    decision the caller has already made. A run that detaches leaves the
+    board's port free, so the collector opens it (`serial_source`). A run
+    that stays attached keeps that port and drains it itself, echoing the
+    board's output to its own stdout (`_pump_console` in mpremote's
+    commands.py); opening the port as well would put two readers on one tty,
+    each taking an arbitrary share of the bytes, so the collector reads the
+    command's stdout instead (`pipe_source`).
 
     Reading that stdout is not optional for such a run: mpremote's console
     pump writes into it, and a pipe nobody empties stalls the pump, which
     stops the board (`planning/20260813_console_backpressure.md`). Its
-    bounded buffer makes that lossy rather than fatal now, but the loss is
-    still this suite's evidence going missing.
+    bounded buffer makes that lossy rather than fatal, but the loss is still
+    this suite's evidence going missing.
 
     The target's own completion line is the only signal that it ran to the
     end - the DAP protocol has no event for it here.
     """
 
-    def __init__(self, device=None, stream=None):
-        assert (device is None) != (stream is None), "exactly one source"
-        self._port = None
-        self._stream = stream
-        if device is not None:
-            import serial
-
-            self._port = serial.Serial(device, BAUDRATE, timeout=0.2)
+    def __init__(self, source):
+        self._read, self._close = source
         self._chunks = []
+        self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._pump, daemon=True)
         self._thread.start()
@@ -234,36 +261,39 @@ class DeviceOutput:
     def _pump(self):
         while not self._stop.is_set():
             try:
-                if self._port is not None:
-                    data = self._port.read(4096)
-                else:
-                    # A blocking read of whatever has arrived: the stream is a
-                    # pipe from a process that is still running, so read1()
-                    # returns as soon as there is anything rather than waiting
-                    # for a full buffer, and b"" only at EOF.
-                    data = self._stream.read1(4096)
-                    if not data:
-                        return
+                data = self._read()
             except Exception:
                 return
             if data:
-                self._chunks.append(data)
+                with self._lock:
+                    self._chunks.append(data)
+
+    def data(self):
+        with self._lock:
+            return b"".join(self._chunks)
 
     def text(self):
-        return b"".join(self._chunks).decode("utf-8", "replace")
+        return self.data().decode("utf-8", "replace")
 
     def wait_for(self, needle, timeout):
+        """Wait for `needle`, searched as bytes or as text to match its type.
+
+        Both are asked for here: a scenario waiting on the target's own
+        completion line wants text, and one checking that a marker byte
+        survived the framing wants the bytes it survived as.
+        """
+        haystack = self.data if isinstance(needle, bytes) else self.text
         deadline = time.monotonic() + timeout
-        while needle not in self.text() and time.monotonic() < deadline:
-            time.sleep(0.2)
-        return needle in self.text()
+        while needle not in haystack():
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.05)
+        return True
 
     def close(self):
         self._stop.set()
         self._thread.join(timeout=2)
-        if self._port is not None:
-            with contextlib.suppress(Exception):
-                self._port.close()
+        self._close()
 
 
 @pytest.fixture()
@@ -321,8 +351,8 @@ def hil_debug_runner(request, hil_device, hil_facts, tmp_path):
         # Whichever end of the board's console this run leaves readable; see
         # DeviceOutput. Under --dap-log the command is still holding the port,
         # so its stdout is the only place the board's output now appears.
-        payload["device"] = (
-            DeviceOutput(stream=proc.stdout) if log_path else DeviceOutput(device=hil_device)
+        payload["device"] = DeviceOutput(
+            pipe_source(proc.stdout) if log_path else serial_source(hil_device)
         )
         payload["dap_log"] = log_path
         runs.append(payload)
@@ -410,11 +440,8 @@ def pytest_sessionfinish(session):
     # which the run itself has already changed.
     tree = getattr(session, "_hil_tree", None) or _tree_state(_TOP_DIR)
     board = str(facts.get("board", "unknown-board")).replace("/", "_")
-    # One bench arrangement now, so a record is named by its date and board
-    # alone. It was previously also named by whether a second CDC interface
-    # was supplied, because the serial-DAP scenarios and the single-CDC one
-    # needed opposite boots of the same board and neither could be allowed to
-    # overwrite the other's record.
+    # A record is named by its date and board: one bench arrangement, so a
+    # rerun on the same day is the same run and may overwrite.
     path = _TOP_DIR / "planning" / "{}_hil_{}.md".format(time.strftime("%Y%m%d"), board)
     capabilities = facts.get("capabilities")
     lines = [

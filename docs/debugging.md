@@ -143,9 +143,9 @@ Two channels, and you only ever name the first one:
 - **Control plane** - how mpremote talks to the target to get the session
   started. For a device that is the raw REPL over `device`; for `unix` it is a
   subprocess mpremote owns. This is what `mpdebug.toml` configures.
-- **Data plane** - how the DAP client talks to the debug server. A TCP port the
-  device binds, the board's second CDC interface, or a loopback port on the
-  host. The device chooses and *reports* it; nobody configures it.
+- **Data plane** - how the DAP client talks to the debug server. A TCP port
+  the device binds, or a loopback port on the host. The device chooses and
+  *reports* it; nobody configures it.
 
 The sequence:
 
@@ -194,7 +194,6 @@ question: is the board on a network?**
   [custom builds](#custom-builds-use-networking).
 - **Yes.** Use [network](#network). It is the mainline path and does not care how
   the address arrived.
-
 
 ### unix
 
@@ -276,24 +275,12 @@ while not nic.isconnected():
 print(nic.ipconfig("addr4"))
 ```
 
-That is a better trade than a second CDC, and not because one is easier to
-obtain than the other: **both need a firmware you compiled yourself.** Upstream
-sets `MICROPY_HW_USB_CDC_NUM (2)` for exactly one board, the STM32H7B3I_DK, so
-no board this project targets can run DAP on a second interface without a build
-that raises that ceiling - the PYBD_SF6 used on the bench here gets it from a
-patch in this project's own composition, not from anything you can download.
-
-Given that both start from a custom build, the second CDC then additionally
-costs a `boot.py` edit and a re-enumeration, and gets you a transport this
-project has to bridge and frame for you. NCM costs nothing further and gets you
-the transport that was already there.
-
-Two things do limit NCM, and they are about which boards can take it rather
-than about effort. It is off by default (`MICROPY_PY_NETWORK_USBD_NCM`) and no
-upstream port enables it yet. And it needs a port on the TinyUSB stack - on
-stm32 `MICROPY_HW_TINYUSB_STACK` defaults to 0, so a PYBD is on the legacy stack
-and cannot take NCM without moving off it. That is the one thing the second CDC
-still has: it works on the legacy stack, where NCM does not.
+Two things limit it, and both are about which boards can take it rather than
+about effort. It is off by default (`MICROPY_PY_NETWORK_USBD_NCM`) and no
+upstream port enables it yet, so this is a build-it-yourself option rather than
+something a released firmware carries. And it needs a port on the TinyUSB
+stack - on stm32 `MICROPY_HW_TINYUSB_STACK` defaults to 0, so a PYBD is on the
+legacy stack and cannot take NCM without moving off it.
 
 ### one UART
 

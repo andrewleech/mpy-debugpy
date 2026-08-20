@@ -24,11 +24,10 @@ import json
 import os
 import re
 import subprocess
-import threading
 import time
 
 import pytest
-from conftest import BAUDRATE
+from conftest import BAUDRATE, DeviceOutput, pipe_source
 from dapdrive import attached, run_to_breakpoint
 from debuggee import DEVICE_SOURCE_PATH, LOOP_LINE, TARGET_MODULE
 from mpremote_debug import (
@@ -65,58 +64,6 @@ _PAYLOAD_SIZE = 16384
 # this channel pays framing and credit-window acks on top, so it is not the
 # same number.
 _MIN_BYTES_PER_SECOND = 1000
-
-
-class _CommandOutput:
-    """Everything mpremote printed after the handshake, as raw bytes.
-
-    On this channel the board's stdout *is* mpremote's stdout: the device
-    writes program output into the framing wrapper, the host demultiplexes it
-    back out and writes it on, so a `print()` on the board lands here. Bytes
-    rather than text, because the thing being checked is which bytes survived.
-
-    Reads the raw fd for the same reason `read_until` does - a buffered reader
-    would strand already-flushed output in Python-land where nothing sees it.
-    """
-
-    def __init__(self, proc):
-        self._proc = proc
-        self._chunks = []
-        self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._pump, daemon=True)
-        self._thread.start()
-
-    def _pump(self):
-        fd = self._proc.stdout.fileno()
-        while not self._stop.is_set():
-            try:
-                chunk = os.read(fd, 4096)
-            except OSError:
-                return
-            if chunk == b"":
-                return
-            with self._lock:
-                self._chunks.append(chunk)
-
-    def data(self):
-        with self._lock:
-            return b"".join(self._chunks)
-
-    def text(self):
-        return self.data().decode("utf-8", "replace")
-
-    def wait_for(self, needle, timeout):
-        deadline = time.monotonic() + timeout
-        while needle not in self.data():
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(0.05)
-        return True
-
-    def close(self):
-        self._stop.set()
-        self._thread.join(timeout=2)
 
 
 @pytest.fixture()
@@ -158,7 +105,7 @@ def hil_repl_dap_runner(hil_device, hil_facts, tmp_path):
         payload["process"] = proc
         # `dapdrive` reaches for `device` when a wait ends in silence, and on
         # this channel that is where the board's own traceback would be.
-        payload["device"] = _CommandOutput(proc)
+        payload["device"] = DeviceOutput(pipe_source(proc.stdout))
         runs.append(payload)
         return payload
 
