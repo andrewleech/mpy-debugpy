@@ -114,6 +114,26 @@ def hil_device(request):
     return device
 
 
+@pytest.fixture(scope="session")
+def hil_serial(hil_device):
+    """`with hil_serial() as transport:` - a raw REPL, released on exit."""
+
+    @contextlib.contextmanager
+    def _open(soft_reset=True):
+        from mpremote.transport_serial import SerialTransport
+
+        transport = SerialTransport(hil_device, baudrate=BAUDRATE)
+        transport.enter_raw_repl(soft_reset=soft_reset)
+        try:
+            yield transport
+        finally:
+            with contextlib.suppress(Exception):
+                transport.exit_raw_repl()
+            transport.close()
+
+    return _open
+
+
 def _device_root(transport):
     """The directory an importable module belongs in on this board.
 
