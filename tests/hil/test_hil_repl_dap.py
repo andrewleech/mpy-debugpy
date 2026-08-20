@@ -13,10 +13,9 @@ here:
   clears that;
 - what the channel costs, which is criterion 4 and is a number, not a claim.
 
-Run against the bench PYBD_SF6 booted single-VCP - `hil_single_vcp_board`
-gates on the board's own `usb_mode()`, so a bench still arranged for the
-second-CDC scenarios skips rather than passing this on a board that had
-another interface available all along.
+Run against the bench board as it boots. There is one bench arrangement now,
+so nothing gates these on a USB mode: a second CDC interface is not built,
+not enumerated and not supported.
 """
 
 import contextlib
@@ -121,7 +120,7 @@ class _CommandOutput:
 
 
 @pytest.fixture()
-def hil_repl_dap_runner(hil_single_vcp_board, hil_facts, tmp_path):
+def hil_repl_dap_runner(hil_device, hil_facts, tmp_path):
     """Call to start a `mpremote debug <target>` run with DAP on the REPL stream.
 
     `dap_repl` reaches the command through an `mpdebug.toml` rather than the
@@ -139,7 +138,7 @@ def hil_repl_dap_runner(hil_single_vcp_board, hil_facts, tmp_path):
     (tmp_path / "mpdebug.toml").write_text(
         "[target.hil]\n"
         'kind = "serial"\n'
-        f'device = "{hil_single_vcp_board}"\n'
+        f'device = "{hil_device}"\n'
         "dap_repl = true\n"
         f'program = "{TARGET_MODULE}:main"\n'
     )
@@ -315,7 +314,7 @@ def test_hil_repl_dap_carries_a_large_response(hil_repl_dap_session, record_prop
         assert server.request("threads").body["threads"], "session unusable after a large response"
 
 
-def test_hil_the_repl_comes_back_after_the_session(hil_repl_dap_runner, hil_single_vcp_board):
+def test_hil_the_repl_comes_back_after_the_session(hil_repl_dap_runner, hil_device):
     """The wrapper is given back, so the board is usable without a power cycle.
 
     The failure this rules out is the expensive one. A framing wrapper left in
@@ -355,7 +354,7 @@ def test_hil_the_repl_comes_back_after_the_session(hil_repl_dap_runner, hil_sing
     # rather than demanded at the first attempt.
     deadline = time.monotonic() + 60
     while True:
-        transport = SerialTransport(hil_single_vcp_board, baudrate=BAUDRATE)
+        transport = SerialTransport(hil_device, baudrate=BAUDRATE)
         try:
             transport.enter_raw_repl(soft_reset=False)
             assert transport.eval("1 + 1") == 2
