@@ -327,9 +327,12 @@ interrupt character being scanned - so Ctrl-C arrives at the target as ordinary
 data. Use the client's pause button instead. mpremote puts the slot back on
 every exit path, including a failed one.
 
-Measured on a PYBD_SF6: 81.5-81.7 kB/s, against 81.7-108.8 kB/s for the same
-payload over a second interface. Five runs land within 0.2% of each other, at
-the bottom of the range the dedicated interface spans.
+Measured on a PYBD_SF6: 65.3-81.7 kB/s, and the spread is not noise. Runs land
+on one of two rates, about 65.3 or about 81.6, with nothing in between - the
+slower being exactly 0.8 of the faster, which says something is falling on or
+off a boundary rather than varying. Five runs on an earlier firmware were all
+at the faster rate and three on the current one gave 65.3, 65.4 and 81.6, so
+plan for the lower number.
 
 That mechanism is also the port scope: **stm32 boards on the legacy USB stack**,
 where the REPL is the object in `dupterm` slot 1. rp2 and esp32 build one slot
