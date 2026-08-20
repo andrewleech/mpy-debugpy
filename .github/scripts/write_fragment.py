@@ -23,17 +23,14 @@ import json
 # `select --need` from it; `tests/test_gen_manifest.py` holds the three to each
 # other, since a key accepted here and rejected there fails the release job
 # after the artifacts are already built.
-KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back", "second_cdc")
+KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back")
 
 # The capabilities with no build-time evidence gate, and the value that stands
 # in. Write-back (`set_local`) is not built into any v1 debug-firmware variant.
-# `second_cdc` defaults false for the same reason the runtime probe does: only
-# a port defining MICROPY_HW_USB_CDC_NUM has build evidence to offer, so a job
-# that passes nothing is claiming the absence rather than failing to measure
-# the presence. `settrace` and `save_names` are deliberately absent from this
+# `settrace` and `save_names` are deliberately absent from this
 # table - every caller must supply them from a verify_capabilities.py check
 # against the build's resolved macros.
-DEFAULT_CAPABILITIES = {"set_local": False, "f_back": True, "second_cdc": False}
+DEFAULT_CAPABILITIES = {"set_local": False, "f_back": True}
 
 
 def build_parser() -> argparse.ArgumentParser:

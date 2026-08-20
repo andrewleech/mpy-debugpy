@@ -84,32 +84,7 @@ def test_main_derives_capabilities_from_evidence(tmp_path):
         "save_names": False,
         "set_local": False,
         "f_back": True,
-        "second_cdc": False,
     }
-
-
-def test_main_records_second_cdc_when_the_build_evidence_says_so(tmp_path):
-    """Q12: the stm32 job derives this from MICROPY_HW_USB_CDC_NUM >= 2.
-
-    Its default is false, so without this the true branch would be reachable
-    only from the workflow.
-    """
-    out = tmp_path / "frag.json"
-    rc = write_fragment.main(
-        [
-            *_BASE_ARGS,
-            "--capability",
-            "settrace=true",
-            "--capability",
-            "save_names=true",
-            "--capability",
-            "second_cdc=true",
-            "--output",
-            str(out),
-        ]
-    )
-    assert rc == 0
-    assert json.loads(out.read_text())["capabilities"]["second_cdc"] is True
 
 
 def test_defaulted_capabilities_are_part_of_the_schema(tmp_path):

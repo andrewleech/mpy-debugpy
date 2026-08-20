@@ -36,7 +36,7 @@ and then it waits:
 
 ```
 debug server listening on 127.0.0.1:5678
-capabilities: {'serial_dap': False, 'settrace': True, 'set_local': False, 'f_back': True, 'save_names': True}
+capabilities: {'settrace': True, 'set_local': False, 'f_back': True, 'save_names': True}
 MPDBG-READY {"host": "127.0.0.1", "port": 5678, "caps": {...}, "pathMappings": [...]}
 ```
 
@@ -73,7 +73,7 @@ requires = ["settrace", "save_names"]
 [target.pybd]
 kind = "serial"
 device = "/dev/serial/by-id/usb-MicroPython_Pyboard_Virtual_Comm_Port_in_FS_Mode_3254335D3037-if01"
-dap_device = "/dev/serial/by-id/usb-MicroPython_Pyboard_Virtual_Comm_Port_in_FS_Mode_3254335D3037-if03"
+dap_repl = true
 source = "app"
 program = "app:main"
 ```
@@ -84,9 +84,8 @@ program = "app:main"
 | `device` | connect string as `mpremote connect` accepts. Required for `serial`; for `network` it names the control-plane device used for the pre-IP handshake. Never the debug endpoint - the device reports its own. |
 | `firmware` | for `unix`, a path to a built binary (relative paths resolve against this file's directory), or `system` for whatever `micropython` is on `PATH`. |
 | `program` | default `module[:method]`. Without it, `target:main`. |
-| `requires` | capability names checked against the handshake before the session starts. Vocabulary: `settrace`, `save_names`, `set_local`, `f_back`, `second_cdc`. A typo is caught before any device is touched. `serial_dap` and `repl_dap` are deliberately not accepted here - each reports which channel a run took, so requiring one would fail every target before the run that could satisfy it. |
-| `dap_device` | the board's second CDC interface, for DAP over serial instead of over the network. Only used when the handshake also reports `serial_dap: true`. The node has to exist first - see [serial](#serial). |
-| `dap_repl` | put DAP on the stream that already carries the REPL, for a board with one UART and no network. Conflicts with `dap_device`, and is refused for a `unix` target. See [one UART](#one-uart). |
+| `requires` | capability names checked against the handshake before the session starts. Vocabulary: `settrace`, `save_names`, `set_local`, `f_back`. A typo is caught before any device is touched. `repl_dap` is deliberately not accepted here - it reports which channel a run took, so requiring it would fail every target before the run that could satisfy it. |
+| `dap_repl` | put DAP on the stream that already carries the REPL, for a board with one UART and no network. Refused for a `unix` target. See [one UART](#one-uart). |
 | `source` | host directory mounted at the device's `/remote` before the program runs, so it debugs a live view of this directory. Relative paths resolve against this file's directory. Not valid on a `unix` target. |
 
 Unknown keys are ignored, so a front-end can keep its own metadata alongside
@@ -166,7 +165,7 @@ The handshake line is the contract between mpremote and whatever launched it:
 ```
 MPDBG-READY {"host": "192.168.1.42", "port": 5678,
              "caps": {"settrace": true, "save_names": true, "set_local": false,
-                      "f_back": true, "serial_dap": false},
+                      "f_back": true},
              "pathMappings": [{"localRoot": "/home/me/app", "remoteRoot": "/remote"}]}
 ```
 
@@ -196,11 +195,6 @@ question: is the board on a network?**
 - **Yes.** Use [network](#network). It is the mainline path and does not care how
   the address arrived.
 
-DAP on a *second* USB CDC interface also exists and is tested, but it is not one
-of the two: it needs the same custom firmware as USB networking and then a
-`boot.py` edit and a re-enumeration on top, for a transport this project has to
-bridge and frame. It is documented under [serial](#serial) for the boards
-already carrying it, not offered as a route to take.
 
 ### unix
 
@@ -254,56 +248,6 @@ wlan.config(pm=network.WLAN.PM_NONE)   # after the connection is up
 Be aware that this is not known to remove the rare stall. It has only been
 measured over a handful of runs, which is nowhere near enough to see a
 one-in-twenty fault, and the underlying cause is still open.
-
-### serial
-
-```bash
-mpremote debug pybd app:main
-```
-
-DAP rides a serial interface of its own instead of the network, and mpremote
-bridges it to a loopback port so the client sees an ordinary TCP endpoint. Two
-things have to be true, and both are checked rather than assumed:
-
-- the target has a `dap_device`, because only the host can name the interface by
-  tty node; and
-- the handshake reports `serial_dap: true`, because only the device can map that
-  node to a runtime object.
-
-Measured on a PYBD_SF6: 81.7-108.8 kB/s.
-
-**Do not reach for this first, and do not build a firmware for it.** It is the
-narrowest of the paths, not a shortcut around the network one, and if you are
-compiling your own firmware to get a debugger onto a board with no network, the
-route to build in is USB networking, not a second CDC - see
-[custom builds](#custom-builds-use-networking) below.
-
-It needs both a build with a second USB CDC interface and a boot that enumerates
-it, and **neither part comes with any firmware you can download for the boards
-here**. Upstream sets `MICROPY_HW_USB_CDC_NUM (2)` for one board only, the
-STM32H7B3I_DK; the PYBD_SF6 on this project's bench has it because this
-project's own build patches it in. Then the enumeration is a second, separate
-step: stm32 brings up a single VCP unless `boot.py` says otherwise
-(`ports/stm32/main.c`), and no board in this project's set ships a `boot.py`
-that does. So a board that has the interface still needs
-
-```python
-import pyb
-pyb.usb_mode("2xVCP+MSC")
-```
-
-in `boot.py` and a reboot - the second tty node does not exist until the board
-re-enumerates with it.
-
-Boards with a single UART have no second interface to enumerate at all; they
-take the [one UART](#one-uart) path instead.
-
-Three questions get confused here, and they can answer differently on the same
-run. `second_cdc` in the handshake is the build's maximum, read from
-`MICROPY_HW_USB_CDC_NUM`: it says a second interface is possible, not that this
-boot has one. `pyb.usb_mode()` says what boot actually enumerated, which is what
-decides whether a session can run. `USB_VCP.isconnected()` says whether a host
-is currently holding the interface open. A variant name answers none of them.
 
 ### Custom builds: use networking
 
@@ -510,22 +454,13 @@ is not evidence, and neither is this page.
 | `save_names` | local variables appear under their real names. Without it they are `local_00`, `local_01`, ... positional placeholders. |
 | `set_local` | a local variable can be written from the debugger. |
 | `f_back` | frames chain to their caller, so a call stack deeper than one frame can be walked. |
-| `second_cdc` | the build could enumerate a second USB CDC interface for DAP to use. A fact about the build, not about this boot - see [serial](#serial) for what still has to be true before one exists. |
-| `serial_dap` | this session's DAP channel is a serial stream rather than a TCP socket. A fact about the session, not about the firmware. |
-| `repl_dap` | this session's DAP channel is sharing the stream that carries the REPL. A fact about the session, not about the firmware; `serial_dap` is true as well, since a shared stream is still a stream. |
+| `repl_dap` | this session's DAP channel is sharing the stream that carries the REPL. A fact about the session, not about the firmware. |
 
 On every firmware artifact this project publishes, and on the unix build:
-`settrace`, `save_names` and `f_back` are true, and `set_local` and
-`second_cdc` are false. Two of those builds have been probed rather than
-assumed - the unix `build-standard` binary and a PYBD_SF6 - and both report the
-same values. Function parameters do appear under their real names, not just
-locals.
-
-`second_cdc` is the one that will move: the published PYBD_SF6 artifact is
-built from a commit predating `MICROPY_HW_USB_CDC_NUM (2)` on that board, so
-false is the honest value for it, while a current build of the same board
-probes true. The manifest is corrected by the build job that republishes it,
-not by hand.
+`settrace`, `save_names` and `f_back` are true and `set_local` is false. Two
+of those builds have been probed rather than assumed - the unix
+`build-standard` binary and a PYBD_SF6 - and both report the same values.
+Function parameters do appear under their real names, not just locals.
 
 So **local variables are read-only**. No branch implements local write-back, so
 the tooling marks them read-only from the probe rather than accepting an edit
@@ -617,8 +552,8 @@ attach straight past the log. With `--dap-log`, `--port` pins the proxy's port -
 the one a `launch.json` might have hardcoded - and the device gets a freshly
 reserved port of its own.
 
-A run that stays attached - `--dap-log`, or a target with a `dap_device` -
-prints the board's own console output as it arrives. On a `dap_device` target
+A run that stays attached - `--dap-log`, or `--dap-repl` -
+prints the board's own console output as it arrives. On such a run
 that is the only place your program's `print` output can appear, since the DAP
 channel is a separate interface. Reading it is not only for your benefit: a
 console this process holds open and never empties stops the board

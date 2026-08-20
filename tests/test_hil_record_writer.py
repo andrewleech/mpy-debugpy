@@ -51,7 +51,6 @@ def writer(tmp_path, monkeypatch):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "_TOP_DIR", tmp_path)
-    monkeypatch.delenv(module.DAP_DEVICE_ENV, raising=False)
     (tmp_path / "planning").mkdir()
     module._RESULTS.clear()
     module._MEASUREMENTS.clear()
@@ -80,7 +79,7 @@ def test_a_session_that_reached_the_board_writes_one(writer, tmp_path):
     writer.pytest_sessionfinish(SimpleNamespace(_hil_facts=_FACTS, _hil_tree=_TREE))
     written = _records(tmp_path)
     assert len(written) == 1, written
-    assert written[0].endswith("_hil_FAKE_BOARD_no-dap-device.md"), written[0]
+    assert written[0].endswith("_hil_FAKE_BOARD.md"), written[0]
     body = (tmp_path / "planning" / written[0]).read_text()
     assert "test_hil_breakpoint_stops_the_target_on_the_board` | passed" in body
     assert _TREE["head"] in body

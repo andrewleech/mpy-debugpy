@@ -905,14 +905,6 @@ class TestReplDapRefusals:
         with pytest.raises(commands.CommandError, match="not valid for a unix target"):
             commands.do_debug(State(), self._args(target="unix"))
 
-    def test_dap_device_conflict_is_refused(self, monkeypatch):
-        resolved = Target(
-            name="bench", kind="serial", device="/dev/null", dap_device="/dev/null", dap_repl=False
-        )
-        monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
-        with pytest.raises(commands.CommandError, match="conflicts with target"):
-            commands.do_debug(State(), self._args())
-
     def test_source_is_refused_because_a_mount_frames_the_same_stream(self, monkeypatch, tmp_path):
         resolved = Target(name="bench", kind="serial", device="/dev/null", dap_repl=True)
         monkeypatch.setattr(commands, "resolve_target", lambda name: resolved)
@@ -944,14 +936,6 @@ class TestReplDapConfig:
             self._load(
                 tmp_path,
                 '[target.bench]\nkind = "serial"\ndevice = "/dev/ttyACM0"\ndap_repl = "yes"\n',
-            )
-
-    def test_with_dap_device_is_rejected(self, tmp_path):
-        with pytest.raises(commands.CommandError, match="both 'dap_repl' and 'dap_device'"):
-            self._load(
-                tmp_path,
-                '[target.bench]\nkind = "serial"\ndevice = "/dev/ttyACM0"\n'
-                'dap_device = "/dev/ttyACM1"\ndap_repl = true\n',
             )
 
     def test_on_a_unix_target_is_rejected(self, tmp_path):

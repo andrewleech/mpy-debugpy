@@ -25,23 +25,19 @@ Exits nonzero (with a `::error::`-prefixed message per problem) if any
 success, prints one `NAME=true`/`NAME=false` line per `--expect`ed macro
 (suitable for appending to `$GITHUB_OUTPUT`).
 
-`--report NAME=MACRO>=N` covers the capabilities whose evidence is a count
-rather than a flag - `second_cdc` from `MICROPY_HW_USB_CDC_NUM` (Q12). It
-asserts nothing: a macro no port in the build defines is reported false,
+`--report NAME=MACRO>=N` covers a capability whose evidence is a count
+rather than a flag. It asserts nothing: a macro no port in the build defines is reported false,
 because for these the undefined case is the real answer and not a failure to
 measure. A macro that is defined but does not evaluate to an integer is
 still an error, since that is a value this cannot read either way.
 
 A `--report` rule is only as good as the macro being load-bearing in the port
 it runs against, and this reads resolved macros without knowing who consumes
-them. `MICROPY_HW_USB_CDC_NUM` is read only by `ports/stm32/usb.c`;
-`ports/mimxrt/boards/PHYBOARD_RT1170/mpconfigboard.h` also defines it as `(2)`
-but nothing on that port reads it - `shared/tinyusb/tusb_config.h` derives
-`CFG_TUD_CDC` from the boolean `MICROPY_HW_USB_CDC` instead - so the existing
-`second_cdc` rule would report true for a mimxrt build that enumerates one
-interface. No current variant is mimxrt. Before adding a build job for a port,
-check the macro is actually consumed there, or the manifest ends up claiming
-what the runtime probe contradicts, which is the one thing it must never do.
+them. A board config can define a macro the port never reads - which was true
+of `MICROPY_HW_USB_CDC_NUM` on mimxrt while a `second_cdc` rule existed here -
+so before adding a build job for a port, check the macro is actually consumed
+there, or the manifest ends up claiming what the runtime probe contradicts,
+which is the one thing it must never do.
 """
 
 from __future__ import annotations

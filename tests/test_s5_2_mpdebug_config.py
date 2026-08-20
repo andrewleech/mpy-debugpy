@@ -182,40 +182,6 @@ def test_unknown_capability_in_requires_errors_at_resolve_time(tmp_path):
         mpdebug_config.resolve_target("pico", start_dir=tmp_path)
 
 
-def test_second_cdc_may_be_required_but_serial_dap_may_not(tmp_path):
-    """The two USB-shaped caps are not interchangeable in `requires`.
-
-    `second_cdc` (Q12) describes the build, so any run can answer it; the
-    handshake's `serial_dap` describes the channel that run took, so requiring
-    it would fail every target before the run that could satisfy it.
-    """
-    _write(
-        tmp_path,
-        """
-        [target.pybd]
-        kind = "serial"
-        device = "/dev/serial/by-id/usb-a"
-        requires = ["settrace", "second_cdc"]
-        """,
-    )
-    assert mpdebug_config.resolve_target("pybd", start_dir=tmp_path).requires == [
-        "settrace",
-        "second_cdc",
-    ]
-
-    _write(
-        tmp_path,
-        """
-        [target.pybd]
-        kind = "serial"
-        device = "/dev/serial/by-id/usb-a"
-        requires = ["serial_dap"]
-        """,
-    )
-    with pytest.raises(CommandError, match="unknown capability 'serial_dap'"):
-        mpdebug_config.resolve_target("pybd", start_dir=tmp_path)
-
-
 def test_kind_outside_enum_errors(tmp_path):
     _write(
         tmp_path,
@@ -435,61 +401,6 @@ def test_non_string_firmware_errors(tmp_path):
         """,
     )
     with pytest.raises(CommandError, match="firmware must be a string"):
-        mpdebug_config.resolve_target("pico", start_dir=tmp_path)
-
-
-def test_resolves_dap_device(tmp_path):
-    _write(
-        tmp_path,
-        """
-        [target.pico]
-        kind = "serial"
-        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
-        dap_device = "/dev/serial/by-id/usb-MicroPython_Board-if02"
-        """,
-    )
-    target = mpdebug_config.resolve_target("pico", start_dir=tmp_path)
-    assert target.dap_device == "/dev/serial/by-id/usb-MicroPython_Board-if02"
-
-
-def test_dap_device_defaults_to_none(tmp_path):
-    _write(
-        tmp_path,
-        """
-        [target.pico]
-        kind = "serial"
-        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
-        """,
-    )
-    target = mpdebug_config.resolve_target("pico", start_dir=tmp_path)
-    assert target.dap_device is None
-
-
-def test_empty_dap_device_errors(tmp_path):
-    _write(
-        tmp_path,
-        """
-        [target.pico]
-        kind = "serial"
-        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
-        dap_device = ""
-        """,
-    )
-    with pytest.raises(CommandError, match="empty 'dap_device'"):
-        mpdebug_config.resolve_target("pico", start_dir=tmp_path)
-
-
-def test_non_string_dap_device_errors(tmp_path):
-    _write(
-        tmp_path,
-        """
-        [target.pico]
-        kind = "serial"
-        device = "/dev/serial/by-id/usb-MicroPython_Board-if00"
-        dap_device = 1234
-        """,
-    )
-    with pytest.raises(CommandError, match="dap_device must be a string"):
         mpdebug_config.resolve_target("pico", start_dir=tmp_path)
 
 

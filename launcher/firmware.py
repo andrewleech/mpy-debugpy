@@ -51,10 +51,8 @@ _DOWNLOAD_TIMEOUT_S = 60
 # debugpy.get_capabilities(), echoed in the launcher's MPDBG-READY handshake).
 # `select --need` only accepts keys from this set - a manifest or CLI caller
 # asking for a capability the probe cannot verify is a hard error, not a
-# silently-ignored filter. `second_cdc` is probed by the boot script rather
-# than by the debug server, because it is USB topology; it is in the same set
-# because the same rule applies to it (Q12).
-KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back", "second_cdc")
+# silently-ignored filter.
+KNOWN_CAPABILITIES = ("settrace", "save_names", "set_local", "f_back")
 
 
 class SelectionError(Exception):

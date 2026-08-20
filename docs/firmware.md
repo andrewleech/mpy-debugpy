@@ -26,15 +26,15 @@ in each variant/board header, not `CFLAGS_EXTRA` (see
 Capabilities, keyed by the vocabulary the runtime probe uses
 (`debugpy.get_capabilities()`, echoed in the launcher's `MPDBG-READY`
 handshake). All four variants claim the same values (`settrace`/`save_names`/
-`f_back` true, `set_local`/`second_cdc` false); the evidence column says how
-each row's claim was checked:
+`f_back` true, `set_local` false); the evidence column says how each row's
+claim was checked:
 
-| variant id | settrace | save_names | set_local | f_back | second_cdc | evidence |
-| --- | --- | --- | --- | --- | --- | --- |
-| `unix-standard-debug` | true | true | false | true | false | probe-confirmed |
-| `rp2-rpi-pico-w-debug` | true | true | false | true | false | build intent |
-| `stm32-pybd-sf6-debug` | true | true | false | true | false | build intent; the first four probed on PYBD_SF6 hardware from a newer build, which reports `second_cdc` true |
-| `esp32-generic-debug` | true | true | false | true | false | build intent |
+| variant id | settrace | save_names | set_local | f_back | evidence |
+| --- | --- | --- | --- | --- | --- |
+| `unix-standard-debug` | true | true | false | true | probe-confirmed |
+| `rp2-rpi-pico-w-debug` | true | true | false | true | build intent |
+| `stm32-pybd-sf6-debug` | true | true | false | true | build intent; all four probed on PYBD_SF6 hardware from a newer build |
+| `esp32-generic-debug` | true | true | false | true | build intent |
 
 `unix-standard-debug` is the only row checked against a live `MPDBG-READY`
 `caps` dict produced by the published artifact itself (fetch it and attach).
@@ -53,17 +53,6 @@ than a build flag: `f_back` is unconditional whenever `sys.settrace` is
 compiled in at all (`py/profile.c`), and `set_local` is `false` because no
 branch implements local-variable write-back, so editing a local from the
 debugger is unsupported everywhere, not just on some variants.
-
-`second_cdc` is the one value in this table set by hand rather than derived.
-CI derives it from `MICROPY_HW_USB_CDC_NUM >= 2` (`verify_capabilities.py
---report`), but that gate postdates all four artifacts, so `false` is what
-the manifest was given for them. It is honest for each: three of the four
-ports cannot build a second interface, and the PYBD_SF6 artifact's
-`source_commit` predates `MICROPY_HW_USB_CDC_NUM (2)` reaching that board's
-`mpconfigboard.h`. That row goes true at the next republish, from the build
-job. Note also that a true here would be the build's ceiling and not a usable
-interface — see the serial transport section of
-[`debugging.md`](debugging.md#serial) for what boot still has to do.
 
 Treat the `caps` dict in the launcher's `MPDBG-READY` line as the actual
 answer for a given attach, not this table; see
@@ -262,19 +251,6 @@ The manifest's probe keys, and what they mean for the debugger UX:
   read-only in every session today, regardless of `save_names`.
 - **`f_back`** — a frame's caller is reachable (`frame.f_back`), needed for
   a multi-level call stack in the debugger UI.
-- **`second_cdc`** — the build could enumerate a second USB CDC interface,
-  which is what DAP-over-serial would run on. A ceiling, not an interface:
-  the board still has to boot with the second one enumerated, which is never
-  the default. Unlike the four above it says nothing about the interpreter,
-  and unlike `serial_dap` — reported by the handshake, never by the manifest
-  — it is a property of the build rather than of one session, which is why
-  it can be advertised here and `serial_dap` cannot.
-
-  Reported, not recommended. A build made to get a debugger onto a board with
-  no network should build in USB networking (`network.USBD_NCM`) instead: it
-  puts the board on the mainline network transport down a cable, where a
-  second CDC additionally needs a `boot.py` edit and a re-enumeration and only
-  exists on stm32's legacy USB stack. See `docs/debugging.md`.
 
 The macros that back `settrace`/`save_names`:
 `MICROPY_PY_SYS_SETTRACE` and `MICROPY_PY_SYS_SETTRACE_LOCALNAMES`

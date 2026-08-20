@@ -329,8 +329,9 @@ def test_reaches_breakpoint_over_stream_transport():
             lambda ln: ln.startswith("MPDBG-READY "), deadline
         )
         payload = json.loads(ready[len("MPDBG-READY ") :])
+        # host/port is the whole report for a stream channel: there is no
+        # capability key for "took a stream", only for the REPL-sharing one.
         assert payload["host"] == "serial" and payload["port"] == 0, payload
-        assert payload["caps"]["serial_dap"] is True, payload
 
         buf = b""
 

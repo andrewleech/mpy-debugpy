@@ -7,13 +7,6 @@ board name, or an address - the by-id path comes from the environment and the
 debug endpoint comes from the device's own handshake, as it does in
 production.
 
-`MPY_DEBUG_HIL_DAP_DEVICE` is a second by-id path, the board's dedicated DAP
-interface; it gates the serial-DAP scenarios separately, since a board showing
-one CDC interface can still run everything else here. That node is not a
-given even on a board built for it: stm32 enumerates one VCP unless `boot.py`
-runs `pyb.usb_mode("2xVCP+MSC")`, so a bench board needs that line and a
-reboot before this variable has anything to point at.
-
 Set `MPY_DEBUG_HIL_BOARD` to name the board in the results record; without it
 the record uses the board name the firmware reports for itself.
 
@@ -22,14 +15,11 @@ tree and records the top-repo commit and both submodule pins in its results.
 `MPY_DEBUG_HIL_ALLOW_DIRTY=1` overrides the refusal and lists the uncommitted
 paths in the record instead (see `tree_state.py`).
 
-The board needs one of the two boot scripts in this directory installed as its
-`boot.py` before any of this runs, and a reset after: `board_boot.py` (plus a
-`_secrets.py`) for the WiFi and second-CDC scenarios, which need an interface
-already up and the second CDC already enumerated, or
-`board_boot_single_vcp.py` for the single-UART ones, which need neither.
-Neither arrangement can be reached from here, since both are decided before
-the first `mpremote` connection, and a suite-wide run is always in one of them
-and skips the other.
+The board needs `board_boot.py` from this directory installed as its `boot.py`
+before any of this runs, and a reset after. It brings up WiFi, which the
+network scenarios need and the single-UART ones ignore; a board with no
+network runs the rest. That cannot be reached from here, since it is decided
+before the first `mpremote` connection.
 
 Only one process may hold the board's serial port, and `mpremote debug` needs
 it, so nothing here keeps a transport open across a debug run: `hil_serial` is
@@ -39,7 +29,6 @@ a context manager, not a live connection.
 import contextlib
 import json
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -63,7 +52,6 @@ if str(_SUBMODULE_DIR) not in sys.path:
     sys.path.insert(0, str(_SUBMODULE_DIR))
 
 DEVICE_ENV = "MPY_DEBUG_HIL_DEVICE"
-DAP_DEVICE_ENV = "MPY_DEBUG_HIL_DAP_DEVICE"
 BOARD_ENV = "MPY_DEBUG_HIL_BOARD"
 RESET_ENV = "MPY_DEBUG_HIL_RESET_CMD"
 DAP_LOG_ENV = "MPY_DEBUG_HIL_DAP_LOG"
@@ -126,152 +114,6 @@ def hil_device(request):
     return device
 
 
-@pytest.fixture(scope="session")
-def hil_dap_device():
-    """The board's dedicated DAP interface, or a skip.
-
-    A separate opt-in from `hil_device`: whether a board exposes a second CDC
-    interface is a per-board *and per-boot* fact, so the serial-DAP scenarios
-    skip rather than failing the whole run when there is no second node.
-
-    Both halves have to be true and only the first is a property of the
-    firmware. A build with `MICROPY_HW_USB_CDC_NUM (2)` still enumerates one
-    VCP unless `boot.py` asks for the other (`ports/stm32/main.c`), so the
-    commonest reason for this skip on a board that is perfectly capable is an
-    unconfigured boot, which the skip message says so an operator does not go
-    looking for a firmware problem.
-    """
-    device = os.environ.get(DAP_DEVICE_ENV)
-    if not device:
-        pytest.skip(
-            f"set {DAP_DEVICE_ENV} to the board's second /dev/serial/by-id/... path; "
-            'on stm32 that node exists only after boot.py runs pyb.usb_mode("2xVCP+MSC")'
-        )
-    if "/by-id/" not in device:
-        pytest.fail(f"{DAP_DEVICE_ENV} must be a /dev/serial/by-id/... path, got {device}")
-    if not Path(device).exists():
-        pytest.skip(f"{DAP_DEVICE_ENV}={device} is not present")
-    return device
-
-
-@pytest.fixture(scope="session")
-def hil_single_vcp_board(hil_device, hil_facts):
-    """The board, having been booted with no second interface, or a skip.
-
-    Two arrangements of the same bench board, mutually exclusive by
-    construction: the second-CDC scenarios need it booted with two interfaces
-    and the single-UART ones need it booted with one, which is how every stm32
-    board comes up unless `boot.py` says otherwise (`ports/stm32/main.c`
-    applies `USBD_MODE_CDC_MSC` when boot.py set no mode). A suite-wide run is
-    therefore always in one arrangement and skips the other.
-
-    What the board enumerated decides, not the environment. Two ways a board
-    qualifies and the boot script's probe treats them the same: a port with no
-    `pyb` at all, and a `pyb` whose `usb_mode()` reports a single VCP.
-    `hil_facts` reads both over the REPL, independently of any debug session.
-
-    `MPY_DEBUG_HIL_DAP_DEVICE` set against a board that came up single-VCP is
-    the one real contradiction: the variable names a node the board did not
-    enumerate, so every scenario keyed to it is testing something that is not
-    there.
-    """
-    usb_mode = hil_facts["usb_mode"]
-    if usb_mode and "xVCP" in usb_mode:
-        pytest.skip(
-            f"the board enumerated a second CDC interface (usb_mode {usb_mode!r}); "
-            "this scenario needs a boot with one, which is the stm32 default when "
-            "boot.py calls no pyb.usb_mode()"
-        )
-    if os.environ.get(DAP_DEVICE_ENV):
-        pytest.fail(
-            f"{DAP_DEVICE_ENV} is set, but the board came up with a single VCP "
-            f"(usb_mode {usb_mode!r}); the variable names a node this boot cannot "
-            "have enumerated, so the two-interface scenarios are testing nothing"
-        )
-    return hil_device
-
-
-@pytest.fixture()
-def hil_reset_board(hil_device):
-    """Call to reset the board out from under whatever is talking to it.
-
-    The command comes from the environment because there is no portable way
-    to reset a board: a bench may cut USB power at a hub, drive NRST from a
-    probe, or have nothing at all. `MPY_DEBUG_HIL_RESET_CMD` runs through the
-    shell, so the bench supplies whatever it has, and the scenario skips where
-    it has none.
-
-    Returns once `hil_device` and any `also` path the caller names are back
-    *and* the board has finished booting, so the run leaves the bench as it
-    found it. Their disappearance is not waited for: a reset command may well
-    outlast it, and the scenario's own assertion is what proves the reset was
-    seen.
-    """
-    command = os.environ.get(RESET_ENV)
-    if not command:
-        pytest.skip(f"set {RESET_ENV} to a command that resets the board")
-
-    def _reset(also=(), timeout=60):
-        subprocess.run(command, shell=True, check=True, timeout=timeout)
-        deadline = time.monotonic() + timeout
-        for path in [hil_device, *also]:
-            while not Path(path).exists():
-                assert time.monotonic() < deadline, f"{path} never came back after {command!r}"
-                time.sleep(0.2)
-        _wait_for_repl(hil_device, deadline)
-
-    return _reset
-
-
-def _wait_for_repl(device, deadline):
-    """Block until the board is back at its REPL, so its boot script has run.
-
-    The ports coming back does not mean the board is ready. A boot script
-    that reconfigures USB - which is how a second CDC interface is asked for -
-    enumerates where it makes that call, not when it returns, so the paths
-    reappear while the rest of the script is still running. On this bench the
-    rest is a WiFi association, seconds on a good day and half a minute when
-    the first attempt fails, and a scenario that reset the board and then went
-    looking for it on the network would race that.
-
-    A newline is sent rather than a banner waited for. It sits unread in the
-    interface's rx buffer until the REPL starts, and the prompt echoed back is
-    the signal; waiting passively would miss a board whose boot script returns
-    before this port is open, because a CDC interface discards what it writes
-    while nobody holds it.
-    """
-    import serial
-
-    with serial.Serial(device, BAUDRATE, timeout=0.2) as port:
-        port.write(b"\r\n")
-        seen = b""
-        while b">>>" not in seen:
-            assert time.monotonic() < deadline, (
-                f"{device} never reached a REPL prompt after the reset; read: {seen!r}"
-            )
-            seen += port.read(4096)
-
-
-@pytest.fixture(scope="session")
-def hil_serial(hil_device):
-    """`with hil_serial() as transport:` - a raw REPL, released on exit."""
-
-    @contextlib.contextmanager
-    def _open(soft_reset=True):
-        from mpremote.transport_serial import SerialTransport
-
-        transport = SerialTransport(hil_device, baudrate=BAUDRATE)
-        transport.enter_raw_repl(soft_reset=soft_reset)
-        try:
-            yield transport
-        finally:
-            with contextlib.suppress(Exception):
-                transport.exit_raw_repl()
-            transport.close()
-
-    return _open
-
-
 def _device_root(transport):
     """The directory an importable module belongs in on this board.
 
@@ -306,20 +148,11 @@ def hil_facts(hil_device, hil_serial):
         transport.fs_writefile(debuggee, TARGET_SRC.read_bytes())
 
         transport.exec("import os, sys, debugpy")
-        # The USB mode is a boot-time choice; `second_cdc` is the build's
-        # maximum, and the two can disagree - a board can be built for two CDC
-        # interfaces and booted with one. Recording both makes a run
-        # reproducible from the record alone, and the second is also the
-        # independent probe `test_hil_handshake_caps_match_a_live_probe`
-        # compares the launcher's handshake against, so it is written out here
-        # in full rather than borrowed from that handshake. Ports without
-        # `pyb` have nothing to say to either.
+        # The USB mode is a boot-time choice, recorded so a run is
+        # reproducible from the record alone. Ports without `pyb` have
+        # nothing to say about it.
         transport.exec(
             "try:\n import pyb\n _usb_mode = pyb.usb_mode()\nexcept Exception:\n _usb_mode = None\n"
-        )
-        transport.exec(
-            "try:\n import pyb\n pyb.USB_VCP(1)\n _second_cdc = True\n"
-            "except Exception:\n _second_cdc = False\n"
         )
         return {
             "device": hil_device,
@@ -331,10 +164,7 @@ def hil_facts(hil_device, hil_serial):
             # here identifies what produced these results.
             "firmware": transport.eval("os.uname().version"),
             "usb_mode": transport.eval("_usb_mode"),
-            "capabilities": dict(
-                transport.eval("debugpy.get_capabilities()"),
-                second_cdc=transport.eval("_second_cdc"),
-            ),
+            "capabilities": transport.eval("debugpy.get_capabilities()"),
             "debuggee": debuggee,
         }
 
@@ -352,7 +182,7 @@ class DeviceOutput:
     Where that arrives depends on whether the run detaches. A plain network
     run returns once it has reported the endpoint, leaving the board running
     the target with nobody holding its port, so this opens the port itself. A
-    run that stays attached - `--dap-log`, or a `dap_device` target - keeps
+    run that stays attached - `--dap-log`, or `--dap-repl` - keeps
     the port and drains it, echoing the board's output to its own stdout
     (`_pump_console` in mpremote's commands.py); opening the port as well
     would put two readers on one tty, each taking an arbitrary share of the
@@ -499,82 +329,6 @@ def hil_debug_session(hil_debug_runner):
     return hil_debug_runner()
 
 
-@pytest.fixture()
-def hil_serial_dap_runner(hil_device, hil_dap_device, hil_facts, tmp_path):
-    """Call to start a `mpremote debug <named target>` run, DAP on the 2nd CDC.
-
-    The two device paths reach the command through an `mpdebug.toml` because
-    that is the only way to configure a `dap_device`; it is written to a
-    fresh directory per test and the command is run from there, so the file
-    the run reads is built from the environment and nothing about the bench
-    is committed. `PYTHONPATH` carries the mpremote under test, which the
-    other runs get from their working directory instead.
-
-    Unlike the network runs, these do not detach: mpremote *is* the DAP
-    endpoint here, so the process has to outlive the handshake and is only
-    reaped at the end of the test.
-
-    A second call is what a user does after a session ends badly, so nothing
-    is reset between runs beyond what the command does for itself. The
-    board's two ports must be free before it can start, which for a run this
-    fixture is still holding means the test has to have ended it.
-    """
-    (tmp_path / "mpdebug.toml").write_text(
-        "[target.hil]\n"
-        'kind = "serial"\n'
-        f'device = "{hil_device}"\n'
-        f'dap_device = "{hil_dap_device}"\n'
-        f'program = "{TARGET_MODULE}:main"\n'
-    )
-    env = os.environ.copy()
-    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(_SUBMODULE_DIR), env.get("PYTHONPATH")]))
-    procs = []
-    outputs = []
-
-    def _run(timeout=60):
-        proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
-        procs.append(proc)
-        lines, matched = _read_until(proc, "MPDBG-READY ", timeout=timeout, at_line_start=True)
-        if matched is None:
-            pytest.fail(f"never saw MPDBG-READY; output:\n{''.join(lines)}")
-        payload = json.loads(matched[matched.index("{") :])
-        payload["command_output"] = "".join(lines)
-        payload["process"] = proc
-        # This path never detaches, so mpremote holds the board's console for
-        # the whole session and echoes it here. Nothing in these scenarios
-        # reads the board's output, but the pipe still has to be emptied: see
-        # DeviceOutput.
-        payload["device"] = DeviceOutput(stream=proc.stdout)
-        outputs.append(payload["device"])
-        return payload
-
-    try:
-        yield _run
-    finally:
-        # Console readers first: each holds the command's stdout pipe, and a
-        # terminate() that leaves one reading gets an EOF it treats as a
-        # device problem rather than as teardown.
-        for output in outputs:
-            output.close()
-        # A finished client session ends the bridge and the command with it,
-        # so a live process here means the test left one open; either way the
-        # board's ports must be free before the next test spawns a run.
-        for proc in procs:
-            with contextlib.suppress(Exception):
-                proc.terminate()
-            try:
-                proc.wait(timeout=15)
-            except Exception:
-                proc.kill()
-                proc.wait(timeout=5)
-
-
-@pytest.fixture()
-def hil_serial_dap_session(hil_serial_dap_runner):
-    """One serial-DAP run, for the tests that only need one."""
-    return hil_serial_dap_runner()
-
-
 # --- results record -------------------------------------------------------
 #
 # STORY-6.4 asks every run to leave a dated record behind. It is written from
@@ -636,35 +390,13 @@ def pytest_sessionfinish(session):
     # which the run itself has already changed.
     tree = getattr(session, "_hil_tree", None) or _tree_state(_TOP_DIR)
     board = str(facts.get("board", "unknown-board")).replace("/", "_")
-    # A record names a run, and a run is a bench arrangement as much as a date
-    # and a board. The serial-DAP scenarios need a board booted with two CDC
-    # interfaces and STORY-6.1's single-CDC scenario needs the same board
-    # booted with one, so both can be run on the same day and neither may
-    # overwrite the other - a partial record silently replacing a fuller one
-    # is worse than no record at all. Named by what the arrangement lacks, so
-    # a two-interface run keeps the name every existing record was written
-    # under.
-    dap_device = os.environ.get(DAP_DEVICE_ENV)
-    arrangement = "" if dap_device else "_no-dap-device"
-    path = _TOP_DIR / "planning" / "{}_hil_{}{}.md".format(time.strftime("%Y%m%d"), board, arrangement)
+    # One bench arrangement now, so a record is named by its date and board
+    # alone. It was previously also named by whether a second CDC interface
+    # was supplied, because the serial-DAP scenarios and the single-CDC one
+    # needed opposite boots of the same board and neither could be allowed to
+    # overwrite the other's record.
+    path = _TOP_DIR / "planning" / "{}_hil_{}.md".format(time.strftime("%Y%m%d"), board)
     capabilities = facts.get("capabilities")
-    if dap_device:
-        channel_note = [
-            "The serial-DAP scenarios below assert it is `True` in the",
-            "handshake of the stream session they start.",
-        ]
-    else:
-        channel_note = [
-            "No run in this arrangement takes that channel: the scenarios that",
-            "would were skipped for want of a second interface, which is what",
-            "this arrangement is for.",
-        ]
-        if isinstance(capabilities, dict) and capabilities.get("second_cdc"):
-            channel_note += [
-                "`second_cdc` being `True` beside a single-VCP USB mode is not a",
-                "contradiction: it reports what the firmware can construct, so this",
-                "is a board built for two interfaces and booted with one.",
-            ]
     lines = [
         f"# Hardware-in-loop run: {board}",
         "",
@@ -674,17 +406,16 @@ def pytest_sessionfinish(session):
         f"- Date: {time.strftime('%Y-%m-%d')}",
         *_tree_record_lines(tree),
         f"- Device: `{facts.get('device', 'unknown')}`",
-        f"- Dedicated DAP interface: {f'`{dap_device}`' if dap_device else 'not supplied'}",
         f"- Machine: {facts.get('machine', 'unknown')}",
         f"- Firmware: {facts.get('firmware', 'unknown')}",
         f"- USB mode: {facts.get('usb_mode') or 'n/a'}",
         f"- Debuggee on device: `{facts.get('debuggee', 'unknown')}`",
         f"- Probed capabilities: `{capabilities if capabilities is not None else 'unknown'}`",
         "",
-        "`serial_dap` is `False` above because these capabilities come from a plain",
+        "`repl_dap` is `False` above because these capabilities come from a plain",
         "REPL probe: the key reports which channel a session took, not what the",
-        "firmware can do.",
-        *channel_note,
+        "firmware can do. A scenario that takes it asserts it is `True` in the",
+        "handshake of the session it starts.",
         "",
         "| scenario | result |",
         "| --- | --- |",
