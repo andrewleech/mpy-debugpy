@@ -203,8 +203,9 @@ def test_hil_repl_dap_takes_the_stream_it_was_launched_over(hil_repl_dap_session
     assert endpoints == ["serial:0"], session["command_output"]
 
     assert session["caps"]["repl_dap"] is True, session["caps"]
-    assert session["caps"]["serial_dap"] is True, session["caps"]
 
+    # The board really has no second interface to have taken instead: not
+    # enumerated, and not built either since the second-CDC path was removed.
     usb_mode = hil_facts["usb_mode"]
     assert not (usb_mode and "xVCP" in usb_mode), (
         f"the board enumerated a second interface (usb_mode {usb_mode!r}), so this "
