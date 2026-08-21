@@ -332,6 +332,17 @@ def _tracing_survived_unwind():
 
 
 def _run():
+    # Before `import debugpy`: a firmware built without MICROPY_PY_SYS_SETTRACE
+    # cannot be debugged at all, and debugpy's own import fails on it with a
+    # message about its internals rather than about the firmware. Checking
+    # first is what makes this message reachable.
+    if not hasattr(sys, "settrace"):
+        print(
+            "sys.settrace is not available. You need a firmware compiled with "
+            "MICROPY_PY_SYS_SETTRACE."
+        )
+        return
+
     import debugpy
 
     target_module, target_method, port, dap_stream, loop = _parse_args()

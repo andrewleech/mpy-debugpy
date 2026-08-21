@@ -94,7 +94,7 @@ def hil_repl_dap_runner(hil_device, hil_facts, tmp_path):
     runs = []
 
     def _run(timeout=60):
-        proc = _spawn_debug(["debug", "hil"], env=env, cwd=tmp_path)
+        proc = _spawn_debug(["debug", "-t", "hil"], env=env, cwd=tmp_path)
         lines, matched = _read_until(proc, "MPDBG-READY ", timeout=timeout, at_line_start=True)
         if matched is None:
             proc.kill()

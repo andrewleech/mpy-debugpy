@@ -321,7 +321,7 @@ def test_cli_resolves_named_unix_target_as_not_supported_yet(tmp_path):
     # past kind dispatch and into binary resolution, which fails here because
     # the environment names no built binary.
     env = {k: v for k, v in os.environ.items() if k != "MPY_DEBUG_FIRMWARE"}
-    code, stdout, stderr = _mpremote_cmd(["debug", "sim"], cwd=tmp_path, env=env)
+    code, stdout, stderr = _mpremote_cmd(["debug", "-t", "sim"], cwd=tmp_path, env=env)
     assert code != 0
     assert "no unix debug binary found" in stderr, stderr
     assert "Traceback" not in stderr
@@ -330,7 +330,7 @@ def test_cli_resolves_named_unix_target_as_not_supported_yet(tmp_path):
 def test_cli_unresolved_raw_connect_string_unaffected_by_absent_config(tmp_path):
     """Without an mpdebug.toml, a raw connect string behaves exactly as in s5.1."""
     env = {k: v for k, v in os.environ.items() if k != "MPY_DEBUG_FIRMWARE"}
-    code, stdout, stderr = _mpremote_cmd(["debug", "unix"], cwd=tmp_path, env=env)
+    code, stdout, stderr = _mpremote_cmd(["debug", "-t", "unix"], cwd=tmp_path, env=env)
     assert code != 0
     assert "no unix debug binary found" in stderr, stderr
     assert "Traceback" not in stderr

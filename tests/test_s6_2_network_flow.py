@@ -70,7 +70,7 @@ def _run_against_pty(port, env):
     try:
         time.sleep(0.3)  # let the interpreter reach its REPL before talking to it
         proc = _spawn_debug(
-            _RESUME + ["debug", "--port", str(port), slave_path, "target:main"], env=env
+            _RESUME + ["debug", "--port", str(port), "-t", slave_path, "target:main"], env=env
         )
         lines, matched = _read_until(proc, "MPDBG-READY ", timeout=20, at_line_start=True)
         if matched is None:

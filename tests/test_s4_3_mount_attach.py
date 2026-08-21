@@ -1076,6 +1076,7 @@ class _MountedPtySession:
                 "15",
                 "--source",
                 str(self.source_dir),
+                "-t",
                 self.device.path,
                 "app:main",
             ],

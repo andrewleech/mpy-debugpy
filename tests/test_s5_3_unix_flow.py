@@ -155,7 +155,7 @@ def test_unix_debug_happy_path_reports_endpoint(free_tcp_port):
     env["MPY_DEBUG_FIRMWARE"] = str(_MICROPYTHON)
     env["MICROPYPATH"] = _MICROPYPATH
     before = _debug_child_pids()
-    proc = _spawn_debug(["debug", "--port", str(free_tcp_port), "unix", "target:main"], env=env)
+    proc = _spawn_debug(["debug", "--port", str(free_tcp_port), "-t", "unix", "target:main"], env=env)
     lines, matched = _read_until(proc, "debug server listening on")
     if matched is None:
         proc.kill()
@@ -193,7 +193,7 @@ def test_unix_debug_port_from_handshake(tmp_path, free_tcp_port):
     env = os.environ.copy()
     env["MPY_DEBUG_FIRMWARE"] = str(stub_path)
     before = _debug_child_pids()
-    proc = _spawn_debug(["debug", "--port", str(requested_port), "unix", "target:main"], env=env)
+    proc = _spawn_debug(["debug", "--port", str(requested_port), "-t", "unix", "target:main"], env=env)
     lines, matched = _read_until(proc, "MPDBG-READY ", at_line_start=True)
     if matched is None:
         proc.kill()
@@ -219,7 +219,7 @@ def test_unix_debug_missing_binary_hint(free_tcp_port):
     env = os.environ.copy()
     env.pop("MPY_DEBUG_FIRMWARE", None)
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "unix", "--port", str(free_tcp_port), "target:main"],
+        ["debug", "-t", "unix", "--port", str(free_tcp_port), "target:main"],
         env=env
     )
     assert code != 0, "should have exited with error"
@@ -244,7 +244,7 @@ def test_unix_debug_timeout_names_expected_line(free_tcp_port, tmp_path):
     env = os.environ.copy()
     env["MPY_DEBUG_FIRMWARE"] = str(stub_path)
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "--port", str(free_tcp_port), "--timeout", "1", "unix", "target:main"],
+        ["debug", "--port", str(free_tcp_port), "--timeout", "1", "-t", "unix", "target:main"],
         timeout=20,
         env=env
     )
@@ -268,7 +268,7 @@ def test_unix_debug_missing_binary_spawns_nothing(tmp_path):
     env["PYTHONPATH"] = str(_SUBMODULE_DIR)
     before = _debug_child_pids()
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "unix", "target:main"], timeout=30, env=env, cwd=tmp_path
+        ["debug", "-t", "unix", "target:main"], timeout=30, env=env, cwd=tmp_path
     )
     assert code != 0, stdout
     assert "no unix debug binary found" in stderr, stderr
@@ -291,7 +291,7 @@ def test_unix_debug_subprocess_reaped_on_immediate_exit(free_tcp_port, tmp_path)
 
     before = _debug_child_pids()
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "--port", str(free_tcp_port), "--timeout", "2", "unix", "target:main"],
+        ["debug", "--port", str(free_tcp_port), "--timeout", "2", "-t", "unix", "target:main"],
         timeout=30,
         env=env
     )
@@ -316,7 +316,7 @@ def test_unix_debug_subprocess_reaped_on_no_output(free_tcp_port, tmp_path):
     before = _debug_child_pids()
     start = time.monotonic()
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "--port", str(free_tcp_port), "--timeout", "2", "unix", "target:main"],
+        ["debug", "--port", str(free_tcp_port), "--timeout", "2", "-t", "unix", "target:main"],
         timeout=30,
         env=env
     )
@@ -350,7 +350,7 @@ def test_unix_debug_rejects_duplicate_mpdbg_ready(tmp_path, free_tcp_port):
     env["MPY_DEBUG_FIRMWARE"] = str(stub_path)
     before = _debug_child_pids()
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "--port", str(free_tcp_port), "unix", "target:main"],
+        ["debug", "--port", str(free_tcp_port), "-t", "unix", "target:main"],
         timeout=20,
         env=env,
     )
@@ -391,7 +391,7 @@ def test_unix_debug_rejects_missing_required_cap(tmp_path, free_tcp_port):
     env["PYTHONPATH"] = str(_SUBMODULE_DIR)  # cwd=tmp_path; see _mpremote_cmd note above
     before = _debug_child_pids()
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "needs_set_local", "--port", str(free_tcp_port)],
+        ["debug", "-t", "needs_set_local", "--port", str(free_tcp_port)],
         env=env,
         cwd=tmp_path,
         timeout=20,
@@ -413,7 +413,7 @@ def test_unix_flow_client_can_connect_to_reported_endpoint(free_tcp_port):
     env["MPY_DEBUG_FIRMWARE"] = str(_MICROPYTHON)
     env["MICROPYPATH"] = _MICROPYPATH
     before = _debug_child_pids()
-    proc = _spawn_debug(["debug", "--port", str(free_tcp_port), "unix", "target:main"], env=env)
+    proc = _spawn_debug(["debug", "--port", str(free_tcp_port), "-t", "unix", "target:main"], env=env)
     lines, matched = _read_until(proc, "debug server listening on")
     if matched is None:
         proc.kill()

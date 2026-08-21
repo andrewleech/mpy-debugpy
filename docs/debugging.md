@@ -7,11 +7,15 @@ connected board.
 One command does the orchestration:
 
 ```bash
-mpremote debug [options] [target] [module[:method]]
+mpremote debug [options] [module[:method]]
 ```
 
 It connects to the target, starts the on-device debug server, and prints the
 endpoint that server is listening on. You never type a host or a port.
+
+The device comes from `--target`/`-t`, or from a `connect` earlier in the same
+chain (`mpremote connect <device> debug app:main`), or from the sole target in
+an `mpdebug.toml`.
 
 ## Quick start (unix, no hardware)
 
@@ -28,7 +32,7 @@ Then start a session against the sample debuggee in `src/`:
 export MPY_DEBUG_FIRMWARE="$PWD/micropython/ports/unix/build-standard/micropython"
 export MICROPYPATH="$PWD/src:$PWD/micropython-lib/python-ecosys/debugpy"
 export PYTHONPATH="$PWD/micropython/tools/mpremote"
-python3 -m mpremote debug unix target:main
+python3 -m mpremote debug -t unix target:main
 ```
 
 After the launcher's own banner, the last three lines are the ones that matter,
@@ -93,7 +97,7 @@ these. With one target defined, the name can be omitted entirely:
 `mpremote debug` uses it. With several and no name given, it lists them.
 
 A name that is not in the file but looks like a connect string is still handled
-as one, so `mpremote debug /dev/serial/by-id/...` keeps working in a project
+as one, so `mpremote debug -t /dev/serial/by-id/...` keeps working in a project
 that has an `mpdebug.toml`.
 
 Reference tty devices by `/dev/serial/by-id/<name>`. `/dev/ttyACM*` numbering
@@ -198,7 +202,7 @@ question: is the board on a network?**
 ### unix
 
 ```bash
-mpremote debug unix mymodule:main
+mpremote debug -t unix mymodule:main
 ```
 
 mpremote runs a debug-enabled unix binary as its own child process, so it owns
@@ -218,7 +222,7 @@ from the host filesystem, so there is nothing to mount.
 ### network
 
 ```bash
-mpremote debug pico app:main
+mpremote debug -t pico app:main
 ```
 
 The default device path. The board binds a TCP port on its own network
@@ -285,7 +289,7 @@ legacy stack and cannot take NCM without moving off it.
 ### one UART
 
 ```bash
-mpremote debug --dap-repl pybd app:main
+mpremote debug --dap-repl -t pybd app:main
 ```
 
 For a board with one UART and no network, which is every board as it ships. DAP
@@ -338,7 +342,7 @@ device's own filesystem for these sessions.
 ### Debug the directory you are editing
 
 ```bash
-mpremote debug --source ./app pico app:main
+mpremote debug --source ./app -t pico app:main
 ```
 
 The host directory is mounted at the device's `/remote` before the program runs,
@@ -355,7 +359,7 @@ immediately rather than after putting the board into the raw REPL for nothing.
 ### Re-run edited code without restarting anything
 
 ```bash
-mpremote debug --source ./app --loop pico app:main
+mpremote debug --source ./app --loop -t pico app:main
 ```
 
 `--loop` keeps one process, one DAP session, and one handshake across many runs.
@@ -533,7 +537,7 @@ firmware has no `sys.settrace`, or `debugpy` is not importable on the device. To
 see the whole conversation:
 
 ```bash
-mpremote debug --dap-log --dap-log-file /tmp/dap.jsonl pico app:main
+mpremote debug --dap-log --dap-log-file /tmp/dap.jsonl -t pico app:main
 ```
 
 `--dap-log` inserts a local proxy between the client and the device and writes
@@ -554,6 +558,6 @@ console this process holds open and never empties stops the board
 copy on the device rather than your source.
 
 **Options appear to be ignored** - they have to come before the positional
-arguments: `mpremote debug --loop pico app:main`, never `mpremote debug pico
+arguments: `mpremote debug --loop -t pico app:main`, never `mpremote debug -t pico
 app:main --loop`. If a chained mpremote command follows, put `+` in front of it
 so it is not read as the program name.

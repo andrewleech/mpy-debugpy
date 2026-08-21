@@ -69,7 +69,7 @@ def _mount_session(device, source_dir):
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(_SUBMODULE_DIR), env.get("PYTHONPATH")]))
     proc = _spawn_debug(
-        ["debug", "--source", str(source_dir), device, f"{HOST_ONLY_MODULE}:main"],
+        ["debug", "--source", str(source_dir), "-t", device, f"{HOST_ONLY_MODULE}:main"],
         env=env,
         cwd=source_dir,
     )

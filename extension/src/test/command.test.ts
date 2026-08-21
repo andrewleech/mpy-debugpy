@@ -40,22 +40,22 @@ test("buildDebugArgs with no options", () => {
   assert.deepEqual(buildDebugArgs({}), ["debug"]);
 });
 
-test("buildDebugArgs puts options before target and program", () => {
+test("buildDebugArgs puts every option before the program", () => {
   assert.deepEqual(
     buildDebugArgs({ port: 5678, timeout: 30, target: "pico", program: "app:main" }),
-    ["debug", "--port", "5678", "--timeout", "30", "pico", "app:main"]
+    ["debug", "--target", "pico", "--port", "5678", "--timeout", "30", "app:main"]
   );
 });
 
 test("buildDebugArgs with --dap-log and --dap-log-file", () => {
   assert.deepEqual(
     buildDebugArgs({ dapLog: true, dapLogFile: "trace.jsonl", target: "unix" }),
-    ["debug", "--dap-log", "--dap-log-file", "trace.jsonl", "unix"]
+    ["debug", "--target", "unix", "--dap-log", "--dap-log-file", "trace.jsonl"]
   );
 });
 
 test("buildDebugArgs with target only, no program", () => {
-  assert.deepEqual(buildDebugArgs({ target: "unix" }), ["debug", "unix"]);
+  assert.deepEqual(buildDebugArgs({ target: "unix" }), ["debug", "--target", "unix"]);
 });
 
 test("buildDebugArgs with --dap-log but no file", () => {
@@ -66,21 +66,24 @@ test("buildDebugArgs rejects dapLogFile without dapLog", () => {
   assert.throws(() => buildDebugArgs({ dapLogFile: "trace.jsonl" }), /dapLog/);
 });
 
-test("buildDebugArgs rejects program without target", () => {
-  assert.throws(() => buildDebugArgs({ program: "app:main" }), /target/);
+// A program with no target is a whole shape now: the device comes from a
+// preceding `connect`, or from mpdebug.toml. It used to be inexpressible,
+// because the target was the first positional and could not be skipped.
+test("buildDebugArgs takes a program with no target", () => {
+  assert.deepEqual(buildDebugArgs({ program: "app:main" }), ["debug", "app:main"]);
 });
 
-test("buildDebugArgs with --source and --loop, still before the positionals", () => {
+test("buildDebugArgs with --source and --loop, still before the program", () => {
   assert.deepEqual(
     buildDebugArgs({ source: "/proj/src", loop: true, target: "pico", program: "app:main" }),
-    ["debug", "--source", "/proj/src", "--loop", "pico", "app:main"]
+    ["debug", "--target", "pico", "--source", "/proj/src", "--loop", "app:main"]
   );
 });
 
 // Absent is not the same as false: omitting them is what lets a target's own
 // `source` in mpdebug.toml keep deciding, so neither may leak into argv.
 test("buildDebugArgs omits --source and --loop when unset or false", () => {
-  assert.deepEqual(buildDebugArgs({ target: "pico", loop: false }), ["debug", "pico"]);
+  assert.deepEqual(buildDebugArgs({ target: "pico", loop: false }), ["debug", "--target", "pico"]);
 });
 
 test("buildDebugArgs rejects an empty source", () => {
@@ -98,7 +101,7 @@ test("runDebugCommand resolves with the handshake and child on success", async (
   const result = await promise;
   assert.equal(result.handshake.port, 5678);
   assert.equal(result.child, child);
-  assert.deepEqual(calls[0], { command: "mpremote", args: ["debug", "unix"], cwd: "/proj", env: undefined });
+  assert.deepEqual(calls[0], { command: "mpremote", args: ["debug", "--target", "unix"], cwd: "/proj", env: undefined });
   assert.equal(child.killed, false); // caller now owns the child's lifetime
 });
 

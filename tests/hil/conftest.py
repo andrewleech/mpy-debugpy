@@ -328,7 +328,7 @@ def hil_debug_runner(request, hil_device, hil_facts, tmp_path):
     def _run():
         if runs:
             runs[-1]["device"].close()
-        args = ["debug", hil_device, f"{TARGET_MODULE}:main"]
+        args = ["debug", "-t", hil_device, f"{TARGET_MODULE}:main"]
         log_path = None
         if dap_log:
             log_path = tmp_path / f"dap-{len(runs)}.jsonl"

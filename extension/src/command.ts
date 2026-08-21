@@ -33,10 +33,10 @@ export interface MpremoteDebugOptions {
 }
 
 /**
- * Builds argv for `mpremote debug`, options strictly before positionals -
- * `mpremote debug [--port N] [--timeout N] [--dap-log] [--dap-log-file F]
- * [--source PATH] [--loop] [target] [program]`. The returned array starts
- * with "debug"; the caller supplies the executable (`mpremote`) itself.
+ * Builds argv for `mpremote debug`, options strictly before the positional -
+ * `mpremote debug [--target T] [--port N] [--timeout N] [--dap-log]
+ * [--dap-log-file F] [--source PATH] [--loop] [program]`. The returned array
+ * starts with "debug"; the caller supplies the executable (`mpremote`) itself.
  */
 export function buildDebugArgs(options: MpremoteDebugOptions): string[] {
   if (options.dapLogFile !== undefined && !options.dapLog) {
@@ -48,13 +48,10 @@ export function buildDebugArgs(options: MpremoteDebugOptions): string[] {
   if (options.source !== undefined && options.source.length === 0) {
     throw new Error("source must not be empty");
   }
-  // mpremote's argparse fills the target/program positionals left to right;
-  // a program with no target can't be expressed on the CLI.
-  if (options.program !== undefined && options.target === undefined) {
-    throw new Error("program requires target: mpremote debug can't skip the target positional");
-  }
-
   const args: string[] = ["debug"];
+  if (options.target !== undefined) {
+    args.push("--target", options.target);
+  }
   if (options.port !== undefined) {
     args.push("--port", String(options.port));
   }
@@ -72,9 +69,6 @@ export function buildDebugArgs(options: MpremoteDebugOptions): string[] {
   }
   if (options.loop) {
     args.push("--loop");
-  }
-  if (options.target !== undefined) {
-    args.push(options.target);
   }
   if (options.program !== undefined) {
     args.push(options.program);

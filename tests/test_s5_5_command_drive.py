@@ -95,7 +95,7 @@ def mpremote_debuggee(free_tcp_port):
     env["MPY_DEBUG_FIRMWARE"] = str(_MICROPYTHON)
     env["MICROPYPATH"] = _MICROPYPATH
 
-    proc = _spawn_debug(["debug", "--port", str(free_tcp_port), "unix", "target:main"], env=env)
+    proc = _spawn_debug(["debug", "--port", str(free_tcp_port), "-t", "unix", "target:main"], env=env)
 
     # Read until we see the handshake
     lines, matched = _read_until(proc, "MPDBG-READY ", at_line_start=True)
@@ -407,7 +407,7 @@ def test_s5_5_mpremote_debug_corrupt_config_surfaces_error(tmp_path):
     env = os.environ.copy()
     env["PYTHONPATH"] = str(_SUBMODULE_DIR)
 
-    proc = _spawn_debug(["debug", "main"], env=env, cwd=tmp_path)
+    proc = _spawn_debug(["debug", "-t", "main"], env=env, cwd=tmp_path)
 
     # Poll for exit while watching for a child spawn in the meantime, scoped
     # to this proc so an unrelated launcher elsewhere never counts.
@@ -538,7 +538,7 @@ def test_s5_5_mpremote_debug_serial_pty_leg(free_tcp_port):
         time.sleep(0.3)  # let the interpreter start its REPL before talking to it
 
         proc = _spawn_debug(
-            _RESUME + ["debug", "--port", str(free_tcp_port), slave_path, "target:main"], env=env
+            _RESUME + ["debug", "--port", str(free_tcp_port), "-t", slave_path, "target:main"], env=env
         )
         lines, matched = _read_until(proc, "debug server listening on", timeout=15)
         if matched is None:
@@ -639,7 +639,7 @@ def test_s5_5_mpremote_debug_qemu_pty_leg(free_tcp_port):
 
         env = os.environ.copy()
         proc = _spawn_debug(
-            _RESUME + ["debug", "--port", str(free_tcp_port), slave_path, "target:main"], env=env
+            _RESUME + ["debug", "--port", str(free_tcp_port), "-t", slave_path, "target:main"], env=env
         )
         lines, matched = _read_until(proc, "debug server listening on", timeout=15)
         if matched is None:

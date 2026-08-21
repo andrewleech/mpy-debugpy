@@ -73,8 +73,8 @@ starts the program, and prints where to attach:
 
 ```bash
 export PYTHONPATH="$PWD/micropython/tools/mpremote"
-python3 -m mpremote debug unix target:main            # unix port
-python3 -m mpremote debug pico app                    # device, DAP over the network
+python3 -m mpremote debug -t unix target:main         # unix port
+python3 -m mpremote debug -t pico app                 # device, DAP over the network
 ```
 
 The `debug` command lives on the mpremote branches composed into

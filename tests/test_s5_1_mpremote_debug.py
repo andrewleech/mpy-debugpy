@@ -127,21 +127,23 @@ def test_debug_help_shows_description():
 
 
 def test_debug_help_documents_option_ordering():
-    """--help states that options must precede target/program.
+    """--help states that options must precede the program argument.
 
     mpremote's command-chaining REMAINDER positional swallows any option
-    given after the positionals as the start of the next command, so users
+    given after the positional as the start of the next command, so users
     need this documented rather than discovering it as a silently dropped
     flag.
     """
     code, stdout, stderr = _mpremote_cmd(["debug", "--help"])
     assert code == 0, f"debug --help failed: {stderr}"
-    assert "come before target/program" in stdout, f"missing option-ordering note in --help; got: {stdout}"
+    assert "come before the program argument" in stdout, (
+        f"missing option-ordering note in --help; got: {stdout}"
+    )
 
 
 def test_malformed_spec_extra_colons():
     """Extra colons in module:method spec are rejected cleanly."""
-    code, stdout, stderr = _mpremote_cmd(["debug", "unix", "a:b:c"])
+    code, stdout, stderr = _mpremote_cmd(["debug", "-t", "unix", "a:b:c"])
     assert code != 0, "should have exited with error"
     assert "invalid program" in stderr, f"expected 'invalid program' error; got: {stderr}"
     assert "expected 'module[:method]'" in stderr, f"expected helpful hint; got: {stderr}"
@@ -150,7 +152,7 @@ def test_malformed_spec_extra_colons():
 
 def test_malformed_spec_empty_method():
     """Empty method (module:) is rejected cleanly."""
-    code, stdout, stderr = _mpremote_cmd(["debug", "unix", "mod:"])
+    code, stdout, stderr = _mpremote_cmd(["debug", "-t", "unix", "mod:"])
     assert code != 0, "should have exited with error"
     assert "invalid program" in stderr, f"expected 'invalid program' error; got: {stderr}"
     assert "expected 'module[:method]'" in stderr, f"expected helpful hint; got: {stderr}"
@@ -159,7 +161,7 @@ def test_malformed_spec_empty_method():
 
 def test_malformed_spec_empty_module():
     """Empty module (:method) is rejected cleanly."""
-    code, stdout, stderr = _mpremote_cmd(["debug", "unix", ":main"])
+    code, stdout, stderr = _mpremote_cmd(["debug", "-t", "unix", ":main"])
     assert code != 0, "should have exited with error"
     assert "invalid program" in stderr, f"expected 'invalid program' error; got: {stderr}"
     assert "expected 'module[:method]'" in stderr, f"expected helpful hint; got: {stderr}"
@@ -176,7 +178,7 @@ def test_unix_target_without_a_binary_reports_a_build_hint():
     env = dict(os.environ)
     env.pop("MPY_DEBUG_FIRMWARE", None)
     result = subprocess.run(
-        [sys.executable, "-m", "mpremote", "debug", "unix"],
+        [sys.executable, "-m", "mpremote", "debug", "-t", "unix"],
         cwd=str(_SUBMODULE_DIR),
         capture_output=True,
         text=True,
@@ -194,7 +196,7 @@ def test_program_spec_validated_before_connect():
     A malformed spec on a non-existent device produces the spec error,
     not a connection error.
     """
-    code, stdout, stderr = _mpremote_cmd(["debug", "/dev/does-not-exist", "invalid:spec:extra"])
+    code, stdout, stderr = _mpremote_cmd(["debug", "-t", "/dev/does-not-exist", "invalid:spec:extra"])
     assert code != 0, "should have exited with error"
     assert "invalid program" in stderr, (
         f"program spec should be validated before connect; expected 'invalid program' but got: {stderr}"
@@ -209,7 +211,7 @@ def test_port_zero_rejected_before_connect():
     host means the error names the real reason instead of surfacing as
     whatever `listen(port=0)` raises on the device.
     """
-    code, stdout, stderr = _mpremote_cmd(["debug", "--port", "0", "/dev/does-not-exist", "mod:main"])
+    code, stdout, stderr = _mpremote_cmd(["debug", "--port", "0", "-t", "/dev/does-not-exist", "mod:main"])
     assert code != 0, "should have exited with error"
     assert "--port 0" in stderr, f"expected clear error; got: {stderr}"
     assert "Traceback" not in stderr, "should not have uncaught exception traceback"
@@ -218,7 +220,7 @@ def test_port_zero_rejected_before_connect():
 def test_dap_log_file_requires_dap_log_rejected_before_connect():
     """--dap-log-file without --dap-log is rejected locally, before any connection attempt."""
     code, stdout, stderr = _mpremote_cmd(
-        ["debug", "--dap-log-file", "/tmp/x", "/dev/does-not-exist", "mod:main"]
+        ["debug", "--dap-log-file", "/tmp/x", "-t", "/dev/does-not-exist", "mod:main"]
     )
     assert code != 0, "should have exited with error"
     assert "--dap-log-file requires --dap-log" in stderr, f"expected clear error; got: {stderr}"
@@ -532,7 +534,7 @@ def test_debug_reports_missing_debugpy_on_device(free_tcp_port):
     device = PtyDevice(_MICROPYTHON, "").start()
     try:
         code, stdout, stderr = _mpremote_cmd(
-            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "5", device.path, "mod:main"]
+            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "5", "-t", device.path, "mod:main"]
         )
     finally:
         device.close()
@@ -556,6 +558,63 @@ class _FakeState:
 
     def run_repl_on_completion(self):
         return not self._did_action
+
+
+def test_do_debug_uses_a_preceding_connect_when_no_target_is_given(monkeypatch, capsys):
+    """`mpremote connect <device> debug app:main` debugs the connected device.
+
+    The target is an option, so the first bare word after `debug` is the
+    program. With no --target, a transport a preceding `connect` already put
+    on `state` is the device - which is what the chained form means, and what
+    it could not express while the target was the first positional.
+    """
+    connects = []
+    monkeypatch.setattr(
+        commands, "do_connect", lambda state, device=None: connects.append(device)
+    )
+    handshake = {"host": "192.0.2.10", "port": 5678, "caps": {}}
+    transport = _FakeTransport(
+        [("MPDBG-READY " + json.dumps(handshake) + "\n").encode()],
+        device_name="/dev/fake-tty",
+    )
+    state = _FakeState(transport)
+
+    commands.do_debug(state, debug_args(program="app:main"))
+
+    out = capsys.readouterr().out
+    assert "debug server listening on 192.0.2.10:5678" in out
+    # Already on the right device, so nothing reconnects it.
+    assert connects == [], f"should not have reconnected; got {connects}"
+    assert len(transport.exec_calls) == 1
+
+
+def test_do_debug_without_a_target_or_a_connection_says_so(monkeypatch, tmp_path):
+    """No --target, no preceding connect and no mpdebug.toml is an error, not a guess."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(commands, "do_connect", lambda state, device=None: None)
+    state = _FakeState(None)
+
+    with pytest.raises(commands.CommandError) as er:
+        commands.do_debug(state, debug_args(program="app:main"))
+    assert "no target given" in str(er.value)
+    assert "connect first" in str(er.value)
+
+
+def test_debug_target_is_an_option_not_a_positional():
+    """argv-level: --target/-t names the device, the lone positional is the program.
+
+    The namespace-level tests above build args through the parser, so they
+    keep passing whatever shape the CLI has. This pins the shape itself.
+    """
+    from mpremote.main import argparse_debug
+
+    parsed = argparse_debug().parse_args(["-t", "/dev/ttyACM0", "app:main"])
+    assert parsed.target == "/dev/ttyACM0"
+    assert parsed.program == "app:main"
+
+    lone = argparse_debug().parse_args(["app:main"])
+    assert lone.target is None
+    assert lone.program == "app:main"
 
 
 def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
@@ -635,7 +694,7 @@ def test_port_before_positionals_takes_effect(free_tcp_port):
     try:
         start = time.monotonic()
         code, stdout, stderr = _mpremote_cmd(
-            ["resume", "debug", "--port", str(free_tcp_port), device.path, "mod:main"]
+            ["resume", "debug", "--port", str(free_tcp_port), "-t", device.path, "mod:main"]
         )
         elapsed = time.monotonic() - start
     finally:
@@ -667,7 +726,7 @@ def test_debug_with_default_port_reads_handshake():
     """
     device = PtyDevice(_MICROPYTHON, _MICROPYPATH).start()
     try:
-        code, stdout, stderr = _mpremote_cmd(["resume", "debug", device.path, "mod:main"])
+        code, stdout, stderr = _mpremote_cmd(["resume", "debug", "-t", device.path, "mod:main"])
     finally:
         device.close()
 
@@ -698,7 +757,7 @@ def test_timeout_before_positionals_takes_effect(tmp_path, free_tcp_port):
     try:
         start = time.monotonic()
         code, stdout, stderr = _mpremote_cmd(
-            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "2", device.path, "mod:main"]
+            ["resume", "debug", "--port", str(free_tcp_port), "--timeout", "2", "-t", device.path, "mod:main"]
         )
         elapsed = time.monotonic() - start
     finally:

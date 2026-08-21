@@ -363,6 +363,7 @@ def mpremote_debuggee_with_dap_log(free_tcp_port, tmp_path):
         str(free_tcp_port),
         "--dap-log",
         f"--dap-log-file={log_file}",
+        "-t",
         "unix",
         "target:main",
     ]
@@ -426,7 +427,7 @@ def test_s6_3_dap_log_default_path_used(free_tcp_port, tmp_path):
         [str(_SUBMODULE_DIR)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
     )
 
-    args = ["debug", "--port", str(free_tcp_port), "--dap-log", "unix", "target:main"]
+    args = ["debug", "--port", str(free_tcp_port), "--dap-log", "-t", "unix", "target:main"]
     proc = _spawn_debug(args, env=env, cwd=tmp_path)
 
     lines, matched = _read_until(proc, "MPDBG-READY ", timeout=30, at_line_start=True)
@@ -636,7 +637,7 @@ def test_s6_3_dap_log_no_hardcoded_ports(tmp_path):
         log_file = tmp_path / f"dap_{i}.jsonl"
         # --dap-log/--dap-log-file must come BEFORE target/program per the
         # argument parser epilog.
-        args = ["debug", "--dap-log", f"--dap-log-file={log_file}", "unix", "target:main"]
+        args = ["debug", "--dap-log", f"--dap-log-file={log_file}", "-t", "unix", "target:main"]
         proc = _spawn_debug(args, env=env)
 
         lines, matched = _read_until(proc, "MPDBG-READY ", timeout=30, at_line_start=True)
@@ -699,6 +700,7 @@ def test_s6_3_dap_log_with_flag_behavioural_test_still_works(pytestconfig, free_
             str(free_tcp_port),
             "--dap-log",
             f"--dap-log-file={log_file}",
+            "-t",
             "unix",
             "target:main",
         ]
@@ -806,6 +808,7 @@ def test_s6_3_dap_log_proxy_reaped_on_exit(free_tcp_port, tmp_path):
         str(free_tcp_port),
         "--dap-log",
         f"--dap-log-file={log_file}",
+        "-t",
         "unix",
         "target:main",
     ]
@@ -911,6 +914,7 @@ def test_s6_3_dap_log_over_pty_network_transport(free_tcp_port, tmp_path):
             str(free_tcp_port),
             "--dap-log",
             f"--dap-log-file={log_file}",
+            "-t",
             slave_path,
             "mod:main",
         ]

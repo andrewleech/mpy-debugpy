@@ -200,6 +200,7 @@ class _LoopSession:
                 "--source",
                 str(self.source_dir),
                 "--loop",
+                "-t",
                 self.device.path,
                 "app:main",
             ],
