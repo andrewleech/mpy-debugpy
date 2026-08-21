@@ -1,7 +1,26 @@
-# fmt: off
-# This file is vendored byte-for-byte between repos with different ruff
-# line-length settings; `ruff format` must leave it alone everywhere so a
-# routine reformat in either repo can't silently break the copies apart.
+# This file is part of the MicroPython project, http://micropython.org/
+#
+# The MIT License (MIT)
+#
+# Copyright (c) 2026 Andrew Leech
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 """Single parameterised boot script for MicroPython debugpy sessions.
 
 Usage: mpy_launch_debugpy.py [target_module] [target_method] [port] [dap_stream] [loop]
@@ -36,7 +55,7 @@ waiting on the stream and nothing listening on a port. `caps["repl_dap"]`
 reports whether this run split the REPL stream - a property of the session
 rather than of the build, and the channel a board with one UART and no
 network has. It is the only one that changes what the REPL itself can do
-while a session is live (see `docs/debugging.md`).
+while a session is live (see the `debug` section of the mpremote docs).
 
 `loop`, when the literal `"loop"`, keeps the process and the DAP session alive
 across re-runs of the target: the DAP `restart` request is advertised and
@@ -51,38 +70,52 @@ That line goes to the client's debug console as well as to stdout, because a
 mounted serial session's host never sees anything the device prints.
 """
 
+import gc
 import json
 import sys
-
-_banner = r"""
- _____  _______ ______ _______ _______ ______ ___ ___
-|     \|    ___|   __ \   |   |     __|   __ \   |   |
-|  --  |    ___|   __ <   |   |    |  |    __/\     /
-|_____/|_______|______/_______|_______|___|    |___|
-"""
 
 
 def _detect_host():
     """Return the address debugpy should bind to on this runtime.
 
-    Boards with a `network` module report their own DHCP/WiFi address so
-    tooling never has to guess or hardcode a device IP. The unix port has no
-    `network` module, and a board with `network` but no configured/connected
-    interface has no address to report either - both cases, and any error
-    while probing, fall back to binding all interfaces so a network probe
-    failure never aborts the launch.
+    A board that has an address of its own reports it, so tooling never has
+    to guess or hardcode a device IP. Interfaces are tried cheapest first: a
+    wired `LAN` is up without anything having to associate, while
+    constructing a `WLAN` starts the wifi driver on some ports. Only an
+    interface that is already active is asked, since bringing one up is the
+    caller's business and not a side effect of launching a debug session.
+
+    Everything else - the unix port with no `network` module, a board whose
+    interfaces are all down, any error while probing - falls back to binding
+    all interfaces, so a probe failure never aborts the launch. The host
+    side treats that as "no address" rather than something to connect to.
     """
     try:
         import network
-
-        wlan = network.WLAN(network.STA_IF)
-        addr = wlan.ipconfig("addr4")[0]
-    except Exception:
+    except ImportError:
         return "0.0.0.0"
 
-    if not addr or addr == "0.0.0.0":
-        return "0.0.0.0"
-    return addr
+    makers = []
+    if hasattr(network, "LAN"):
+        makers.append(network.LAN)
+    if hasattr(network, "WLAN"):
+        makers.append(lambda: network.WLAN(network.STA_IF))
+
+    for make in makers:
+        try:
+            nic = make()
+            if not nic.active():
+                continue
+            try:
+                addr = nic.ipconfig("addr4")[0]
+            except (AttributeError, ValueError, OSError):
+                # Firmware predating ipconfig().
+                addr = nic.ifconfig()[0]
+        except Exception:
+            continue
+        if addr and addr != "0.0.0.0":
+            return addr
+    return "0.0.0.0"
 
 
 # The dupterm slot the REPL occupies on the ports that put it in one. stm32
@@ -114,7 +147,7 @@ def _repl_dap_stream():
     anything in the slot detaches the interface from the REPL
     (`usb_vcp_attach_to_repl(vcp, false)`), which stops the interrupt
     character being scanned, so Ctrl-C reaches the target as data instead of
-    raising `KeyboardInterrupt`. `docs/debugging.md` states that trade-off.
+    raising `KeyboardInterrupt`. The mpremote docs state that trade-off.
 
     Which is why the stream must be able to say when the host has let go. On
     every other channel a session that waits forever costs nothing the user
@@ -139,8 +172,17 @@ def _repl_dap_stream():
     if getattr(previous, "isconnected", None) is None:
         os.dupterm(previous, _REPL_DUPTERM_SLOT)
         raise OSError("the REPL stream cannot report the host letting go of it")
-    mux.attach(previous)
+    # Registered before it is attached: from the moment the wrapper is in the
+    # slot, the release path has to know about it. A failure in between would
+    # otherwise leave the board framing its own console with nothing able to
+    # put it back, and on this channel there is no second way in.
     _repl_mux.append(mux)
+    try:
+        mux.attach(previous)
+    except Exception:
+        _repl_mux.pop()
+        os.dupterm(previous, _REPL_DUPTERM_SLOT)
+        raise
     return mux.dap
 
 
@@ -241,6 +283,10 @@ def _evict_target_modules(baseline):
             del sys.modules[name]
             evicted.append(name)
     evicted.sort()
+    # Eviction drops the last reference to whole modules, and the re-import
+    # about to happen needs the heap they held. On a small board collecting
+    # here is the difference between a restart that works and MemoryError.
+    gc.collect()
     return evicted
 
 
@@ -288,17 +334,9 @@ def _tracing_survived_unwind():
 def _run():
     import debugpy
 
-    print(_banner)
-    print("MicroPython VS Code Debugging")
-    print(
-        "Usage: mpy_launch_debugpy.py [target_module] [target_method] [port] [dap_stream] [loop]"
-    )
-    print("==================================")
-
     target_module, target_method, port, dap_stream, loop = _parse_args()
     print(f"Target module: {target_module}")
     print(f"Target method: {target_method}")
-    print("==================================")
 
     if not hasattr(sys, "settrace"):
         print(
@@ -418,11 +456,10 @@ if __name__ == "__main__":
     try:
         _run()
     except KeyboardInterrupt:
-        print("\nTest interrupted by user")
+        print("\nInterrupted by user")
     except Exception as e:
         print(f"Error: {e}")
     finally:
         # Last, and after the prints above, so anything they said still goes
         # out through the framing the host is still reading.
         _release_repl_stream()
-# fmt: on

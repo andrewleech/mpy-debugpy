@@ -574,7 +574,7 @@ def test_do_debug_prints_handshake_and_calls_did_action(monkeypatch, capsys):
     handshake = {"host": "192.0.2.10", "port": 5678, "caps": {"can_set_local": True}}
     transport = _FakeTransport(
         [
-            b"MicroPython VS Code Debugging\n",
+            b"Target module: mod\n",
             ("MPDBG-READY " + json.dumps(handshake) + "\n").encode(),
         ]
     )

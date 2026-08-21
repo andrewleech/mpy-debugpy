@@ -187,11 +187,8 @@ def micropython_debuggee(
 
         # Verify all expected output lines are present
         expected_lines = [
-            "MicroPython VS Code Debugging",
-            "==================================",
             f"Target module: {tgt_module}",
             f"Target method: {tgt_method}",
-            "==================================",
             f"Debugpy listening on 0.0.0.0:{free_tcp_port}",
         ]
 
