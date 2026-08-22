@@ -42,6 +42,22 @@ Rules that keep mbm safe here (learned the hard way, full detail in
   `mpy-debugpy` and push to the `andrewleech` fork by hand.
 - mbm force-moves local feature branches to rebased versions as a side
   effect; reset them to the canonical fork tips afterwards.
+- **A rebuild interrupted by a conflict leaves the feature branches
+  half-migrated, and nothing says so.** mbm rebases each branch and force-moves
+  it; a branch whose rebase you finish by hand (`git rebase --continue`) is
+  left on mbm's own `rebase-<name>` branch, and `mbm rebase --resume` carries
+  on from the branch *after* it, so the original never moves. Measured
+  2026-08-22: after one such run `mpremote_transport_fixes` and
+  `mpremote_dap_repl` sat on the new base while `mpremote_debug_command` sat on
+  the old one, so a stack that had been A ⊂ B ⊂ C was none of those things and
+  looked fine. Before trusting the feature branches after any rebuild, assert
+  the relationships you expect (`git merge-base --is-ancestor`), not just that
+  the branches exist. The integration branch is unaffected - it is built from
+  the rebased versions and is the actual product.
+- Tag every branch tip in both submodules before a rebuild
+  (`git for-each-ref refs/heads/` piped into `git tag -f <stamp>/<branch>`).
+  Restoring afterwards is then a diff against that list rather than a
+  reconstruction, and it costs nothing.
 - A rebuild is not unattended. `git merge` exits non-zero on any conflict, and
   a rerere-replayed resolution is still a conflict, so mbm prints
   `Error: git merge failed` and stops with the merge staged but uncommitted.

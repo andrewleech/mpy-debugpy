@@ -93,7 +93,13 @@ pr_url = "https://github.com/micropython/micropython-lib/pull/1022"
 pr_number = 1022
 title = "debugpy DAP server (PR #1022)"
 
-[[submodules.branches]]
-name = "mpy-debugpy-foundations"
-pr_url = "https://github.com/andrewleech/micropython-lib/tree/mpy-debugpy-foundations"
-title = "debugpy enhancements + EPIC-1 foundations (DAP framing fix, wait_for_client, capability probe, read-only locals)"
+# `mpy-debugpy-foundations` was registered here and is deliberately not any
+# more (2026-08-22). Its commits were folded onto `add-debugpy-support` on
+# 2026-08-10, so composing both replays the same changes twice: the merge
+# conflicts across 11 files, and `make integrate` cannot complete for this
+# submodule. Measured rather than assumed - rebuilding without it succeeds and
+# leaves `python-ecosys/debugpy/` byte-identical to rebuilding with it, and
+# identical to `add-debugpy-support` itself. The branch still exists locally
+# and as tag `safety-20260822/mpy-debugpy-foundations`; nothing it carries is
+# lost by leaving it out, and it reached no PR to begin with.
+

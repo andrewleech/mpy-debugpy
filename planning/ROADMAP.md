@@ -1840,9 +1840,27 @@ lineages (Josverl vs andrewleech) reconciled.
     upstream, with `git rerere` replaying conflict resolutions. The Makefile
     `integrate` target currently stubs to this story.
   - acceptance criteria:
-    - [ ] `mbm rebase -s micropython` and `-s micropython-lib` reproduce branches that
-      build and pass `make test`.
-    - [ ] `make integrate` runs the rebuild.
+    - [x] `mbm rebase -s micropython` and `-s micropython-lib` reproduce branches that
+      build and pass `make test`. **Re-proven 2026-08-22** on a composition that had
+      changed since: both submodules rebuilt onto current `upstream/master` (53 commits
+      past the debug branches' base), 444 passed / 18 skipped / 1 xfailed, plus
+      `make lint-submodules` and the mpremote harness on the bench PYBD-SF6.
+    - [x] `make integrate` runs the rebuild. It does not run *unattended* - a conflict
+      stops it by design, and 2026-08-22 hit two: a rerere-replayed resolution on
+      `local_names_implementation` needing a hand commit in mbm's format, and a genuine
+      `docs/reference/mpremote.rst` conflict from upstream drift. Both are the documented
+      workflow rather than defects, and neither is a reason to leave the box unticked.
+  - **2026-08-22: the composition had drifted and the rebuild could not complete.**
+    `mpy-debugpy-foundations`'s commits were folded onto `add-debugpy-support` on
+    2026-08-10, so composing both replayed the same changes twice and the merge
+    conflicted across 11 files - micropython-lib had not been rebuildable since. It is
+    deregistered, measured rather than assumed: rebuilding without it succeeds and
+    leaves `python-ecosys/debugpy/` byte-identical to rebuilding with it. A second
+    hazard was found and is now in CLAUDE.md rather than only here: a rebuild
+    interrupted by a conflict leaves the feature branches half-migrated with nothing
+    saying so, because a branch whose rebase is finished by hand stays on mbm's
+    `rebase-<name>` branch while `--resume` continues past it. It broke the debug
+    stack's A ⊂ B ⊂ C relationship while every branch still looked present.
   - dependencies: **STORY-8.6** — ticket s8.5 found `local_names_implementation` sits on
     stale ancestry superseded by #8767, so it must be rebuilt on top of `pdb_support`
     (with the two fix commits) before it can be an mbm branch entry. Scope also covers
