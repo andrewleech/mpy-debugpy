@@ -128,7 +128,9 @@ Capture discipline (per the phased-roadmap procedure):
 
 Use `uv` with PEP 723 inline deps so scripts run via `uv run script.py`.
 
-## Session attribution
+## Attribution
 
-End commit messages with the Claude-Session trailer and PR bodies with the
-session link, per the global convention.
+Do not add `Claude-Session` trailers, "Generated with Claude Code" footers, or
+any other tool-attribution line to commit messages or PR bodies. Upstream
+MicroPython PRs disclose AI assistance in the template's own Generative AI
+section and nowhere else.
