@@ -63,10 +63,25 @@ name = "unix_stdin_read_error"
 pr_url = "https://github.com/andrewleech/micropython/tree/unix_stdin_read_error"
 title = "unix/unix_mphal: Report a failed stdin read as end of input"
 
+# The `debug` work is three stacked branches, in this order: each is based on
+# the one above it, so composing them out of order replays the later ones onto
+# a tree missing what they build on. They replace the single `mpremote_debug`
+# branch, which is superseded and must not be composed - it predates the split
+# and carries none of the review fixes.
 [[submodules.branches]]
-name = "mpremote_debug"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug"
+name = "mpremote_transport_fixes"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_transport_fixes"
+title = "tools/mpremote: Fix read_until timeouts and mount's filesystem RPC reads"
+
+[[submodules.branches]]
+name = "mpremote_debug_command"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_command"
 title = "tools/mpremote: Add the debug command (targets, handshake, unix flow, --dap-log)"
+
+[[submodules.branches]]
+name = "mpremote_dap_repl"
+pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_dap_repl"
+title = "tools/mpremote: Add --dap-repl, DAP on the stream that carries the REPL"
 
 [[submodules]]
 path = "micropython-lib"

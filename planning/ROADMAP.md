@@ -20,6 +20,38 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **`mpremote_debug` is three stacked branches, and 42 review findings are applied
+  (2026-08-22).** `20260822_mpremote_debug_branch_split.md`. `mpremote_transport_fixes`
+  (2 commits, `transport_serial.py` and nothing else) → `mpremote_debug_command` (+10)
+  → `mpremote_dap_repl` (+1); 17 commits became 13, on one author identity, with no
+  `Claude-Session` trailers. `/mpy-rules:review` returned 42 findings, 41 kept, 1
+  questionable, **0 invalid**, and two of them were merge-stoppers for a project that
+  does not squash-merge. `read_until` had lost its non-strict `timeout_overall` bound -
+  the check moved behind a new `timeout_overall_strict` parameter, so at its default the
+  parameter was dead and `enter_raw_repl(timeout_overall=10)` was unbounded for every
+  pre-existing caller, with the docstring still describing the old behaviour. And
+  `mpremote mount` was broken across seven commits, because the first reads
+  `self.serial.timeout` on what `mount_local` substitutes as a `SerialIntercept` lacking
+  it until the property arrives seven commits later. Both are fixed in the commit that
+  owns them, and `test_mount.sh` is now green on the bench PYBD-SF6 at **all 13
+  commits** - that per-commit run is the check the fold exists to satisfy, so it is run
+  per commit rather than at the tip. One review finding was right about the hazard and
+  wrong about the fix: clamping the pty poll timeout so it could not undercut
+  `SerialIntercept`'s 5 s RPC floor broke mount teardown, because polling reads and the
+  RPC exchange are two operations and only the second needs the floor; it now wraps the
+  exchange. `--target`/`-t` becomes an option so `mpremote connect <dev> debug app:main`
+  reaches the device it just connected to instead of trying to open one named
+  `app:main`. The docs gain the `debug` section's missing prerequisites
+  (`MICROPY_PY_SYS_SETTRACE`, debugpy on the device), `--source`/`--loop`/`--dap-repl`,
+  and the `MPDBG-READY`/`MPDBG-RESTART` contract - split across seven commits because a
+  mechanical check requires every documented flag to exist in that commit's own parser,
+  which caught two gaps prose review had not. Two device-free test files join mpremote's
+  own harness, which had gated none of this. **Not done and deliberately separate:**
+  `mbm.toml` now registers the three branches in dependency order, but `make integrate`
+  has not been run, so `mpy-debugpy` still merges the superseded `mpremote_debug`
+  (`d9d9350047`, kept as tag `pre-split-20260821`) - a rebuild moves the submodule pin.
+  Fork PR #51 still has that branch as its head.
+
 - **The separate serial DAP path is removed (2026-08-20).** D9. It was never available
   without a custom firmware - upstream sets `MICROPY_HW_USB_CDC_NUM (2)` for exactly one
   board, and the bench PYBD had the interface only because this project patched it in - so
@@ -1749,6 +1781,18 @@ lineages (Josverl vs andrewleech) reconciled.
     `CODECONVENTIONS.md`'s standard, which asks for one or two sentences. The
     push to the fork and the PR itself are not done - both are outward-facing
     and neither is needed for the two criteria above.
+  - **2026-08-22: the head branch this story tracks no longer exists.**
+    `mpremote_debug` is superseded by three stacked branches -
+    `mpremote_transport_fixes` (`9ee81df4b7`), `mpremote_debug_command`
+    (`d36c5e6f78`), `mpremote_dap_repl` (`b80cc3d585`) - carrying 42 applied
+    review findings, the `--target` CLI change, the documentation, and the
+    first tests mpremote's own harness has run against any of this. See
+    `20260822_mpremote_debug_branch_split.md`. The remaining acceptance
+    criteria are unchanged in substance but now describe three PRs rather than
+    one, stacked in that order; PR #51 still points at the superseded branch,
+    and `make integrate` has not been re-run, so the integration branch still
+    merges it. The record below is retained for what it says about the fork's
+    staging shape, which is unchanged.
   - **2026-08-10, on the fork only, by explicit user decision ("fork + draft
     PR, stop there"): https://github.com/andrewleech/micropython/pull/51**,
     draft, `mpremote_debug` at `33c065e033` into `review/mpremote_debug`, which
