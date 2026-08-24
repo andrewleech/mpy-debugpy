@@ -63,25 +63,25 @@ name = "unix_stdin_read_error"
 pr_url = "https://github.com/andrewleech/micropython/tree/unix_stdin_read_error"
 title = "unix/unix_mphal: Report a failed stdin read as end of input"
 
-# The `debug` work is three stacked branches, in this order: each is based on
-# the one above it, so composing them out of order replays the later ones onto
-# a tree missing what they build on. They replace the single `mpremote_debug`
-# branch, which is superseded and must not be composed - it predates the split
-# and carries none of the review fixes.
-[[submodules.branches]]
-name = "mpremote_transport_fixes"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_transport_fixes"
-title = "tools/mpremote: Fix read_until timeouts and mount's filesystem RPC reads"
-
-[[submodules.branches]]
-name = "mpremote_debug_command"
-pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debug_command"
-title = "tools/mpremote: Add the debug command (targets, handshake, unix flow, --dap-log)"
-
+# The `debug` work is three stacked branches, and only the tip is registered.
+# `mpremote_dap_repl` contains `mpremote_debug_command`, which contains
+# `mpremote_transport_fixes`, so composing the tip alone yields the identical
+# tree. Registering all three does NOT work: mbm rebases each branch
+# independently onto the target, so the tip's rebase mints different SHAs for
+# the same commits the middle branch already contributed, and merging both
+# replays every change twice - measured 2026-08-25, a six-file conflict across
+# commands.py, main.py, dap_log.py, mpdebug_config.py, mpy_launch_debugpy.py
+# and the docs. It only appears when the target differs from the branches'
+# existing base, so a pinned-target rebuild will not show it.
+#
+# The other two branches are kept, unregistered, because upstream wants them as
+# three stacked PRs in that order (the middle one calls a `read_until`
+# parameter the first one adds). They supersede `mpremote_debug`, which
+# predates the split and carries none of the review fixes.
 [[submodules.branches]]
 name = "mpremote_dap_repl"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_dap_repl"
-title = "tools/mpremote: Add --dap-repl, DAP on the stream that carries the REPL"
+title = "tools/mpremote: Add the debug command, over TCP and over the REPL stream"
 
 [[submodules]]
 path = "micropython-lib"
