@@ -20,6 +20,33 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **The composition is rebuilt on current upstream and only the debug tip is
+  registered (2026-08-25).** `micropython` onto v1.29.0 (`0fd6c573ea`), 54 commits
+  past the debug branches' base; `micropython-lib` onto its own current master. 444
+  passed, `lint-submodules` clean, unix firmware builds, mpremote's own harness green
+  on the bench, and the HIL suite 17/17 from a clean tree
+  (`20260825_hil_PYBD_SF6.md`). **Registering all three stacked debug branches was
+  wrong and is undone.** mbm rebases each registered branch independently onto the
+  target, so the tip's rebase mints fresh SHAs for the commits the middle branch
+  already contributed, and merging both replays every change twice - a six-file
+  conflict across `commands.py`, `main.py`, `dap_log.py`, `mpdebug_config.py`,
+  `mpy_launch_debugpy.py` and the docs. Only the tip is registered now; it contains
+  the other two, so the composed tree is identical. The hazard is invisible to a
+  pinned-target rebuild, because there the rebase is a no-op - which is exactly how
+  the 2026-08-22 proof run missed it, and a caution about what that style of proof
+  can and cannot establish.
+- **Upstream has absorbed part of what ampremote carries (2026-08-25).** #18327 (PTY
+  detection) merged whole as `e1f8f204b6`, so `_is_pty_device` is on master and
+  `mpremote_transport_fixes` builds on merged upstream code rather than on an
+  unlanded branch. Seven of #19062's 23 commits landed on 2026-07-21, including the
+  Windows UTF-8 console fix; `git cherry` reports only two of them, because the other
+  five were reworked in review, so the patch-id screen under-reports here in the
+  opposite direction to the over-reporting the stranded-commits row records. Both
+  entries in ampremote's own `mbm.toml` are now stale. Separately,
+  `mpremote_file_cp_hash` has **diverged** between this repo and ampremote - same
+  subject and date, different content, neither containing the other - and wants
+  reconciling before either integration is trusted.
+
 - **`mpremote_debug` is three stacked branches, and 42 review findings are applied
   (2026-08-22).** `20260822_mpremote_debug_branch_split.md`. `mpremote_transport_fixes`
   (2 commits, `transport_serial.py` and nothing else) → `mpremote_debug_command` (+10)
