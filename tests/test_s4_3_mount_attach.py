@@ -468,7 +468,7 @@ def test_do_debug_mount_lifecycle_mounts_boots_reports_and_tears_down(
     no interrupt.
     """
     monkeypatch.setattr(commands, "do_connect", lambda state, device=None: None)
-    monkeypatch.setattr(commands, "_stay_attached_mount", lambda message, pump_failed=None: None)
+    monkeypatch.setattr(commands, "_stay_attached_mount", lambda message, **_kw: None)
 
     source_dir = tmp_path / "src"
     source_dir.mkdir()
@@ -763,7 +763,7 @@ def test_pump_mount_reports_and_sets_failed_event_on_unexpected_read_error(capsy
     stop_event = threading.Event()
     failed_event = threading.Event()
 
-    commands._pump_mount(transport, stop_event, failed_event)
+    commands._pump_mount(transport, stop_event, failed_event, threading.Event())
 
     assert transport.read_calls == 1
     assert failed_event.is_set()
@@ -788,10 +788,67 @@ def test_pump_mount_requested_stop_reports_nothing_and_leaves_failed_event_clear
     failed_event = threading.Event()
     transport = _RaisingTransport(on_read=stop_event.set)
 
-    commands._pump_mount(transport, stop_event, failed_event)
+    commands._pump_mount(transport, stop_event, failed_event, threading.Event())
 
     assert not failed_event.is_set()
     assert capsys.readouterr().err == ""
+
+
+class _ScriptedPort:
+    """A serial port with a fixed byte stream queued, then silence."""
+
+    def __init__(self, data):
+        self._data = bytearray(data)
+        self.timeout = None
+
+    def inWaiting(self):
+        return len(self._data)
+
+    def read(self, n=1):
+        out = bytes(self._data[:n])
+        del self._data[:n]
+        return out
+
+
+def test_pump_mount_forwards_program_output_and_reports_the_boot_script_ending(capsys):
+    """The console reaches stdout, and the raw-REPL end of the exec ends the pump.
+
+    What arrives here is what `SerialIntercept` leaves once the RPC is taken
+    out: the program's output, `\\x04`, whatever the REPL itself said, `\\x04`,
+    then the prompt. A pump that discarded it left a mounted session with a
+    program that had died silently and a `mpremote` that waited on it forever;
+    the real `read_until` drives it so the framing is the transport's own.
+    """
+    transport = commands.SerialTransport.__new__(commands.SerialTransport)
+    transport.serial = _ScriptedPort(
+        b"Running debuggable code...\r\nValueError: boom\r\n\x04repl said this\r\n\x04>"
+    )
+    transport.is_pty = False
+    transport.device_name = "/dev/fake-tty"
+    stop_event, failed_event, finished_event = (threading.Event() for _ in range(3))
+
+    commands._pump_mount(transport, stop_event, failed_event, finished_event)
+
+    assert finished_event.is_set()
+    assert not failed_event.is_set()
+    captured = capsys.readouterr()
+    assert captured.out == "Running debuggable code...\r\nValueError: boom\r\n"
+    assert captured.err == "repl said this\n"
+    # The prompt is left for the teardown's own raw-REPL entry to consume.
+    assert transport.serial.read(1) == b">"
+
+
+def test_stay_attached_mount_returns_once_the_program_has_ended(monkeypatch, capsys):
+    """A finished boot script ends a mounted session without anyone pressing Ctrl-C."""
+
+    def _must_not_sleep(*_a, **_kw):
+        raise AssertionError("must return on the first finished check, before ever sleeping")
+
+    monkeypatch.setattr(commands.time, "sleep", _must_not_sleep)
+    finished = threading.Event()
+    finished.set()
+    commands._stay_attached_mount("test message", finished=finished)
+    assert capsys.readouterr().out == "test message\nthe program on the device has ended\n"
 
 
 # ==============================================================================

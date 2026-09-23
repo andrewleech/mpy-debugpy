@@ -20,6 +20,24 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **2026-09-23: a mounted debug session on a board hid its program dying, and never
+  ended. rp2 fixed and proven on hardware; esp32 unconfirmed.**
+  `20260923_mount_debug_hang_esp32_rp2.md`. It looked like `mpremote debug --source`
+  hanging after `configurationDone` on an ESP32-C3 (WiFi) and a Pico (`USBD_NCM`).
+  On the Pico the mount worked; the sample raised on `network.WLAN`, and
+  `_pump_mount` discarded the traceback while the boot script left the DAP
+  connection open, so neither mpremote nor the client ever ended. Now the pump
+  forwards the console and ends the session when the boot script finishes, and the
+  boot script closes the DAP connection at exit, printing a full traceback that the
+  client also sees. A mounted Pico run then stops at `target.py:104` and runs to a
+  clean exit 0. The C3 needs a rerun to show what really stopped it. Found with it:
+  `_detect_host()` ignored `USBD_NCM`, so `docs/debugging.md`'s "nothing changes" for
+  USB networking was false (fixed). The extension passes only
+  the handshake's `pathMappings`, which an unmounted device target does not have,
+  so its breakpoints can never match a device path. A mounted target's import is
+  slow under the tracer: 12.5 s to the first stop on the Pico, against 1.0 s on the
+  PYBD. The mpremote fixes are on `mpremote_dap_repl` (`e1e74ebbd0`, `81cc708122`)
+  and cherry-picked onto the integration branch; not pushed.
 - **The composition is rebuilt on current upstream and only the debug tip is
   registered (2026-08-25).** `micropython` onto v1.29.0 (`0fd6c573ea`), 54 commits
   past the debug branches' base; `micropython-lib` onto its own current master. 444

@@ -20,15 +20,13 @@ device process's pid never changes, so nothing was reset either.
 
 The observable that makes a re-run visible to a client is a DAP `output` event,
 not `terminated`: a client that sees `terminated` tears the session down, which
-is the opposite of what loop mode is for. It is also the only route available
-here - mpremote's mount pump discards everything the device prints, so the
-MPDBG-RESTART marker on device stdout never reaches this process. That is why
-the launcher mirrors its markers to the debug console (see `_report` there).
+is the opposite of what loop mode is for. The launcher mirrors its markers to
+the debug console as well as stdout (see `_report` there) so a client sees
+them on every transport, including ones with no readable console.
 """
 
 import json
 import os
-import signal
 import subprocess
 import sys
 import threading
@@ -391,17 +389,15 @@ class _LoopSession:
         (test_s4_3_mount_attach covers it): the target is parked in a wait that
         no interrupt can reach, and only a power cycle clears the mount.
 
-        The wait cannot be polled for: mpremote's mount pump discards the
-        device's console output, and the client this would have watched is the
-        one that just went away.
+        The wait cannot be polled for over DAP: the client this would have
+        watched is the one that just went away. `wait_ended` watches mpremote.
         """
         self.dap_server.stop()
         self.dap_server = None
         time.sleep(1.0)
 
-    def end(self, timeout=15):
-        """Signal mpremote as Ctrl-C would, and return its exit code."""
-        self.mpremote_proc.send_signal(signal.SIGINT)
+    def wait_ended(self, timeout=15):
+        """Wait for mpremote to exit on its own, and return its exit code."""
         exit_code = self.mpremote_proc.wait(timeout=timeout)
         for thread in self._threads:
             thread.join(timeout=2)
@@ -575,18 +571,19 @@ def test_a_client_leaving_between_runs_leaves_the_mount_tearable_down(loop_sessi
     session: the mount comes down without the pump-stuck warning, and the device
     is left at a working REPL rather than desynced.
 
-    mpremote itself has to be signalled either way - a mounted session with no
-    proxy to watch has no client-session end it can observe, so `Ctrl-C` is the
-    only way `_stay_attached_mount` ever returns.
+    mpremote is not signalled: the device's boot script running to its end is
+    the session being over, and a mounted session has to notice that itself
+    rather than wait for a Ctrl-C nobody knows to press.
     """
     run1, boundary = loop_session.run_until("run 1")
     assert boundary == "end", f"run 1 did not finish on its own: {boundary}"
 
     loop_session.detach_client()
 
-    assert loop_session.end() == 0, (
-        f"mpremote did not exit cleanly after the client left: {loop_session.stderr_text}"
+    assert loop_session.wait_ended() == 0, (
+        f"mpremote did not exit on its own after the client left: {loop_session.stderr_text}"
     )
+    assert "the program on the device has ended" in "".join(loop_session.stdout_lines)
     assert "did not stop in time" not in loop_session.stderr_text, (
         f"the mount's filesystem pump was left wedged: {loop_session.stderr_text}"
     )

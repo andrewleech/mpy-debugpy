@@ -23,6 +23,10 @@ def _hidden(net: tuple):
     return net[5] if len(net) > 5 else "-"
 
 def run_scan():
+    if not hasattr(network, "WLAN"):
+        # A board can have networking (USB NCM, Ethernet) and no WiFi at all.
+        print("No WLAN on this board. Skipping WiFi scan.")
+        return
     wlan = network.WLAN(network.STA_IF)
     was_active = wlan.active()
     _ = wlan.active(True)

@@ -265,9 +265,10 @@ USB networking is the one that needs no hardware you do not already have.
 host sees an ordinary USB Ethernet adapter, the device serves it an address over
 DHCP, and the board is on a network down the cable that was already plugged in.
 
-Nothing in this project changes for it. The [network](#network) transport above
-is the mainline path, and it does not care whether the address arrived over
-WiFi, Ethernet or a USB cable:
+The [network](#network) transport above is the mainline path, and it does not
+care whether the address arrived over WiFi, Ethernet or a USB cable. The device
+reports its own address, and asks `USBD_NCM` first, since that link's peer is
+always the host running the session:
 
 ```python
 import network
@@ -481,7 +482,22 @@ your program is at fault.
   body line's number. A `while` line itself is only reported once, at loop
   entry, rather than on each pass. Every other body line, the `for` line, and
   loops over anything but `range` are exact. Stepping and values are correct;
-  only the number and position of the stops are off.
+  only the number and position of the stops are off. The loop test stops there
+  on every pass, whether or not the line itself ran, so when the body ends in a
+  statement that runs only sometimes - an `except` handler, an `if` branch -
+  the breakpoint stops on every iteration and looks like the handler or branch
+  fired when it did not. Put the breakpoint on an earlier line of that block,
+  or add a statement after it.
+- **There is no "Raised Exceptions" or "Uncaught Exceptions" option.** The
+  server offers no exception filters, so VS Code does not show those
+  checkboxes, and an exception pauses nothing unless you have set a line
+  breakpoint where it is handled. An uncaught one ends the session and prints
+  its traceback, but by then the frames are gone and their locals cannot be
+  inspected. Breakpoints you set inside `except` and `finally` blocks work
+  normally. "Raised" is buildable in the server alone: the firmware reports
+  exceptions to the trace hook, and `sys.exc_info()` there returns the
+  exception. "Uncaught" is harder, because MicroPython has no traceback
+  objects to rebuild the stack at the raise once the exception has unwound.
 - **A `line` event fires before its statement executes.** When you are stopped
   on a line, that line has not run yet. This matches CPython, and it is worth
   restating because it decides what a variable reads at a breakpoint.
@@ -489,9 +505,14 @@ your program is at fault.
 
 ## Ending a session
 
-Ctrl-C, at mpremote. (In a `--dap-repl` session that is the only thing Ctrl-C
-still does - it no longer reaches the target; see [one UART](#one-uart).) Detach
-the client first if a mounted session is stopped at a
+A session ends when its program does, whether it returns or raises: the device
+closes the DAP connection, so the client sees the session end, and a traceback
+shows in the client's debug console. A mounted session also prints the program's
+output as it runs, then unmounts and exits.
+
+To end one early, Ctrl-C at mpremote. (In a `--dap-repl` session that is the
+only thing Ctrl-C still does - it no longer reaches the target; see
+[one UART](#one-uart).) Detach the client first if a mounted session is stopped at a
 breakpoint: mpremote has to reach the device over the raw REPL to unmount, and a
 target still parked in the debugger will not answer. Detaching lets the program
 finish, which puts the device back at a REPL prompt, and teardown is then clean
