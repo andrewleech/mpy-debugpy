@@ -17,9 +17,9 @@ type a host or a port anywhere.
 ## Requirements
 
 - `ms-python.debugpy`, which is installed automatically as a dependency.
-- An `mpremote` that has the `debug` command, from a checkout of
-  [mpy-debugpy](https://github.com/andrewleech/mpy-debugpy). A released
-  `mpremote` does not have it yet.
+- An `mpremote` that has the `debug` command. A released `mpremote` does not
+  have it yet. Install the one from mpy-debugpy's micropython fork:
+  `uv tool install "git+https://github.com/andrewleech/micropython@mpy-debugpy#subdirectory=tools/mpremote"`.
 - Firmware built with `MICROPY_PY_SYS_SETTRACE`, and `debugpy` installed on
   the board. mpy-debugpy's docs cover both.
 - For a board: a network the host can reach (WiFi, Ethernet or USB NCM), or

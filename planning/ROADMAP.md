@@ -26,9 +26,14 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   Marketplace metadata (`preview: true`). The README now says how to build and
   install it. Publishing needs owner steps (publisher, icon, an Entra ID
   credential, since global PATs retire 2026-12-01). It also needs a decision:
-  a Marketplace user cannot yet get an `mpremote` with `debug`. The same day the
-  RPI_PICO `DEBUG_NCM` variant and the ESP32_GENERIC_C3 settrace flags went onto
-  `debug_board_flags`.
+  a Marketplace user can get an `mpremote` with `debug` only through
+  `uv tool install git+...@mpy-debugpy#subdirectory=tools/mpremote`, which was
+  checked working, and the extension does not yet say so when it is missing. The
+  same day the RPI_PICO `DEBUG_NCM` variant and the ESP32_GENERIC_C3 settrace
+  flags went onto `debug_board_flags`. Everything was pushed, and CI published
+  `fw-7c8dd9c90e` (run 35947195711, all jobs green including the unix suite and
+  extension host). `firmware/firmware.toml` now points at it, replacing
+  `fw-f9d7c96b96`, which predated the loop line-event and locals-slot fixes.
 - **2026-09-23: a mounted debug session on a board hid its program dying, and never
   ended. rp2 fixed and proven on hardware; esp32 unconfirmed.**
   `20260923_mount_debug_hang_esp32_rp2.md`. It looked like `mpremote debug --source`

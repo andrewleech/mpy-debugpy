@@ -53,16 +53,18 @@ Options, in order of how much they fix:
   Cheap. The cost is first impressions and support questions.
 - **B. First make `mpremote` installable from the fork**, then publish.
   `uv tool install "git+https://github.com/andrewleech/micropython@mpy-debugpy#subdirectory=tools/mpremote"`
-  would need checking: hatch-vcs derives the version from tags, and the fork
-  must carry them. Also, the extension could detect a missing `debug`
-  subcommand and link the install instructions. Removes requirement 1 for
-  anyone with Python.
+  already works. Measured 2026-09-24 after the push: it installs
+  `mpremote 1.29.0.post45+g7c8dd9c90` in 4.5 minutes (most of that is
+  cloning micropython), and `mpremote debug -t unix target:main` from that
+  install prints its `MPDBG-READY` line. So what B still needs is on the
+  extension side: detect a missing `debug` subcommand and link the install
+  instructions. Removes requirement 1 for anyone with Python.
 - **C. Wait for upstream**: `mpremote debug` in a released mpremote, and
   `debugpy` installable with `mip`. Everything becomes stock, but the timing
   is not ours.
 
 Recommended: **B, then publish.** The extension-side check is small, and the
-install line is one to verify, not a project.
+install line is proven.
 
 ## Steps to publish (owner actions marked)
 
