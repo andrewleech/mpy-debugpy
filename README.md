@@ -43,8 +43,12 @@ roadmap.
 ```bash
 git clone --recurse-submodules <this-repo> mpy-debugpy
 cd mpy-debugpy
-make bootstrap        # submodule init + mbm rebuild of both integration branches
+make bootstrap        # check out both submodules at their pinned integration commits
 ```
+
+The pins already point at composed integration branches on the forks, so no
+rebuild is needed to get started. `make integrate` recomposes them from
+`mbm.toml` on current upstream, which only matters when changing the branch set.
 
 ### 2. Get debug-enabled firmware
 
@@ -73,17 +77,24 @@ starts the program, and prints where to attach:
 
 ```bash
 export PYTHONPATH="$PWD/micropython/tools/mpremote"
-python3 -m mpremote debug -t unix target:main         # unix port
-python3 -m mpremote debug -t pico app                 # device, DAP over the network
+python3 -m mpremote debug -t unix target:main           # unix port
+python3 -m mpremote debug -t /dev/ttyACM0 app:main      # device on a serial port
+python3 -m mpremote debug -t pico app:main              # a target named in mpdebug.toml
 ```
+
+A device session runs DAP over the board's network (WiFi, Ethernet or USB
+NCM), so the board needs one that is up; the serial port only starts the
+program. A board with no network can share its REPL's stream instead
+(`--dap-repl`). The board also needs `debugpy` on it - see "Putting debugpy on
+a board" in [`docs/debugging.md`](docs/debugging.md).
 
 The `debug` command lives on the mpremote branches composed into
 `micropython/tools/mpremote`, so run that copy rather than a released
 `mpremote` until it upstreams.
 
-A target name comes from an `mpdebug.toml` beside your code; anything that is
-not a target name is treated as a connect string. See
-[`docs/debugging.md`](docs/debugging.md) for the target file, the three
+A target name like `pico` comes from an `mpdebug.toml` beside your code;
+anything that is not a target name is treated as a connect string. See
+[`docs/debugging.md`](docs/debugging.md) for the target file, the
 transports, the `--source`/`--loop` iteration loop, and troubleshooting.
 
 `make demo` runs `src/target.py` through the launcher directly, without
@@ -101,10 +112,23 @@ positional placeholders), `set_local` (local-variable editing), `f_back`.
 
 ### 4. Attach from VS Code
 
-Install the [`extension/`](extension/) `MicroPython Debug` extension (and its
-dependency, `ms-python.debugpy`), then press F5 — `.vscode/launch.json`'s
-`micropython` config spawns `mpremote debug`, reads its handshake, and
-starts the attach session with no host/port typed anywhere.
+The [`extension/`](extension/) `MicroPython Debug` extension, with its
+dependency `ms-python.debugpy`, turns a session into one keypress: its
+`micropython` launch configuration spawns `mpremote debug`, reads the
+handshake, and attaches with no host or port typed anywhere. It is not on the
+Marketplace yet, so build and install it from this checkout:
+
+```bash
+cd extension
+npm ci
+npm run package                                   # writes mpy-debugpy-<version>.vsix
+code --install-extension mpy-debugpy-*.vsix
+```
+
+Then press F5 on one of the `micropython` configurations in
+`.vscode/launch.json`. They run this checkout's `mpremote` (`python3 -m
+mpremote` with `PYTHONPATH` set), since a released `mpremote` has no `debug`
+command yet.
 
 Without the extension, attach by hand: run `mpremote debug` yourself, take
 the host/port off its `MPDBG-READY` line, and paste them into a `debugpy`
@@ -112,10 +136,12 @@ the host/port off its `MPDBG-READY` line, and paste them into a `debugpy`
 
 ## Status
 
-Early. See `planning/ROADMAP.md` for the epics/stories and current progress, and
-`planning/BACKGROUND.md` for how the pieces fit together. Known limitation:
-local-variable editing depends on firmware `set_local` support — the tooling
-reports this per-session and marks locals read-only when unavailable.
+Working on the unix port and on hardware (ESP32-C3, RP2040, PYBD-SF6W), not yet
+upstream. See `planning/ROADMAP.md` for the epics/stories and current progress,
+and `planning/BACKGROUND.md` for how the pieces fit together. What the debugger
+cannot do yet - exception breakpoints, editing locals where the firmware lacks
+`set_local`, a few loop-line quirks - is listed under "Known limitations" in
+[`docs/debugging.md`](docs/debugging.md#known-limitations).
 
 ## Relationship to other repos
 

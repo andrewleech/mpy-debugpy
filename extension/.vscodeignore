@@ -1,0 +1,10 @@
+src/**
+out/test/**
+out/**/*.map
+.vscode-test/**
+tsconfig.json
+**/*.vsix
+node_modules/smol-toml/src/**
+node_modules/**/*.map
+node_modules/**/*.d.ts
+.gitignore

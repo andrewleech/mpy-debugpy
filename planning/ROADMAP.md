@@ -20,6 +20,15 @@ upstream micropython PR), with a thin VS Code extension layered on top last.
 
 Updated as work lands. See per-story acceptance criteria below for detail.
 
+- **2026-09-24: the extension packages for the Marketplace; publishing waits on
+  Q15.** `20260924_extension_marketplace_publishing.md`. `npm run package` builds
+  a 56 KB VSIX containing only runtime files, and `package.json` carries the
+  Marketplace metadata (`preview: true`). The README now says how to build and
+  install it. Publishing needs owner steps (publisher, icon, an Entra ID
+  credential, since global PATs retire 2026-12-01). It also needs a decision:
+  a Marketplace user cannot yet get an `mpremote` with `debug`. The same day the
+  RPI_PICO `DEBUG_NCM` variant and the ESP32_GENERIC_C3 settrace flags went onto
+  `debug_board_flags`.
 - **2026-09-23: a mounted debug session on a board hid its program dying, and never
   ended. rp2 fixed and proven on hardware; esp32 unconfirmed.**
   `20260923_mount_debug_hang_esp32_rp2.md`. It looked like `mpremote debug --source`
@@ -37,7 +46,7 @@ Updated as work lands. See per-story acceptance criteria below for detail.
   so its breakpoints can never match a device path. A mounted target's import is
   slow under the tracer: 12.5 s to the first stop on the Pico, against 1.0 s on the
   PYBD. The mpremote fixes are on `mpremote_dap_repl` (`e1e74ebbd0`, `81cc708122`)
-  and cherry-picked onto the integration branch; not pushed.
+  and cherry-picked onto the integration branch; pushed to the fork 2026-09-24.
 - **The composition is rebuilt on current upstream and only the debug tip is
   registered (2026-08-25).** `micropython` onto v1.29.0 (`0fd6c573ea`), 54 commits
   past the debug branches' base; `micropython-lib` onto its own current master. 444
@@ -828,7 +837,13 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-No question is open. Q1–Q8 and Q11–Q14 are closed; see DECIDED entries below.
+Q15 is open. Q1–Q8 and Q11–Q14 are closed; see DECIDED entries below.
+
+- **Q15 (2026-09-24) — when to publish the extension to the Marketplace.** Now
+  as a preview (the requirements stated), after `mpremote` with `debug` is
+  installable from the fork and the extension detects its absence, or after
+  upstream releases it. Recommended: the second.
+  `20260924_extension_marketplace_publishing.md`.
 
 **DECIDED (2026-08-10):**
 

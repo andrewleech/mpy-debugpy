@@ -398,9 +398,10 @@ below.
 ## Attaching from VS Code
 
 Install the extension in [`extension/`](../extension/) along with its
-dependency, `ms-python.debugpy`. A `micropython` launch configuration then
-spawns `mpremote debug`, reads its handshake, and starts the attach session
-with nothing typed:
+dependency, `ms-python.debugpy` (until it is on the Marketplace, build the VSIX
+as the [README](../README.md#4-attach-from-vs-code) shows). A `micropython`
+launch configuration then spawns `mpremote debug`, reads its handshake, and
+starts the attach session with nothing typed:
 
 ```json
 {
