@@ -2,10 +2,10 @@
 upstream_repo: micropython/micropython
 upstream_base: master
 local_branch: mpremote_close_lost_device
-status: pushed to fork, description written, no PR
-title: "tools/mpremote: Close the serial port even if clearing RTS/DTR fails."
+status: fork draft #74; upstream review pending
+title: "tools/mpremote: Close the port when RTS/DTR clearing fails"
 pushed_branch: https://github.com/andrewleech/micropython/tree/mpremote_close_lost_device
-head: 23fe999a40
+head: 953209e2a9
 relationship: |
   Independent. Touches SerialTransport.close() in transport_serial.py, as does
   mpremote_transport_fixes but in a different function; merge-tree clean with
@@ -17,20 +17,10 @@ todo:
     /mpy-rules:review pass (never reviewed).
 ---
 
-### Summary
+Unplugging a USB CDC board during an mpremote command could produce its intended lost-device error and then a traceback during disconnect. `SerialTransport.close()` tried to clear RTS/DTR first, and an EIO there stopped it from closing the port. Signal clearing is best-effort, so it now closes the port even if that step fails.
 
-If a device goes away while a command is running (unplugged, or reset by its own firmware), clearing RTS/DTR in `close()` fails with EIO. Only ENOTTY was tolerated, so the `OSError` propagated out of `do_disconnect()`, which `main()` calls from a `finally` outside its `CommandError` handler. The command printed its message about losing the device, then exited with a traceback, and the port was never closed.
-
-Clearing the signals is best-effort anyway (it exists to stop a Windows host resetting an ESP target on the way out) so a failure no longer stops the close.
-
-### Testing
-
-Linux with a PYBD_SF6 over USB CDC. A standalone probe (open the port, power-cycle its USB hub port, `close()`) reproduces the EIO, and a board power-cycled mid-command now exits with mpremote's own error and no traceback. Not tested on Windows or macOS.
-
-### Trade-offs and Alternatives
-
-Catching every `OSError` rather than adding EIO to the allowed list, since there's nothing useful to do with any failure here and the port still has to be closed.
+On Linux with a USB CDC board, open the port with `SerialTransport('/dev/ttyACM0')`, unplug it / power-cycle its hub port, then call `close()`. Before this fix that raised EIO on the PYBD_SF6; afterwards the command exited with its own error and no traceback. Other USB drivers may not reproduce the EIO. Not tested on Windows or macOS.
 
 ### Generative AI
 
-I used generative AI tools when creating this PR, but a human has checked the code and is responsible for the description above.
+I used generative AI tools when creating this PR. I checked the code and am responsible for the change.

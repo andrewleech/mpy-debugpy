@@ -2,10 +2,10 @@
 upstream_repo: micropython/micropython
 upstream_base: master
 local_branch: settrace_loop_line_events
-status: pushed to fork, description written, no PR
-title: "py/vm: Fire settrace line events on backward jumps, not FOR_ITER."
+status: fork draft #73; upstream review pending
+title: "py/vm: Report loop lines again after backward jumps"
 pushed_branch: https://github.com/andrewleech/micropython/tree/settrace_loop_line_events
-head: 879d3b7c17
+head: 9b2f00d88e
 relationship: |
   Independent of #8767 (sys.settrace line events are already upstream). It
   does affect expected line-event streams, so local_names_implementation's
@@ -23,24 +23,31 @@ todo:
     /mpy-rules:review pass (never reviewed).
 ---
 
-### Summary
+Stepping through loops showed duplicate `for` headers and missing repeats for `while` / `range` loops. `FOR_ITER` was clearing the last reported line every iteration, while other loops never went through it. Clearing it on a backward jump instead reports a line when control returns to it, including single-line loop bodies.
 
-Stepping through loops in a debugger showed the wrong lines. A line event fires when the current instruction's source line differs from the last one reported, and `MP_BC_FOR_ITER` clears the last-reported line on every iteration so a single-line loop body still reports each time. That over-corrects: a multi-line `for` reports its header line twice per iteration, since FOR_ITER has just reported it. A two-deep loop reported the inner header ten times where CPython reports six. It also doesn't help `while` or `range` loops, which don't go through FOR_ITER, so those report their header line once for the whole loop.
+To see the trace, run this on a unix build with settrace enabled and under CPython:
 
-The reset now happens on a backward jump instead, which is the rule CPython uses: re-entering code already reported is exactly where a repeat belongs, and leaving a line by a forward jump isn't. General `for` loops now match CPython's line event stream exactly, and `range` / `while` loops whose body is on the header's line iterate visibly.
+```python
+import sys
 
-The offset is cast to `ptrdiff_t` rather than `mp_int_t`, because `DECODE_SLABEL` gives a `size_t` which under `MICROPY_OBJ_REPR_D` is narrower than `mp_int_t` and the sign test would never fire.
+def trace(frame, event, arg):
+    if frame.f_code.co_name == 'loop' and event == 'line':
+        print(frame.f_lineno, end=' ')
+    return trace
 
-### Testing
+def loop():
+    for i in (0, 1):
+        x = i
+        x += 1
 
-`tests/misc/sys_settrace_generator.py.exp` changes with the fix, both ways toward CPython: three duplicate events disappear from a `for i in gen:` loop and two appear in a single-line `while True:` loop. I measured the three loop forms against CPython 3.12 with two-statement bodies so the first and last body lines can be told apart, on both a plain-master coverage build and one carrying #8767. `sys_settrace_features.py` has no `.exp` and fails against CPython on master both before and after this change, with byte-identical output.
+sys.settrace(trace)
+loop()
+sys.settrace(None)
+print()
+```
 
-### Trade-offs and Alternatives
-
-Compiles out entirely without `MICROPY_PY_SYS_SETTRACE`. With it, four jump opcodes gain a sign test.
-
-One difference from CPython remains. The loop test of a `range` / `while` loop is compiled at the bottom of the loop, so it inherits the last body line's number, and the line table only records increasing lines (`py/emitbc.c`), so the test can't be attributed to the header without an .mpy format change. Moving the test to the top would cost every build a second branch per iteration for something only a tracer sees, so I've left it.
+Saved as written, the current unix build reports `9 10 11 9 10 11 9 11`; CPython 3 reports `9 10 11 9 10 11 9`. The final `11` remains because the bytecode line table can't attribute the bottom-of-loop test to the header. The existing generator test expectation also changes. This compiles out without settrace; a settrace-enabled code-size number is still needed.
 
 ### Generative AI
 
-I used generative AI tools when creating this PR, but a human has checked the code and is responsible for the description above.
+I used generative AI tools when creating this PR. I checked the code and am responsible for the change.

@@ -6,22 +6,24 @@
 
 One file per branch that should eventually become an upstream PR, plus one per already-open upstream PR carrying a drafted follow-up comment (those descriptions are not rewritten; see the memory note on appending rather than rewriting). Frontmatter follows the `draft-pr` skill's schema: `upstream_repo`, `upstream_base`, `local_branch`, `status`, `title`, and where relevant `pushed_branch`, `upstream_pr`, `head`, `depends_on`, `relationship`, `todo`.
 
-Per the `draft-pr` skill and STORY-8.3, new PRs are raised on the fork first (targeting `andrewleech/<repo>` `master`) for review, and nothing is opened upstream until the user has signed off on the fork PR.
+New work goes through draft PRs on `andrewleech/micropython` for self-review before any separate upstream PR. Independent branches use a `review/mpy-debugpy-<branch>` base pinned at their original upstream base, keeping the fork PR diff limited to the branch's own commits. The debug stack uses the preceding feature branch as its base. These fork PRs are public drafts, not private GitHub PRs.
 
 ## New PRs
 
 | draft | repo | depends on | state |
 |---|---|---|---|
-| [mpremote_transport_fixes](mpremote_transport_fixes.md) | micropython | - | local only; rebase clean |
-| [mpremote_debug_command](mpremote_debug_command.md) | micropython | transport_fixes; #1022 to be usable | local only; docs conflict on rebase; soft-reset decision after #17485 |
-| [mpremote_dap_repl](mpremote_dap_repl.md) | micropython | debug_command | local only; the branch mbm composes |
-| [unix_stdin_read_error](unix_stdin_read_error.md) | micropython | - | pushed; fix not yet measured after |
-| [settrace_loop_line_events](settrace_loop_line_events.md) | micropython | - | pushed |
-| [mpremote_close_lost_device](mpremote_close_lost_device.md) | micropython | - | pushed |
-| [mpremote_debugpy_install](mpremote_debugpy_install.md) | micropython | #18436; #1022 | pushed; broken without #18436; upstream fit questionable |
-| [local_names_implementation](local_names_implementation.md) | micropython | #8767 | pushed; needs cleanup (PERSIST option, debug knobs, history) |
+| [mpremote_transport_fixes](mpremote_transport_fixes.md) | micropython | - | [fork draft #69](https://github.com/andrewleech/micropython/pull/69) |
+| [mpremote_debug_command](mpremote_debug_command.md) | micropython | transport_fixes; #1022 to be usable | [fork draft #70](https://github.com/andrewleech/micropython/pull/70), stacked on #69 |
+| [mpremote_dap_repl](mpremote_dap_repl.md) | micropython | debug_command | [fork draft #71](https://github.com/andrewleech/micropython/pull/71), stacked on #70 |
+| [unix_stdin_read_error](unix_stdin_read_error.md) | micropython | - | [fork draft #72](https://github.com/andrewleech/micropython/pull/72); post-fix syscall count still open |
+| [settrace_loop_line_events](settrace_loop_line_events.md) | micropython | - | [fork draft #73](https://github.com/andrewleech/micropython/pull/73) |
+| [mpremote_close_lost_device](mpremote_close_lost_device.md) | micropython | - | [fork draft #74](https://github.com/andrewleech/micropython/pull/74) |
+| [mpremote_debugpy_install](mpremote_debugpy_install.md) | micropython | #18436; #1022 | [fork draft #75](https://github.com/andrewleech/micropython/pull/75); broken without #18436, upstream fit unresolved |
+| [local_names_implementation](local_names_implementation.md) | micropython | #8767 | [existing fork PR #5](https://github.com/andrewleech/micropython/pull/5); needs cleanup |
 
 The three `mpremote_` debug branches are a stack (A ⊂ B ⊂ C) and are raised as three stacked PRs in that order. They supersede fork PR andrewleech/micropython#51.
+
+The fork drafts and their 21 feature commits were rewritten for the working style on 2026-09-27. The integration was rebuilt at `d7fb7f3795`; its tree is byte-identical to the previous pin `7c8dd9c90e`. The published firmware still records that original source commit because those are the binaries it was built from. The old pin remains reachable via its `mpy-debugpy-pin-7c8dd9c90e` tag.
 
 ## Open upstream PRs (follow-up comments)
 

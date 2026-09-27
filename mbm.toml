@@ -34,8 +34,7 @@ title = "frame.f_locals with real local names + placeholder fallback"
 
 [[submodules.branches]]
 name = "settrace_loop_line_events"
-pr_url = "https://github.com/andrewleech/micropython/tree/settrace_loop_line_events"
-title = "py/vm: Fire settrace line events on backward jumps, not FOR_ITER"
+title = "py/vm: Report loop lines again after backward jumps"
 
 [[submodules.branches]]
 name = "debug_board_flags"
@@ -51,17 +50,17 @@ title = "tools/mpremote: Add streaming hash verification to file transfers"
 [[submodules.branches]]
 name = "mpremote_close_lost_device"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_close_lost_device"
-title = "tools/mpremote: Close the serial port even if clearing RTS/DTR fails"
+title = "tools/mpremote: Close the port when RTS/DTR clearing fails"
 
 [[submodules.branches]]
 name = "mpremote_debugpy_install"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_debugpy_install"
-title = "tools/mpremote: Add cached, cross-compiled debugpy package installer"
+title = "tools/mpremote: Install cross-compiled debugpy on a board"
 
 [[submodules.branches]]
 name = "unix_stdin_read_error"
 pr_url = "https://github.com/andrewleech/micropython/tree/unix_stdin_read_error"
-title = "unix/unix_mphal: Report a failed stdin read as end of input"
+title = "unix: Stop reading stdin after a pty disconnects"
 
 # The `debug` work is three stacked branches, and only the tip is registered.
 # `mpremote_dap_repl` contains `mpremote_debug_command`, which contains
@@ -81,7 +80,7 @@ title = "unix/unix_mphal: Report a failed stdin read as end of input"
 [[submodules.branches]]
 name = "mpremote_dap_repl"
 pr_url = "https://github.com/andrewleech/micropython/tree/mpremote_dap_repl"
-title = "tools/mpremote: Add the debug command, over TCP and over the REPL stream"
+title = "tools/mpremote: Carry DAP over the REPL connection"
 
 [[submodules]]
 path = "micropython-lib"

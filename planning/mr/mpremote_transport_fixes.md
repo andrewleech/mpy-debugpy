@@ -2,9 +2,9 @@
 upstream_repo: micropython/micropython
 upstream_base: master
 local_branch: mpremote_transport_fixes
-status: branch exists locally, not pushed; needs /mpy-rules:review clean pass
-title: "tools/mpremote: Bound serial reads by wall clock, and fix mount reads."
-head: 9ee81df4b7
+status: fork draft #69; upstream review pending
+title: "tools/mpremote: Stop pty and mount reads hanging"
+head: 26905a5ba0
 relationship: |
   First of three stacked PRs. mpremote_debug_command is based on this branch
   and calls the `timeout_overall_strict` parameter it adds, so this one lands
@@ -19,26 +19,10 @@ todo:
     test_transport_timeouts.sh is new; confirm the upstream mpremote test runner picks it up after the rebase (the harness gained `-t device` and skip support upstream since the base).
 ---
 
-### Summary
+I hit two read failures while running mpremote against a pty / mounted board. A quiet pty could block inside `serial.read()` past `read_until`'s deadline, and the mount intercept could keep polling forever or crash on a short RPC field. The serial read now gets a short polling timeout; mount reads return short or raise `TransportError` when the device stops mid-command. `timeout_overall_strict` also bounds a continuously chatty peer without changing the default boot-output behaviour.
 
-While building a debug command on top of mpremote's serial transport I kept hitting reads that never returned. Two separate causes.
-
-On a pty (the unix port, QEMU) `read_until` can block forever in `serial.read()` once the peer goes quiet, because a pty read has no timeout of its own to expire, so the loop never gets to check its deadline. The port's read timeout is now lowered for the duration of the poll to give it that tick.
-
-A mounted transport had a couple of ways to hang or crash too. `SerialIntercept` looped forever when the device was quiet for a whole timeout period, indexed an empty read when a command byte didn't arrive, and a short read of an RPC field reached `struct.unpack` as a `struct.error` with no cause. Those now return a short read or raise `TransportError` saying the device stopped mid-command. A filesystem RPC is a multi-read exchange so it gets its own 5 s floor around the exchange rather than inheriting the short polling timeout.
-
-`read_until` also gains `timeout_overall_strict`. The default is unchanged: `timeout_overall` is only consulted once the peer goes quiet, which is what stops a verbose board's boot printing being cut off mid-line. A caller reading from a peer that may stream for the whole session (a mount's RPC pump, a handshake scan) passes True to get a bound that holds regardless.
-
-### Testing
-
-`tools/mpremote/tests/test_transport_timeouts.sh` is new and device-free: it drives `read_until`'s quiet and strict bounds over a pty pair and checks `SerialIntercept`'s timeout round-trip. `test_mount.sh` passes on a PYBD_SF6 at both commits.
-
-Not tested on Windows or on a UART-bridge (CP210x / CH340) board.
-
-### Trade-offs and Alternatives
-
-Lowering the port timeout is done per poll and restored afterwards, rather than set once at open, so code that reads the port directly keeps the timeout it asked for.
+To reproduce without hardware, run `bash tools/mpremote/tests/test_transport_timeouts.sh` on POSIX. It covers quiet and streaming pty peers plus the mount intercept's timeout. `test_mount.sh` passed on PYBD_SF6. I haven't tried Windows or UART bridge boards.
 
 ### Generative AI
 
-I used generative AI tools when creating this PR, but a human has checked the code and is responsible for the description above.
+I used generative AI tools when creating this PR. I checked the code and am responsible for the change.

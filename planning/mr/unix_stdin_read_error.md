@@ -2,10 +2,10 @@
 upstream_repo: micropython/micropython
 upstream_base: master
 local_branch: unix_stdin_read_error
-status: pushed to fork, description written, no PR
-title: "unix/unix_mphal: Report a failed stdin read as end of input."
+status: fork draft #72; upstream review pending
+title: "unix: Stop reading stdin after a pty disconnects"
 pushed_branch: https://github.com/andrewleech/micropython/tree/unix_stdin_read_error
-head: 6213c10d44
+head: 9b317d8d72
 relationship: |
   Independent. Found while running the unix port under a pty for mpremote
   debug testing, but nothing depends on it.
@@ -20,20 +20,31 @@ todo:
     /mpy-rules:review pass (never reviewed).
 ---
 
-### Summary
+I found this while running the unix port under a pty. Once its peer closes, `read()` can return EIO; `mp_hal_stdin_rx_chr` returned the uninitialised byte `c` and kept reading. The original host run counted about 85k syscalls. A failed read now acts like EOF, after the existing EINTR retry.
 
-I found this running the unix port under a pty for host-side testing of a debugger. `mp_hal_stdin_rx_chr` only treats `read() == 0` as end of input; on `-1` it falls through and returns `c`, which was never written, so the REPL gets an uninitialised byte and immediately asks for another. The errors that land here don't clear (EIO once a pty's last other opener has closed, for one), so it loops forever. I counted about 85k syscalls in a single test run.
+A small reproducer, run from this repository with the unix standard binary built:
 
-A failed read is now reported as end of input the same way a zero-byte read is.
+```sh
+python3 - <<'PY'
+import os, pty, subprocess
+master, slave = pty.openpty()
+proc = subprocess.Popen(
+    ['ports/unix/build-standard/micropython'], stdin=slave,
+    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+)
+os.close(slave)
+os.close(master)
+try:
+    print('exit:', proc.wait(timeout=2))
+except subprocess.TimeoutExpired:
+    proc.kill()
+    proc.wait()
+    print('still reading after pty disconnect')
+PY
+```
 
-### Testing
-
-Unix port under a pty with no other opener, where the read fails with EIO. TODO: re-run the syscall count with the fix and the unix test suite before raising.
-
-### Trade-offs and Alternatives
-
-Treating every error as EOF also covers errors that might in theory be transient. `MP_HAL_RETRY_SYSCALL` already retries EINTR, and I couldn't find another errno a blocking read of stdin returns that would clear on its own.
+That probe exited with status 0 on the current build. I haven't run this exact probe on the unfixed branch or measured the post-fix syscall count yet. Not tested on Windows.
 
 ### Generative AI
 
-I used generative AI tools when creating this PR, but a human has checked the code and is responsible for the description above.
+I used generative AI tools when creating this PR. I checked the code and am responsible for the change.
