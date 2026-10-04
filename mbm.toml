@@ -39,7 +39,7 @@ title = "py/vm: Report loop lines again after backward jumps"
 [[submodules.branches]]
 name = "debug_board_flags"
 pr_url = "https://github.com/andrewleech/micropython/tree/debug_board_flags"
-title = "Enable sys.settrace on the RPI_PICO_W, PYBD_SF6, ESP32_GENERIC debug-firmware build targets"
+title = "Enable sys.settrace on the RPI_PICO_W, PYBD_SF6, ESP32_GENERIC, ESP32_GENERIC_C3 debug-firmware build targets, plus an RPI_PICO DEBUG_NCM variant"
 
 [[submodules.branches]]
 name = "mpremote_file_cp_hash"

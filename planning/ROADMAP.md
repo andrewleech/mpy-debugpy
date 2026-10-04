@@ -1881,6 +1881,16 @@ lineages (Josverl vs andrewleech) reconciled.
     content to success, and upstream's own `qemu_mips` is green at the shared
     base `5f2181f938`. The two remaining acceptance criteria stay open, since
     they are about the upstream PR.
+  - **2026-09-27 correction: a pin tag on a master commit is redundant, so it is
+    deleted rather than left.** The pins exist only to keep orphaned submodule
+    tips fetchable. A pin whose commit any fork branch contains protects
+    nothing, and that is exactly the kind that shadows `v*` for `git describe`.
+    `mpy-debugpy-pin-13303f8d293f` was the only one (contained by 57 fork
+    branches). It was deleted from the fork, which brought `Package mpremote`
+    on PRs #69-#75 back to `v1.29.0-preview`. The other 15 pins sit on orphaned
+    integration commits and stay. Before pushing a new pin, check
+    `git branch -r --contains <sha>`; if any branch already contains it, don't
+    tag it.
   - dependencies: STORY-8.1, STORY-6.4
   - component: mpremote · effort: S · risk: med · model: sonnet
 
