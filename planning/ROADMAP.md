@@ -842,13 +842,20 @@ foundations, because each can remove a whole epic's worth of work.
 
 ### Open questions
 
-Q15 is open. Q1–Q8 and Q11–Q14 are closed; see DECIDED entries below.
+Q15 and Q16 are open. Q1–Q8 and Q11–Q14 are closed; see DECIDED entries below.
 
 - **Q15 (2026-09-24) — when to publish the extension to the Marketplace.** Now
   as a preview (the requirements stated), after `mpremote` with `debug` is
   installable from the fork and the extension detects its absence, or after
   upstream releases it. Recommended: the second.
   `20260924_extension_marketplace_publishing.md`.
+- **Q16 (opened 2026-09-23): is a C-level line filter in front of the `sys.settrace`
+  callback worth adding?** It comes from the GHI comparison
+  (`20260923_ghi_debugger_comparison.md`): their engine checks breakpoints in C and
+  runs no Python per line, while ours calls a Python trace function on every line
+  event. Decide it with the measurement spike in STORY-9.1 /
+  `tickets/s9.1_settrace-c-line-filter.md`. Close it with a dated DECIDED entry
+  either way.
 
 **DECIDED (2026-08-10):**
 
@@ -1952,6 +1959,31 @@ lineages (Josverl vs andrewleech) reconciled.
     - [ ] a param-name regression test asserts `f_locals` carries parameter names.
   - dependencies: EPIC-1
   - component: firmware · effort: M · risk: med · model: sonnet
+
+### EPIC-9 — Future, for consideration
+
+**Goal:** park ideas that are credible but unscheduled, so they are not lost. Nothing
+here is on the execution sequence until its gating question is decided.
+
+- **STORY-9.1 — Evaluate a C-level line filter in front of the settrace callback**
+  - **PROPOSED 2026-09-23**. Ticket `tickets/s9.1_settrace-c-line-filter.md`,
+    origin `20260923_ghi_debugger_comparison.md`. Gated on **Q16**.
+  - type: spike, then implementation
+  - description: GHI's debugger checks breakpoints in C behind an armed flag and
+    does not call Python until a line matches. Our debugpy runs a Python trace
+    function on every line event. Measure that cost (unix + RP2040). If it matters,
+    add an optional, capability-probed filter in `mp_prof_instr_tick` that drops
+    `line` events outside the breakpoint set before `mp_prof_callback_invoke`. It
+    needs a pump escape so pause and DAP traffic still get serviced, and it passes
+    everything through while stepping. The Python DAP architecture stays as it is.
+  - acceptance criteria:
+    - [ ] a settrace cost report exists and Q16 is DECIDED.
+    - [ ] if implemented: measured overhead reduction on hardware, a fallback
+          proven on firmware without the capability, and pause/step/suffix-match
+          adversarial checks pass (see ticket).
+  - dependencies: upstream review direction on #8767. It does not block any
+    other epic.
+  - component: firmware + debugpy · effort: M · risk: med · model: sonnet
 
 ---
 
